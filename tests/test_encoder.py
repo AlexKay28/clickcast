@@ -188,3 +188,39 @@ class TestEncodeResultShape:
         assert result.size_bytes > 0
         assert result.format == "gif"
         assert result.path == tmp_path / "out.gif"
+
+
+class TestGifPaletteRegression:
+    """Regression: a leading blank frame must not poison the animation palette.
+
+    The demo pipeline captures an `about:blank` pre-goto frame followed by
+    real dark-background content. Sampling only the first frame for palette
+    quantized all subsequent frames to white and Pillow's optimizer
+    collapsed the animation to a single 1 KB frame.
+    """
+
+    def test_blank_first_frame_does_not_collapse_animation(self, tmp_path: Path) -> None:
+        d = tmp_path / "frames"
+        d.mkdir()
+        # Frame 0: all-white blank (mimics about:blank pre-goto capture)
+        Image.new("RGB", (200, 150), color="white").save(d / "frame-0000-000.png")
+        # Frames 1..9: dark background with a moving coloured marker
+        for i in range(1, 10):
+            img = Image.new("RGB", (200, 150), color=(10, 14, 20))  # worldsight bg
+            draw = ImageDraw.Draw(img)
+            draw.rectangle([i * 15, 30, i * 15 + 40, 100], fill=(220, 100, 80))
+            img.save(d / f"frame-0000-{i:03d}.png")
+
+        result = encode(d, tmp_path / "out.gif", fps=5)
+        assert result.frame_count == 10
+        with Image.open(tmp_path / "out.gif") as img:
+            # If the palette was poisoned by frame 0 all subsequent dark
+            # frames would collapse into it and n_frames drops to 1.
+            assert img.n_frames == 10
+            # Also sanity-check that at least one non-first frame carries
+            # dark pixels — the whole point of the fix.
+            img.seek(5)
+            rgb = img.convert("RGB")
+            pixels = rgb.getcolors(maxcolors=100_000) or []
+            dark = [c for c in pixels if sum(c[1]) < 200]
+            assert dark, "expected dark pixels in a mid-animation frame"

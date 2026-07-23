@@ -98,12 +98,39 @@ def _per_frame_ms(fps: int) -> int:
     return max(1, round(1000 / fps))
 
 
+def _sample_frames_for_palette(frames: list[Path], *, max_samples: int = 8) -> Image.Image:
+    """Concatenate up to ``max_samples`` evenly-spaced frames vertically so
+    quantizing the resulting strip yields a palette representative of the
+    whole animation, not just its first frame.
+
+    This matters when the reel starts on an `about:blank` white screen (or
+    any transient loading state) and the interesting content is dark — the
+    naive "first-frame palette" collapses everything to white.
+    """
+    sample_count = min(max_samples, len(frames))
+    step = max(1, len(frames) // sample_count)
+    picks = frames[::step][:sample_count]
+
+    samples = [Image.open(f).convert("RGB") for f in picks]
+    width = samples[0].width
+    total_h = sum(s.height for s in samples)
+    strip = Image.new("RGB", (width, total_h))
+    y = 0
+    for s in samples:
+        strip.paste(s, (0, y))
+        y += s.height
+        s.close()
+    return strip
+
+
 def _encode_gif(frames: list[Path], out: Path, fps: int, quality: int, loop: int) -> EncodeResult:
     out.parent.mkdir(parents=True, exist_ok=True)
-    # Quantize each frame to the palette computed from the first frame so
-    # animation-wide colours stay stable and the file stays small.
-    with Image.open(frames[0]) as first:
-        palette = first.convert("RGB").quantize(colors=256)
+    # Palette from a sample strip across the animation so the file stays
+    # small AND the animation doesn't collapse when the first frame is a
+    # blank/loading state.
+    strip = _sample_frames_for_palette(frames)
+    palette = strip.quantize(colors=256)
+    strip.close()
 
     images: list[Image.Image] = []
     for f in frames:
