@@ -161,6 +161,10 @@ class Session:
     async def close(self) -> None:
         await self.__aexit__(None, None, None)
 
+    async def wait(self, wait: WaitArg | None) -> None:
+        """Polymorphic wait: number → sleep, load-state → wait_for_load_state, else selector."""
+        await self._wait(wait)
+
     async def _wait(self, wait: WaitArg | None) -> None:
         if wait is None:
             return
