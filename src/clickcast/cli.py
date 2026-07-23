@@ -20,6 +20,14 @@ from platformdirs import user_config_dir
 
 from clickcast import __version__
 from clickcast.capture import Recorder
+from clickcast.config import (
+    Config as ConfigModel,
+)
+from clickcast.config import (
+    get_effective_value,
+    set_user_value,
+    user_config_path,
+)
 from clickcast.core.actions import ClickStep, GotoStep, ScrollStep, execute
 from clickcast.core.session import Session
 from clickcast.discovery import Element, discover
@@ -673,23 +681,35 @@ def _find_playwright_engine(engine: str) -> Path | None:
 
 @app.command(help="Read / write persistent defaults.")
 def config(
-    action: Annotated[str, typer.Argument(help="path | get | set")],
+    action: Annotated[str, typer.Argument(help="path | get | set | list")],
     key: Annotated[str | None, typer.Argument(help="Config key (for get / set).")] = None,
     value: Annotated[str | None, typer.Argument(help="Value (for set).")] = None,
 ) -> None:
-    config_path = Path(user_config_dir(_APP_NAME)) / "config.toml"
     if action == "path":
-        typer.echo(str(config_path))
+        typer.echo(str(user_config_path()))
         return
-    if action in {"get", "set"}:
-        typer.secho(
-            f"`clickcast config {action}` requires the config-precedence layer (#13). "
-            f"For now, edit {config_path} directly or use scenario `meta:` blocks.",
-            fg=typer.colors.YELLOW,
-            err=True,
-        )
-        raise typer.Exit(code=2)
-    raise typer.BadParameter(f"unknown action {action!r}; expected path | get | set")
+    if action == "list":
+        for k in sorted(ConfigModel.model_fields):
+            typer.echo(f"  {k:<12}  {get_effective_value(k)}")
+        return
+    if action == "get":
+        if not key:
+            raise typer.BadParameter("`config get` requires a key")
+        try:
+            typer.echo(get_effective_value(key))
+        except KeyError as e:
+            _die(str(e))
+        return
+    if action == "set":
+        if not key or value is None:
+            raise typer.BadParameter("`config set` requires both a key and a value")
+        try:
+            written_to = set_user_value(key, value)
+        except (KeyError, ValueError) as e:
+            _die(str(e))
+        typer.echo(f"✔ {key} = {value}  ({written_to})")
+        return
+    raise typer.BadParameter(f"unknown action {action!r}; expected path | get | set | list")
 
 
 # ==========================================================================

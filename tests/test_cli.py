@@ -104,10 +104,12 @@ class TestConfig:
         assert "clickcast" in r.stdout
         assert "config.toml" in r.stdout
 
-    def test_get_stubbed_pending_issue_13(self) -> None:
+    def test_get_returns_effective_default(self) -> None:
+        # After #13 shipped, `config get engine` returns the actual value
+        # rather than the "requires #13" stub.
         r = runner.invoke(app, ["config", "get", "engine"])
-        assert r.exit_code == 2
-        assert "#13" in r.output
+        assert r.exit_code == 0
+        assert "chromium" in r.stdout
 
     def test_unknown_action_rejected(self) -> None:
         r = runner.invoke(app, ["config", "bogus"])
