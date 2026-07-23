@@ -21,7 +21,6 @@ The API is a thin, chainable wrapper around the shipped subsystems:
 from __future__ import annotations
 
 import asyncio
-import json
 from pathlib import Path
 from typing import Any, cast
 
@@ -43,6 +42,8 @@ from clickcast.core.session import Engine, Session, WaitArg
 from clickcast.discovery import Element
 from clickcast.discovery import discover as _async_discover
 from clickcast.encode import EncodeResult, Format, encode
+from clickcast.feedback import Media, ReportBuilder
+from clickcast.feedback import write as write_report
 from clickcast.scenario import Meta, Scenario
 from clickcast.scenario import run as run_scenario
 
@@ -269,9 +270,10 @@ async def _run_and_encode(
     format_: Format | None,
     quality: int,
     loop: int,
+    builder: ReportBuilder | None = None,
 ) -> tuple[Any, EncodeResult]:
     with Recorder(fps=scenario.meta.fps, default_dwell=scenario.meta.dwell) as rec:
-        result = await run_scenario(scenario, recorder=rec)
+        result = await run_scenario(scenario, recorder=rec, builder=builder)
         rec.flush()
         enc = encode(
             rec.frames_dir,
@@ -284,17 +286,37 @@ async def _run_and_encode(
     return result, enc
 
 
-def _write_sidecar_stub(out: Path, no_sidecar: bool, extra: dict[str, Any]) -> Path | None:
-    """Placeholder sidecar until #12 lands the real Report schema."""
-    if no_sidecar:
+def _viewport_list_from_meta(scenario: Scenario) -> list[int] | None:
+    vp = scenario.meta.viewport
+    if not vp:
+        return None
+    try:
+        w, h = vp.lower().split("x", 1)
+        return [int(w), int(h)]
+    except ValueError:
+        return None
+
+
+def _write_sidecar_from_builder(
+    out: Path,
+    no_sidecar: bool,
+    builder: ReportBuilder | None,
+    enc: EncodeResult,
+    fps: int,
+) -> Path | None:
+    if no_sidecar or builder is None:
         return None
     sidecar = out.with_suffix(out.suffix + ".json")
-    payload = {
-        "schema_version": 0,
-        "note": "placeholder sidecar; full schema lands in #12",
-        **extra,
-    }
-    sidecar.write_text(json.dumps(payload, indent=2))
+    media = Media(
+        path=str(enc.path),
+        format=enc.format,
+        size_bytes=enc.size_bytes,
+        frame_count=enc.frame_count,
+        duration_s=enc.duration_s,
+        fps=fps,
+    )
+    report = builder.build(media)
+    write_report(report, sidecar)
     return sidecar
 
 
@@ -318,24 +340,24 @@ class AsyncReel(_BaseReel):
         out = Path(path)
         out.parent.mkdir(parents=True, exist_ok=True)
         scenario = self.build_scenario()
+        builder: ReportBuilder | None = None
+        if not no_sidecar:
+            builder = ReportBuilder(
+                url=self._url,
+                engine=scenario.meta.engine,
+                viewport=_viewport_list_from_meta(scenario),
+            )
         result, enc = await _run_and_encode(
-            scenario, out, format_=format, quality=quality, loop=loop
-        )
-        _write_sidecar_stub(
+            scenario,
             out,
-            no_sidecar,
-            {
-                "media": {
-                    "path": str(enc.path),
-                    "format": enc.format,
-                    "size_bytes": enc.size_bytes,
-                    "frame_count": enc.frame_count,
-                    "duration_s": enc.duration_s,
-                },
-                "steps_ok": result.ok,
-                "failed_at": result.failed_at,
-            },
+            format_=format,
+            quality=quality,
+            loop=loop,
+            builder=builder,
         )
+        if builder is not None and not result.ok:
+            builder.add_warning(f"scenario failed at step {result.failed_at}")
+        _write_sidecar_from_builder(out, no_sidecar, builder, enc, scenario.meta.fps)
         return enc.path
 
 

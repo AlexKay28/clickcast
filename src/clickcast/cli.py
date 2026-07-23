@@ -24,6 +24,8 @@ from clickcast.core.actions import ClickStep, GotoStep, ScrollStep, execute
 from clickcast.core.session import Session
 from clickcast.discovery import Element, discover
 from clickcast.encode import encode
+from clickcast.feedback import Media, ReportBuilder
+from clickcast.feedback import write as write_report
 from clickcast.scenario import ScenarioError, load
 from clickcast.scenario import run as run_scenario
 
@@ -114,21 +116,28 @@ def _session_kwargs(
     }
 
 
-def _write_sidecar_stub(out: Path, no_sidecar: bool, extra: dict[str, Any]) -> Path | None:
-    """Placeholder sidecar writer until #12 lands the real Report model.
+def _make_media(enc: Any, fps: int) -> Media:
+    return Media(
+        path=str(enc.path),
+        format=enc.format,
+        size_bytes=enc.size_bytes,
+        frame_count=enc.frame_count,
+        duration_s=enc.duration_s,
+        fps=fps,
+    )
 
-    We keep the flag surface real (``--no-sidecar``) and write the smallest
-    plausible JSON so downstream consumers don't crash on missing files.
-    """
-    if no_sidecar:
+
+def _write_sidecar(
+    out: Path,
+    no_sidecar: bool,
+    builder: ReportBuilder | None,
+    media: Media,
+) -> Path | None:
+    if no_sidecar or builder is None:
         return None
     sidecar = out.with_suffix(out.suffix + ".json")
-    payload = {
-        "schema_version": 0,  # not v1 yet — #12 replaces this
-        "note": "placeholder sidecar; full schema lands in #12",
-        **extra,
-    }
-    sidecar.write_text(json.dumps(payload, indent=2))
+    report = builder.build(media)
+    write_report(report, sidecar)
     return sidecar
 
 
@@ -220,6 +229,15 @@ async def _do_auto(
     no_sidecar: bool,
 ) -> None:
     async with Session(**session_kwargs) as sess:
+        builder: ReportBuilder | None = None
+        if not no_sidecar:
+            builder = ReportBuilder(
+                url=url,
+                engine=session_kwargs.get("engine", "chromium"),
+                viewport=session_kwargs.get("viewport"),
+            )
+            builder.attach(sess)
+
         with Recorder(fps=fps, default_dwell=dwell) as rec:
             goto = GotoStep(url=url, wait="networkidle", dwell=dwell)
             await rec.pre_action(sess)
@@ -228,13 +246,18 @@ async def _do_auto(
                 _die(f"goto {url} failed: {result.error}")
             if initial_wait > 0:
                 await sess.wait(initial_wait)
-            await rec.post_action(sess, result, goto)
+            frames_goto = await rec.post_action(sess, result, goto)
+            if builder:
+                await builder.record_step(index=0, step=goto, result=result, frames=frames_goto)
 
             elements = await discover(sess, limit=max_steps * 2)
             if not elements:
                 _die("no interactive elements discovered")
+            if builder:
+                builder.set_discovered(elements[:max_steps])
 
             clicked = 0
+            step_index = 1
             for element in elements:
                 if clicked >= max_steps:
                     break
@@ -246,15 +269,24 @@ async def _do_auto(
                 )
                 await rec.pre_action(sess)
                 r = await execute(step, sess)
-                await rec.post_action(sess, r, step)
+                frames_step = await rec.post_action(sess, r, step)
                 if r.status == "ok":
                     clicked += 1
+                if builder:
+                    await builder.record_step(
+                        index=step_index, step=step, result=r, frames=frames_step
+                    )
+                step_index += 1
                 await sess.wait(0.3)
 
             scroll = ScrollStep(by=600, dwell=dwell)
             await rec.pre_action(sess)
             r = await execute(scroll, sess)
-            await rec.post_action(sess, r, scroll)
+            frames_scroll = await rec.post_action(sess, r, scroll)
+            if builder:
+                await builder.record_step(
+                    index=step_index, step=scroll, result=r, frames=frames_scroll
+                )
 
             rec.flush()
             out_path = Path(out)
@@ -266,21 +298,8 @@ async def _do_auto(
                 loop=loop,
                 format=format_,  # type: ignore[arg-type]
             )
-            sidecar = _write_sidecar_stub(
-                out_path,
-                no_sidecar,
-                {
-                    "url": url,
-                    "media": {
-                        "path": str(enc.path),
-                        "format": enc.format,
-                        "size_bytes": enc.size_bytes,
-                        "frame_count": enc.frame_count,
-                        "duration_s": enc.duration_s,
-                    },
-                    "discovered_elements": [e.to_dict() for e in elements[:max_steps]],
-                },
-            )
+            media = _make_media(enc, fps)
+            sidecar = _write_sidecar(out_path, no_sidecar, builder, media)
 
     typer.echo(
         f"✔ {enc.path} ({enc.size_bytes // 1024} KB, {enc.frame_count} frames, {enc.duration_s:.1f}s)"
@@ -347,8 +366,20 @@ async def _do_run(
     format_: str | None,
     no_sidecar: bool,
 ) -> None:
+    builder: ReportBuilder | None = None
+    if not no_sidecar:
+        vp = scenario.meta.viewport
+        viewport_list: list[int] | None = None
+        if vp:
+            try:
+                w, h = vp.lower().split("x", 1)
+                viewport_list = [int(w), int(h)]
+            except ValueError:
+                viewport_list = None
+        builder = ReportBuilder(engine=scenario.meta.engine, viewport=viewport_list)
+
     with Recorder(fps=scenario.meta.fps, default_dwell=scenario.meta.dwell) as rec:
-        result = await run_scenario(scenario, recorder=rec)
+        result = await run_scenario(scenario, recorder=rec, builder=builder)
         rec.flush()
         out_path = Path(out)
         enc = encode(
@@ -357,21 +388,10 @@ async def _do_run(
             fps=scenario.meta.fps,
             format=format_,  # type: ignore[arg-type]
         )
-    sidecar = _write_sidecar_stub(
-        out_path,
-        no_sidecar,
-        {
-            "media": {
-                "path": str(enc.path),
-                "format": enc.format,
-                "size_bytes": enc.size_bytes,
-                "frame_count": enc.frame_count,
-                "duration_s": enc.duration_s,
-            },
-            "steps_ok": result.ok,
-            "failed_at": result.failed_at,
-        },
-    )
+    if builder is not None and not result.ok:
+        builder.add_warning(f"scenario failed at step {result.failed_at}")
+    media = _make_media(enc, scenario.meta.fps)
+    sidecar = _write_sidecar(out_path, no_sidecar, builder, media)
     typer.echo(f"✔ {enc.path} ({enc.size_bytes // 1024} KB, {enc.frame_count} frames)")
     if not result.ok:
         typer.secho(

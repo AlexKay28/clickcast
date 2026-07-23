@@ -1,0 +1,320 @@
+{
+  "$defs": {
+    "DiscoveredElement": {
+      "additionalProperties": false,
+      "description": "A single element returned by ``discover()`` at capture time.",
+      "properties": {
+        "selector": {
+          "title": "Selector",
+          "type": "string"
+        },
+        "role": {
+          "title": "Role",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "bbox": {
+          "items": {
+            "type": "integer"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "title": "Bbox",
+          "type": "array"
+        },
+        "score": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "title": "Score"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "selector",
+        "role",
+        "text",
+        "bbox",
+        "score",
+        "source"
+      ],
+      "title": "DiscoveredElement",
+      "type": "object"
+    },
+    "Media": {
+      "additionalProperties": false,
+      "description": "Encoded reel metadata.",
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "format": {
+          "title": "Format",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "title": "Size Bytes",
+          "type": "integer"
+        },
+        "frame_count": {
+          "minimum": 0,
+          "title": "Frame Count",
+          "type": "integer"
+        },
+        "duration_s": {
+          "minimum": 0,
+          "title": "Duration S",
+          "type": "number"
+        },
+        "fps": {
+          "minimum": 1,
+          "title": "Fps",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "format",
+        "size_bytes",
+        "frame_count",
+        "duration_s",
+        "fps"
+      ],
+      "title": "Media",
+      "type": "object"
+    },
+    "PageState": {
+      "additionalProperties": false,
+      "description": "Post-action snapshot of the browser page.",
+      "properties": {
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string"
+        },
+        "url_after": {
+          "default": "",
+          "title": "Url After",
+          "type": "string"
+        },
+        "console_errors": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 50,
+          "title": "Console Errors",
+          "type": "array"
+        },
+        "page_errors": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 50,
+          "title": "Page Errors",
+          "type": "array"
+        },
+        "network_failed": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 50,
+          "title": "Network Failed",
+          "type": "array"
+        }
+      },
+      "title": "PageState",
+      "type": "object"
+    },
+    "StepReport": {
+      "additionalProperties": false,
+      "description": "One step's outcome + metadata.",
+      "properties": {
+        "index": {
+          "minimum": 0,
+          "title": "Index",
+          "type": "integer"
+        },
+        "action": {
+          "title": "Action",
+          "type": "string"
+        },
+        "args": {
+          "additionalProperties": true,
+          "title": "Args",
+          "type": "object"
+        },
+        "status": {
+          "title": "Status",
+          "type": "string"
+        },
+        "duration_ms": {
+          "minimum": 0,
+          "title": "Duration Ms",
+          "type": "number"
+        },
+        "frames": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Frames",
+          "type": "array"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "cursor_xy": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cursor Xy"
+        },
+        "page_state": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PageState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        }
+      },
+      "required": [
+        "index",
+        "action",
+        "status",
+        "duration_ms"
+      ],
+      "title": "StepReport",
+      "type": "object"
+    }
+  },
+  "description": "AI-feedback sidecar \u2014 the primary contract for downstream agents.\n\nDeliberately does NOT set ``extra=\"forbid\"`` at the top level so #29 Track\nC can add a ``graph`` block without a breaking schema change. The nested\nmodels above DO forbid extras \u2014 those shapes are stable.",
+  "properties": {
+    "schema_version": {
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "clickcast_version": {
+      "title": "Clickcast Version",
+      "type": "string"
+    },
+    "url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Url"
+    },
+    "engine": {
+      "default": "chromium",
+      "title": "Engine",
+      "type": "string"
+    },
+    "viewport": {
+      "items": {
+        "type": "integer"
+      },
+      "title": "Viewport",
+      "type": "array"
+    },
+    "started_at": {
+      "title": "Started At",
+      "type": "string"
+    },
+    "duration_s": {
+      "minimum": 0,
+      "title": "Duration S",
+      "type": "number"
+    },
+    "media": {
+      "$ref": "#/$defs/Media"
+    },
+    "discovered_elements": {
+      "items": {
+        "$ref": "#/$defs/DiscoveredElement"
+      },
+      "title": "Discovered Elements",
+      "type": "array"
+    },
+    "steps": {
+      "items": {
+        "$ref": "#/$defs/StepReport"
+      },
+      "title": "Steps",
+      "type": "array"
+    },
+    "warnings": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+    },
+    "errors": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Errors",
+      "type": "array"
+    }
+  },
+  "required": [
+    "clickcast_version",
+    "started_at",
+    "duration_s",
+    "media"
+  ],
+  "title": "Report",
+  "type": "object"
+}

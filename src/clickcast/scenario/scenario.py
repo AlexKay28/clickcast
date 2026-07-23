@@ -15,6 +15,7 @@ from clickcast.core.session import Session
 
 if TYPE_CHECKING:
     from clickcast.capture import Recorder
+    from clickcast.feedback import ReportBuilder
 
 
 __all__ = [
@@ -278,35 +279,54 @@ async def run(
     *,
     session: Session | None = None,
     recorder: Recorder | None = None,
+    builder: ReportBuilder | None = None,
 ) -> RunResult:
     """Execute a scenario end-to-end.
 
     If ``session`` is None, a fresh Session is built from ``scenario.meta``
     and torn down when we're done. Otherwise the caller's session is reused
     unchanged.
+
+    An optional ``builder`` (from :mod:`clickcast.feedback`) receives per-step
+    reports; caller finalizes it after encoding. The builder is attached to
+    the session's page here, so it must be passed **before** any step runs.
     """
     if session is not None:
-        return await _run_with(scenario, session, recorder)
+        return await _run_with(scenario, session, recorder, builder)
 
     async with Session(**_session_kwargs_from_meta(scenario.meta)) as sess:
-        return await _run_with(scenario, sess, recorder)
+        return await _run_with(scenario, sess, recorder, builder)
 
 
 async def _run_with(
     scenario: Scenario,
     session: Session,
     recorder: Recorder | None,
+    builder: ReportBuilder | None,
 ) -> RunResult:
+    if builder is not None:
+        builder.attach(session)
+
     results: list[ActionResult] = []
     for i, step in enumerate(scenario.steps):
         # `repeat` is honored at the caller layer — see #4's PR notes
         for _ in range(step.repeat):
+            frames_this_step: list[Any] = []
             if recorder is not None:
                 await recorder.pre_action(session)
             result = await execute(step, session)
             if recorder is not None:
-                await recorder.post_action(session, result, step)
+                frames_this_step = await recorder.post_action(session, result, step)
             results.append(result)
+
+            if builder is not None:
+                await builder.record_step(
+                    index=i,
+                    step=step,
+                    result=result,
+                    frames=frames_this_step,
+                )
+
             if not result.ok:
                 # optional=True was already absorbed by execute() into
                 # status="skipped" with ok=True, so anything not-ok here is
