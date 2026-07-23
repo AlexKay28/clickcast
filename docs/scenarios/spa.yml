@@ -1,0 +1,35 @@
+# Landing-page tour — clicks the 3 primary buttons in sequence.
+#
+# Requires a --var override so the scenario can point at any target.
+# Against the built-in fixture site (from `tests/fixtures/site/`) run:
+#
+#   clickcast run docs/scenarios/spa.yml \
+#       --var base_url=http://127.0.0.1:8000
+#
+# Against a public site, swap the base URL. Selectors are inspired by
+# the fixture; adjust them to match your target if you re-point it.
+
+meta:
+  name: "Landing page tour"
+  viewport: 1280x800
+  fps: 12
+  dwell: 1.0
+  format: gif
+  out: reel-spa.gif
+
+steps:
+  - goto: "{{ base_url }}/"
+    wait: load
+    label: "Open landing page"
+
+  - click: "#btn-3d"
+    label: "Click 3D"
+    dwell: 1.5
+
+  - click: "#btn-compare"
+    label: "Click Compare"
+    dwell: 1.5
+
+  - click: "#btn-reset"
+    label: "Click Reset"
+    dwell: 1.0

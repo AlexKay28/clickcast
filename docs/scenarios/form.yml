@@ -1,0 +1,34 @@
+# Form-submission tour — types a name, picks a country, submits.
+#
+# Requires --var base_url (see docs/scenarios/spa.yml for the pattern).
+# Selectors are wired for the built-in fixture site's `form.html`.
+
+meta:
+  name: "Sign-up form"
+  viewport: 1280x800
+  fps: 12
+  dwell: 1.0
+  format: gif
+  out: reel-form.gif
+
+steps:
+  - goto: "{{ base_url }}/form.html"
+    wait: load
+    label: "Open form"
+
+  - type:
+      into: "#name"
+      text: "Alice"
+      delay: 40
+    label: "Type name"
+    dwell: 0.8
+
+  - select:
+      in: "#country"
+      value: "fr"
+    label: "Pick France"
+    dwell: 0.8
+
+  - click: "#submit-btn"
+    label: "Submit"
+    dwell: 1.5
