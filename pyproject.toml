@@ -3,7 +3,7 @@ requires = ["hatchling>=1.24"]
 build-backend = "hatchling.build"
 
 [project]
-name = "webreel"
+name = "clickcast"
 version = "0.1.0.dev0"
 description = "Drive a browser through a website and hand back a reel + AI-readable feedback sidecar."
 readme = "README.md"
@@ -49,17 +49,17 @@ dev = [
 ]
 
 [project.scripts]
-webreel = "webreel.cli:app"
+clickcast = "clickcast.cli:app"
 
 [project.urls]
-Homepage = "https://github.com/AlexKay28/webreel"
-Issues = "https://github.com/AlexKay28/webreel/issues"
+Homepage = "https://github.com/AlexKay28/clickcast"
+Issues = "https://github.com/AlexKay28/clickcast/issues"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/webreel"]
+packages = ["src/clickcast"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/webreel", "README.md", "LICENSE", "pyproject.toml"]
+include = ["src/clickcast", "README.md", "LICENSE", "pyproject.toml"]
 
 [tool.ruff]
 line-length = 100
@@ -87,7 +87,7 @@ quote-style = "double"
 [tool.mypy]
 python_version = "3.10"
 strict = true
-files = ["src/webreel"]
+files = ["src/clickcast"]
 warn_unused_ignores = true
 warn_redundant_casts = true
 
@@ -107,7 +107,7 @@ markers = [
 asyncio_mode = "auto"
 
 [tool.coverage.run]
-source = ["src/webreel"]
+source = ["src/clickcast"]
 branch = true
 
 [tool.coverage.report]

@@ -1,26 +1,26 @@
 from typer.testing import CliRunner
 
-import webreel
-from webreel.cli import app
+import clickcast
+from clickcast.cli import app
 
 runner = CliRunner()
 
 
 def test_import_exposes_version() -> None:
-    assert isinstance(webreel.__version__, str)
-    assert webreel.__version__
+    assert isinstance(clickcast.__version__, str)
+    assert clickcast.__version__
 
 
 def test_cli_help_runs() -> None:
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    assert "webreel" in result.stdout.lower()
+    assert "clickcast" in result.stdout.lower()
 
 
 def test_cli_version_flag() -> None:
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert webreel.__version__ in result.stdout
+    assert clickcast.__version__ in result.stdout
 
 
 def test_stub_subcommand_exits_nonzero() -> None:

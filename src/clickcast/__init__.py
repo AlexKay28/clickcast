@@ -1,9 +1,9 @@
-"""webreel — drive a browser, return a reel + AI-readable feedback sidecar."""
+"""clickcast — drive a browser, return a reel + AI-readable feedback sidecar."""
 
 from importlib.metadata import PackageNotFoundError, version
 
 try:
-    __version__ = version("webreel")
+    __version__ = version("clickcast")
 except PackageNotFoundError:
     __version__ = "0.0.0+unknown"
 

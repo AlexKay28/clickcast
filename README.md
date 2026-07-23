@@ -1,31 +1,34 @@
-# 🎞️ webreel
+# 🎞️ clickcast
 
-> Automatically tour any website and turn the interaction into a shareable GIF, MP4, or WebP — from a single command line.
+> Give AI agents visual + structured feedback about live web UIs — and give humans deterministic demo reels while you're at it.
 
-[![PyPI version](https://img.shields.io/pypi/v/webreel.svg)](https://pypi.org/project/webreel/)
-[![Python](https://img.shields.io/pypi/pyversions/webreel.svg)](https://pypi.org/project/webreel/)
-[![CI](https://img.shields.io/github/actions/workflow/status/yourname/webreel/ci.yml?branch=main)](https://github.com/yourname/webreel/actions)
+[![PyPI version](https://img.shields.io/pypi/v/clickcast.svg)](https://pypi.org/project/clickcast/)
+[![Python](https://img.shields.io/pypi/pyversions/clickcast.svg)](https://pypi.org/project/clickcast/)
+[![CI](https://img.shields.io/github/actions/workflow/status/AlexKay28/clickcast/ci.yml?branch=main)](https://github.com/AlexKay28/clickcast/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
-`webreel` drives a real browser through a website — clicking buttons, toggling views, switching
-languages, scrolling, filling forms — and records every step as an annotated animation with
-click indicators, action labels, and a progress bar. Point it at a URL and it will *auto-discover*
-the interactive elements and build a tour for you, or hand it a small YAML **scenario** for a
-scripted, repeatable walkthrough.
+> **Not to be confused with [vercel-labs/webreel](https://github.com/vercel-labs/webreel)** — that's a TypeScript tool for authoring polished demo videos. `clickcast` is a Python tool aimed primarily at *AI agents* that need a visual modality onto a live web UI, and secondarily at humans who want reproducible demo reels.
 
-It was built to answer a simple, recurring need: *"I want an automatic visual demo of my site
-without screen-recording it by hand every time it changes."*
+`clickcast` drives a real browser through a website — clicking buttons, toggling views, switching
+languages, scrolling, filling forms — and hands back **two things**:
+
+1. A watchable **reel** (GIF / MP4 / WebP) with click ripples, cursor trails, and a progress bar.
+2. A machine-readable **JSON sidecar** — every step, every discovered element, every console error,
+   every failed request — so an AI agent can *reason* about what it just saw without watching the pixels.
+
+Point it at a URL and it will *auto-discover* the interactive elements and build a tour for you,
+or hand it a small YAML **scenario** for a scripted, repeatable walkthrough.
 
 ---
 
 ## Demo
 
 ```bash
-webreel auto https://worldsight-weld.vercel.app --out worldsight.gif
+clickcast auto https://worldsight-weld.vercel.app --out worldsight.gif
 ```
 
 <p align="center">
-  <img src="docs/demo.gif" alt="webreel touring a site" width="720">
+  <img src="docs/demo.gif" alt="clickcast touring a site" width="720">
 </p>
 
 ```
@@ -43,19 +46,23 @@ webreel auto https://worldsight-weld.vercel.app --out worldsight.gif
 
 ---
 
-## Why webreel
+## Why clickcast
 
-Screen recorders are manual, non-reproducible, and go stale the moment your UI changes. Existing
-browser-automation frameworks (Playwright, Selenium) *can* capture screenshots, but you have to
-write and maintain glue code for framing, timing, annotation, and encoding every time.
+LLM agents today reason about web UIs almost entirely through DOM/HTML. That misses rendered
+layout, visual state transitions, regressions that don't change the DOM but ruin the pixels, and
+whether a click *appeared* to do anything. `clickcast` closes that gap by producing both a
+video artifact and a structured JSON sidecar the agent can parse.
 
-`webreel` collapses that into one tool with three modes:
+For humans, screen recorders are manual, non-reproducible, and go stale the moment your UI
+changes. Existing browser-automation frameworks (Playwright, Selenium) *can* capture screenshots,
+but you have to write and maintain glue code for framing, timing, annotation, and encoding every
+time. `clickcast` collapses that into one tool with three modes:
 
 | Mode | Command | When to use |
 |------|---------|-------------|
-| **Auto** | `webreel auto <url>` | You want a quick visual tour and don't care about the exact script. |
-| **Scenario** | `webreel run tour.yml` | You want a precise, repeatable walkthrough (docs, release notes, CI). |
-| **Shot** | `webreel shot <url>` | You just need one clean, full-page screenshot. |
+| **Auto** | `clickcast auto <url>` | You want a quick visual tour and don't care about the exact script. |
+| **Scenario** | `clickcast run tour.yml` | You want a precise, repeatable walkthrough (docs, release notes, CI). |
+| **Shot** | `clickcast shot <url>` | You just need one clean, full-page screenshot. |
 
 Everything is deterministic, headless-by-default, CI-friendly, and version-controllable.
 
@@ -63,6 +70,7 @@ Everything is deterministic, headless-by-default, CI-friendly, and version-contr
 
 ## Features
 
+- 🧠 **AI-feedback sidecar** — every run writes a versioned JSON report an agent can parse: steps, timings, discovered elements, per-step frames, console errors, failed requests.
 - 🤖 **Auto-tour** — heuristically finds buttons, toggles, tabs, and links, then visits them in a sensible order.
 - 📝 **Declarative scenarios** — describe a walkthrough in readable YAML; no Python required.
 - 🎨 **Annotated output** — click ripples, action labels, cursor trails, and a progress bar (each toggleable).
@@ -80,17 +88,17 @@ Everything is deterministic, headless-by-default, CI-friendly, and version-contr
 
 ```bash
 # Recommended: isolated install
-pipx install webreel
+pipx install clickcast
 
 # or plain pip
-pip install webreel
+pip install clickcast
 
 # one-time: fetch the browser binaries Playwright needs
-webreel install
+clickcast install
 ```
 
-`webreel install` is a thin wrapper over `playwright install chromium` (add `--with-deps` on Linux
-CI to pull system libraries). Firefox and WebKit are optional: `webreel install firefox webkit`.
+`clickcast install` is a thin wrapper over `playwright install chromium` (add `--with-deps` on Linux
+CI to pull system libraries). Firefox and WebKit are optional: `clickcast install firefox webkit`.
 
 **Requirements:** Python ≥ 3.9. On Linux you'll need the usual headless-Chromium system deps
 (handled by `--with-deps`).
@@ -101,28 +109,28 @@ CI to pull system libraries). Firefox and WebKit are optional: `webreel install 
 
 ```bash
 # 1. Auto-tour a site and save a GIF
-webreel auto https://example.com --out tour.gif
+clickcast auto https://example.com --out tour.gif
 
 # 2. Scaffold a scenario you can edit
-webreel init tour.yml --url https://example.com
+clickcast init tour.yml --url https://example.com
 
 # 3. Run the scenario
-webreel run tour.yml
+clickcast run tour.yml
 
 # 4. Grab a single full-page screenshot
-webreel shot https://example.com --full-page --out home.png
+clickcast shot https://example.com --full-page --out home.png
 ```
 
 ---
 
 ## Commands
 
-### `webreel auto <url>`
+### `clickcast auto <url>`
 
 Discover interactive elements and build a tour automatically.
 
 ```bash
-webreel auto https://worldsight-weld.vercel.app \
+clickcast auto https://worldsight-weld.vercel.app \
   --out worldsight.gif \
   --max-steps 8 \
   --viewport 1280x800 \
@@ -142,64 +150,64 @@ webreel auto https://worldsight-weld.vercel.app \
 | `--scroll` | `on` | Auto-scroll targets into view before interacting. |
 | `--dry-run` | – | Print the planned tour without recording. |
 
-### `webreel run <scenario.yml>`
+### `clickcast run <scenario.yml>`
 
 Execute a declarative scenario (see [Scenario format](#scenario-format)).
 
 ```bash
-webreel run tour.yml --out release-notes.mp4 --format mp4 --loop 0
+clickcast run tour.yml --out release-notes.mp4 --format mp4 --loop 0
 ```
 
 Useful flags: `--out`, `--format`, `--headful` (watch it run), `--slowmo MS`, `--var key=value`
 (inject variables usable as `{{ key }}` inside the scenario).
 
-### `webreel shot <url>`
+### `clickcast shot <url>`
 
 Capture a single screenshot.
 
 ```bash
-webreel shot https://example.com --full-page --wait "networkidle" --out home.png
+clickcast shot https://example.com --full-page --wait "networkidle" --out home.png
 ```
 
 Flags: `--full-page`, `--selector CSS` (screenshot just one element), `--wait`, `--viewport`,
 `--device`, `--dark` (emulate `prefers-color-scheme: dark`).
 
-### `webreel init [file]`
+### `clickcast init [file]`
 
 Scaffold a starter scenario file, optionally pre-seeded by auto-discovering a URL.
 
 ```bash
-webreel init tour.yml --url https://example.com --from-auto
+clickcast init tour.yml --url https://example.com --from-auto
 ```
 
 `--from-auto` runs discovery once and writes the found steps into the file so you can trim/edit
 instead of starting blank.
 
-### `webreel elements <url>`
+### `clickcast elements <url>`
 
-Dump the interactive elements webreel can see — handy for authoring selectors.
+Dump the interactive elements clickcast can see — handy for authoring selectors.
 
 ```bash
-webreel elements https://example.com --interactive --json > elements.json
+clickcast elements https://example.com --interactive --json > elements.json
 ```
 
-### `webreel doctor`
+### `clickcast doctor`
 
 Diagnose the environment: Python version, installed browser engines, ffmpeg availability, and
 whether the sandbox can reach the network.
 
 ```bash
-webreel doctor
+clickcast doctor
 ```
 
-### `webreel config`
+### `clickcast config`
 
 Read/write persistent defaults (see [Configuration](#configuration)).
 
 ```bash
-webreel config set defaults.viewport 1440x900
-webreel config get defaults.viewport
-webreel config path
+clickcast config set defaults.viewport 1440x900
+clickcast config get defaults.viewport
+clickcast config path
 ```
 
 ---
@@ -269,10 +277,10 @@ and `repeat: N`.
 
 ## Configuration
 
-Precedence (highest first): **CLI flags → scenario `meta:` → project `webreel.toml` → user config → built-in defaults.**
+Precedence (highest first): **CLI flags → scenario `meta:` → project `clickcast.toml` → user config → built-in defaults.**
 
 ```toml
-# webreel.toml (project-local)
+# clickcast.toml (project-local)
 [defaults]
 engine   = "chromium"
 viewport = "1280x800"
@@ -291,7 +299,7 @@ watermark = false
 proxy = ""
 ```
 
-Environment overrides: `WEBREEL_ENGINE`, `WEBREEL_VIEWPORT`, `WEBREEL_HEADFUL`, `WEBREEL_PROXY`.
+Environment overrides: `CLICKCAST_ENGINE`, `CLICKCAST_VIEWPORT`, `CLICKCAST_HEADFUL`, `CLICKCAST_PROXY`.
 
 ---
 
@@ -324,7 +332,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: yourname/webreel-action@v1
+      - uses: AlexKay28/clickcast-action@v1
         with:
           scenario: docs/tour.yml
           out: docs/demo.gif
@@ -337,13 +345,13 @@ jobs:
 **Mobile capture**
 
 ```bash
-webreel auto https://example.com --device "iPhone 15" --out mobile.gif
+clickcast auto https://example.com --device "iPhone 15" --out mobile.gif
 ```
 
 **Dark mode shot**
 
 ```bash
-webreel shot https://example.com --dark --full-page --out home-dark.png
+clickcast shot https://example.com --dark --full-page --out home-dark.png
 ```
 
 ---
@@ -351,7 +359,7 @@ webreel shot https://example.com --dark --full-page --out home-dark.png
 ## Python API
 
 ```python
-from webreel import Reel
+from clickcast import Reel
 
 reel = (
     Reel("https://worldsight-weld.vercel.app", viewport=(1280, 800), fps=12)
@@ -368,7 +376,7 @@ reel.save("worldsight.gif")          # or .save("tour.mp4", quality=8)
 Discovery is available programmatically too:
 
 ```python
-from webreel import discover
+from clickcast import discover
 elements = discover("https://example.com", interactive=True)
 ```
 
@@ -395,11 +403,11 @@ elements = discover("https://example.com", interactive=True)
 - **Blank frames / nothing rendered** — the page is a SPA; add `wait: networkidle` or a
   `wait: ".loaded-selector"` to your first step.
 - **`ffmpeg not found`** — install ffmpeg, or output `gif`/`webp` (which don't require it).
-- **Selector not found** — run `webreel elements <url>` to see what's actually clickable, or mark
+- **Selector not found** — run `clickcast elements <url>` to see what's actually clickable, or mark
   the step `optional: true`.
-- **Can't reach an internal site** — set a proxy via `WEBREEL_PROXY` or `[network].proxy`, or run
-  `webreel doctor` to confirm network egress.
-- **Chromium missing** — run `webreel install` (add `--with-deps` on Linux CI).
+- **Can't reach an internal site** — set a proxy via `CLICKCAST_PROXY` or `[network].proxy`, or run
+  `clickcast doctor` to confirm network egress.
+- **Chromium missing** — run `clickcast install` (add `--with-deps` on Linux CI).
 
 ---
 
@@ -418,10 +426,10 @@ elements = discover("https://example.com", interactive=True)
 Issues and PRs welcome. To set up locally:
 
 ```bash
-git clone https://github.com/yourname/webreel
-cd webreel
+git clone https://github.com/AlexKay28/clickcast
+cd clickcast
 pip install -e ".[dev]"
-webreel install
+clickcast install
 pytest
 ```
 

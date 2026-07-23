@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import typer
 
-from webreel import __version__
+from clickcast import __version__
 
 app = typer.Typer(
-    name="webreel",
+    name="clickcast",
     help="Drive a browser through a website and return a reel + AI-readable feedback sidecar.",
     no_args_is_help=True,
     add_completion=False,
@@ -14,7 +14,7 @@ app = typer.Typer(
 
 def _not_yet(name: str) -> None:
     typer.secho(
-        f"`webreel {name}` is not implemented yet — tracked in the MVP roadmap (issue #1).",
+        f"`clickcast {name}` is not implemented yet — tracked in the MVP roadmap (issue #1).",
         fg=typer.colors.YELLOW,
         err=True,
     )
@@ -61,7 +61,7 @@ def init(path: str = typer.Argument("tour.yml", help="Output scenario path.")) -
     _not_yet("init")
 
 
-@app.command(help="Dump interactive elements webreel can see on a page.")
+@app.command(help="Dump interactive elements clickcast can see on a page.")
 def elements(url: str = typer.Argument(..., help="Target URL.")) -> None:
     _not_yet("elements")
 

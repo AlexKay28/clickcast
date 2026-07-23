@@ -1,4 +1,4 @@
-from webreel.cli import app
+from clickcast.cli import app
 
 if __name__ == "__main__":
     app()
