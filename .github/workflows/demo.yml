@@ -1,0 +1,78 @@
+name: demo
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: URL to record
+        default: https://worldsight-weld.vercel.app/
+        required: true
+      viewport:
+        description: Viewport (WxH)
+        default: 1280x800
+        required: true
+      fps:
+        description: Frames per second
+        default: "12"
+        required: true
+      max-clicks:
+        description: Max discovered elements to click
+        default: "3"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Explicit token so `git push` below uses the GITHUB_TOKEN + our
+          # per-job contents:write permission, not any long-lived credential.
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -e ".[dev]"
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-Linux-${{ hashFiles('pyproject.toml') }}
+
+      - name: Install Playwright chromium
+        run: playwright install --with-deps chromium
+
+      - name: Generate demo GIF
+        run: |
+          python scripts/generate_demo.py \
+            --url "${{ inputs.url }}" \
+            --viewport "${{ inputs.viewport }}" \
+            --fps "${{ inputs.fps }}" \
+            --max-clicks "${{ inputs['max-clicks'] }}" \
+            --out docs/demo.gif \
+            --verbose
+
+      - name: Show output size
+        run: ls -lh docs/demo.gif
+
+      - name: Commit regenerated GIF
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/demo.gif
+          if git diff --staged --quiet; then
+            echo "docs/demo.gif is unchanged; nothing to commit."
+          else
+            git commit -m "chore(demo): refresh docs/demo.gif via demo workflow"
+            git push
+          fi
