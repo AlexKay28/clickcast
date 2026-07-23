@@ -35,15 +35,27 @@ async def _run(
     fps: int,
     dwell: float,
     max_clicks: int,
+    initial_wait: float,
+    keep_frames_dir: Path | None,
 ) -> None:
     async with Session(viewport=viewport) as sess:
-        with Recorder(fps=fps, default_dwell=dwell) as rec:
+        with Recorder(
+            fps=fps,
+            default_dwell=dwell,
+            keep=keep_frames_dir is not None,
+            out_dir=keep_frames_dir,
+        ) as rec:
             goto = GotoStep(url=url, wait="networkidle", dwell=dwell)
             await rec.pre_action(sess)
             result = await execute(goto, sess)
-            await rec.post_action(sess, result, goto)
             if not result.ok:
                 raise RuntimeError(f"goto {url} failed: {result.error}")
+            # Give SPAs / heavy client-side apps time to actually paint
+            # (networkidle can fire before hydration finishes).
+            if initial_wait > 0:
+                await sess.wait(initial_wait)
+                log.info("held %.1fs after networkidle for hydration", initial_wait)
+            await rec.post_action(sess, result, goto)
 
             elements = await discover(sess, limit=max_clicks * 2)
             log.info(
@@ -98,6 +110,18 @@ def main() -> None:
     parser.add_argument("--fps", type=int, default=12)
     parser.add_argument("--dwell", type=float, default=1.2)
     parser.add_argument("--max-clicks", type=int, default=3)
+    parser.add_argument(
+        "--initial-wait",
+        type=float,
+        default=4.0,
+        help="Seconds to hold after networkidle before starting to click (SPA hydration).",
+    )
+    parser.add_argument(
+        "--keep-frames",
+        type=Path,
+        default=None,
+        help="If set, copy raw PNG frames to this directory (for debugging).",
+    )
     parser.add_argument("-v", "--verbose", action="count", default=0)
     args = parser.parse_args()
 
@@ -115,6 +139,8 @@ def main() -> None:
             fps=args.fps,
             dwell=args.dwell,
             max_clicks=args.max_clicks,
+            initial_wait=args.initial_wait,
+            keep_frames_dir=args.keep_frames,
         )
     )
 
