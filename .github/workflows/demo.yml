@@ -19,6 +19,10 @@ on:
         description: Max discovered elements to click
         default: "3"
         required: true
+      initial-wait:
+        description: Seconds to hold after networkidle before first click
+        default: "4"
+        required: true
 
 permissions:
   contents: read
@@ -59,11 +63,21 @@ jobs:
             --viewport "${{ inputs.viewport }}" \
             --fps "${{ inputs.fps }}" \
             --max-clicks "${{ inputs['max-clicks'] }}" \
+            --initial-wait "${{ inputs['initial-wait'] }}" \
+            --keep-frames debug-frames \
             --out docs/demo.gif \
             --verbose
 
       - name: Show output size
         run: ls -lh docs/demo.gif
+
+      - name: Upload debug frames
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: demo-frames
+          path: debug-frames/
+          retention-days: 7
 
       - name: Commit regenerated GIF
         run: |
