@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Tabs — Clickcast Fixture</title>
+  <style>
+    body { font-family: sans-serif; margin: 20px; color: #222; }
+    nav { background: #eef2f7; padding: 12px; margin-bottom: 20px; border-radius: 4px; }
+    nav a { margin-right: 16px; color: #14509d; text-decoration: none; font-weight: 600; }
+    [role="tablist"] { display: flex; border-bottom: 2px solid #ccc; margin-bottom: 20px; }
+    [role="tab"] {
+      background: transparent;
+      border: none;
+      padding: 12px 20px;
+      cursor: pointer;
+      font-size: 15px;
+      color: #666;
+    }
+    [role="tab"][aria-selected="true"] {
+      color: #1877f2;
+      border-bottom: 2px solid #1877f2;
+      font-weight: 600;
+    }
+    [role="tabpanel"] { padding: 12px; }
+  </style>
+</head>
+<body>
+  <nav aria-label="Primary">
+    <a href="/">Home</a>
+    <a href="/form.html">Form</a>
+    <a href="/tabs.html">Tabs</a>
+  </nav>
+
+  <main>
+    <h1>Tabs</h1>
+    <div role="tablist" aria-label="Sections">
+      <button role="tab" aria-selected="true"  aria-controls="panel-overview" id="tab-overview">Overview</button>
+      <button role="tab" aria-selected="false" aria-controls="panel-details"  id="tab-details">Details</button>
+      <button role="tab" aria-selected="false" aria-controls="panel-settings" id="tab-settings">Settings</button>
+    </div>
+    <div id="panel-overview" role="tabpanel" aria-labelledby="tab-overview">
+      <p>Overview content — the default panel.</p>
+    </div>
+    <div id="panel-details" role="tabpanel" aria-labelledby="tab-details" hidden>
+      <p>Details content — hidden until Details is clicked.</p>
+    </div>
+    <div id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
+      <p>Settings content — hidden until Settings is clicked.</p>
+    </div>
+  </main>
+
+  <script>
+    const tabs = document.querySelectorAll('[role="tab"]');
+    tabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        tabs.forEach((t) => {
+          t.setAttribute('aria-selected', 'false');
+          document.getElementById(t.getAttribute('aria-controls')).hidden = true;
+        });
+        tab.setAttribute('aria-selected', 'true');
+        document.getElementById(tab.getAttribute('aria-controls')).hidden = false;
+      });
+    });
+  </script>
+</body>
+</html>

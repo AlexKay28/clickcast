@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Clickcast Fixture Site</title>
+  <style>
+    body { font-family: sans-serif; margin: 20px; color: #222; }
+    nav { background: #eef2f7; padding: 12px; margin-bottom: 20px; border-radius: 4px; }
+    nav a { margin-right: 16px; color: #14509d; text-decoration: none; font-weight: 600; }
+    nav a:hover { text-decoration: underline; }
+    .primary-buttons { margin: 24px 0; }
+    .primary-buttons button {
+      padding: 12px 24px;
+      margin-right: 12px;
+      font-size: 16px;
+      background: #1877f2;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .primary-buttons button:hover { background: #145dc4; }
+    #marker { padding: 12px; background: #e6f7ea; border: 1px solid #b7e0c4; border-radius: 4px; margin-top: 24px; }
+    footer { margin-top: 60px; border-top: 1px solid #ccc; padding-top: 16px; color: #666; }
+    footer a { margin-right: 20px; color: #666; }
+  </style>
+</head>
+<body>
+  <nav aria-label="Primary">
+    <a href="/">Home</a>
+    <a href="/form.html">Form</a>
+    <a href="/tabs.html">Tabs</a>
+  </nav>
+
+  <main>
+    <h1>Clickcast Fixture Site</h1>
+    <p>A tiny multi-page app for integration tests. No public internet needed.</p>
+
+    <div class="primary-buttons">
+      <button id="btn-3d">3D</button>
+      <button id="btn-compare" aria-label="Compare countries">Compare</button>
+      <button id="btn-reset" data-testid="reset-btn">Reset</button>
+    </div>
+
+    <div id="marker" hidden>
+      last clicked: <span id="clicked-name"></span>
+    </div>
+  </main>
+
+  <footer>
+    <a href="/privacy.html">Privacy</a>
+    <a href="/terms.html">Terms</a>
+  </footer>
+
+  <script>
+    document.querySelectorAll('.primary-buttons button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const marker = document.getElementById('marker');
+        marker.hidden = false;
+        document.getElementById('clicked-name').textContent = btn.textContent;
+      });
+    });
+  </script>
+</body>
+</html>

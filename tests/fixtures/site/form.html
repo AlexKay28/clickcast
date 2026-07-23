@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Form — Clickcast Fixture</title>
+  <style>
+    body { font-family: sans-serif; margin: 20px; color: #222; }
+    nav { background: #eef2f7; padding: 12px; margin-bottom: 20px; border-radius: 4px; }
+    nav a { margin-right: 16px; color: #14509d; text-decoration: none; font-weight: 600; }
+    form { max-width: 400px; }
+    label { display: block; margin-bottom: 12px; }
+    input, select { width: 100%; padding: 8px; margin-top: 4px; }
+    button[type="submit"] {
+      padding: 10px 20px;
+      background: #1877f2;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    #result { margin-top: 24px; padding: 12px; background: #eef7ff; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <nav aria-label="Primary">
+    <a href="/">Home</a>
+    <a href="/form.html">Form</a>
+    <a href="/tabs.html">Tabs</a>
+  </nav>
+
+  <main>
+    <h1>Sign-up form</h1>
+    <form id="signup">
+      <label>
+        Name
+        <input type="text" id="name" name="name" required>
+      </label>
+      <label>
+        Country
+        <select id="country" name="country">
+          <option value="us">United States</option>
+          <option value="uk">United Kingdom</option>
+          <option value="fr">France</option>
+        </select>
+      </label>
+      <button type="submit" id="submit-btn">Submit</button>
+    </form>
+
+    <div id="result" hidden></div>
+  </main>
+
+  <script>
+    document.getElementById('signup').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const name = document.getElementById('name').value || '(anon)';
+      const country = document.getElementById('country').value;
+      const result = document.getElementById('result');
+      result.hidden = false;
+      result.textContent = `Hello ${name} from ${country}`;
+    });
+  </script>
+</body>
+</html>
