@@ -85,7 +85,10 @@ extend-immutable-calls = ["typer.Argument", "typer.Option"]
 quote-style = "double"
 
 [tool.mypy]
-python_version = "3.10"
+# python_version is set to 3.12 (not our min-supported 3.10) because numpy's
+# type stubs use PEP 695 `type` statements, which are 3.12+ syntax. Runtime
+# 3.10 compatibility is enforced by the CI matrix, not mypy.
+python_version = "3.12"
 strict = true
 files = ["src/clickcast"]
 warn_unused_ignores = true
