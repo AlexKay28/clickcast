@@ -53,6 +53,13 @@ def annotate_frames_dir(
     total_steps = max(f["step_index"] for f in frames) + 1
     ann = Annotator(config)
     steps = steps or {}
+    # Build the ordered list of every step's label — the actions-panel needs
+    # the full history to render "the last N with current highlighted". Steps
+    # without a label render as an empty row (rare in practice — auto pipeline
+    # always sets one).
+    all_labels: list[str] = [
+        (steps.get(i, StepAnnotation()).label or "…") for i in range(total_steps)
+    ]
 
     for entry in frames:
         step_index = entry["step_index"]
@@ -75,5 +82,6 @@ def annotate_frames_dir(
             cursor_xy=cursor_xy,
             click_at=step_ann.click_at,
             ripple_stage=ripple_stage,
+            all_labels=all_labels,
         )
     return len(frames)
