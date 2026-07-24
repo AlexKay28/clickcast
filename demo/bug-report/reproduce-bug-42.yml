@@ -18,31 +18,28 @@ meta:
   out: reel-bug-42.gif
 
 steps:
-  - action: goto
-    url: "{{ base_url }}/the/broken/page"
+  - goto: "{{ base_url }}/the/broken/page"
     wait: networkidle
     dwell: 1.5
     label: "open broken page"
 
   # Fill in the exact clicks / types that trigger the failure.
-  - action: click
-    selector: 'role=button[name="Edit"]'
-    label: "open editor"
+  - click: 'role=button[name="Edit"]'
     dwell: 1.0
+    label: "open editor"
 
-  - action: type
-    into: 'textarea[name="content"]'
-    text: "example content that triggers the bug"
+  - type:
+      into: 'textarea[name="content"]'
+      text: "example content that triggers the bug"
     label: "enter content"
 
-  - action: click
-    selector: 'role=button[name="Save"]'
-    label: "click save (this is where it fails)"
+  - click: 'role=button[name="Save"]'
     # `optional: true` means the sidecar records the failure but the tour
     # continues — you still get frames of the broken state.
     optional: true
     dwell: 3.0
+    label: "click save (this is where it fails)"
 
-  - action: screenshot
-    full_page: true
+  - screenshot:
+      full_page: true
     label: "capture the failure state"

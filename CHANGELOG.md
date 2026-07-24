@@ -8,12 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **`demo/` folder** — runnable use-case examples (closes part of #66).
-  Four subfolders shipped: `ai-eye-review/`, `site-cartography/`,
-  `regression-visual-diff/`, `bug-report/`. Each has a README with when/why
-  and a concrete command. `regression-visual-diff/` and `bug-report/` also
-  include a scenario YAML template. Remaining four use cases from #66
-  planned for a follow-up.
+- **`demo/` folder complete** (closes #66). All 8 use cases from the
+  original issue now have subfolders with README + committed sample reel:
+  `ai-eye-review/`, `site-cartography/`, `regression-visual-diff/`,
+  `bug-report/`, `onboarding-tutorial/`, `a-b-comparison/`,
+  `llm-doc-scraping/`, `accessibility-preflight/`. Reels are ~9 MB
+  total, all generated against public sites so anyone can regenerate.
+
+### Fixed
+- **Demo scenario YAMLs used wrong shape.** `login-flow.yml` and
+  `reproduce-bug-42.yml` (added in the initial demo folder PR) used
+  `action: goto` style, but the scenario parser expects the action verb
+  as the YAML key (`goto: url`). Fixed both to match `docs/scenarios/*.yml`.
 
 ## [0.1.2] — 2026-07-24
 
