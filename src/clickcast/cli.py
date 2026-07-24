@@ -343,13 +343,25 @@ async def _explore_page(
             await builder.record_step(index=step_index, step=step, result=r, frames=frames_step)
         step_index += 1
 
-        # Post-click: did we navigate? If yes, note the destination and stop
-        # clicking on the current page (we've drifted — remaining discovered
-        # elements no longer exist).
+        # Post-click: did we navigate? Note the destination and try to restore
+        # the page so we can keep clicking the remaining discovered elements.
+        # Same-origin nav: page.go_back() and continue. Cross-origin nav:
+        # bail (we shouldn't drive further on someone else's site).
         url_after = sess.page.url
         if url_after != url_before:
             discovered_urls.append(url_after)
-            break
+            if not is_same_origin(url_after, url_before):
+                break
+            try:
+                await sess.page.go_back(wait_until="networkidle")
+            except Exception:
+                # Some sites (chained redirects, popstate handlers) refuse
+                # go_back cleanly. Give up on further clicks on this page.
+                break
+            # Verify we actually returned to the original page — some sites
+            # replace history so go_back lands somewhere else.
+            if sess.page.url != url_before:
+                break
         await sess.wait(0.3)
 
     scroll = ScrollStep(by=600, dwell=dwell)
