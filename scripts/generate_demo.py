@@ -187,6 +187,7 @@ async def _run(
     max_pages: int,
     max_duration: float,
     click_timeout_ms: int,
+    traversal: str,
     initial_wait: float,
     keep_frames_dir: Path | None,
 ) -> None:
@@ -206,16 +207,17 @@ async def _run(
             pages_visited = 0
             clicks_remaining = max_clicks
 
+            pop_next = queue.pop if traversal == "dfs" else queue.popleft
             while queue and pages_visited < max_pages and clicks_remaining > 0:
                 if time.monotonic() >= deadline:
                     log.warning(
-                        "max-duration %.0fs reached before page %d/%d → stopping BFS",
+                        "max-duration %.0fs reached before page %d/%d → stopping tour",
                         max_duration,
                         pages_visited + 1,
                         max_pages,
                     )
                     break
-                current = queue.popleft()
+                current = pop_next()
                 key = normalize_url(current)
                 if key in visited:
                     continue
@@ -301,6 +303,15 @@ def main() -> None:
         help="Per-click timeout in seconds (Playwright default is 30s).",
     )
     parser.add_argument(
+        "--traversal",
+        choices=("dfs", "bfs"),
+        default="dfs",
+        help=(
+            "Queue policy: 'dfs' (default, coherent narrative) or 'bfs' (site-map "
+            "coverage, visit every top-level destination first)."
+        ),
+    )
+    parser.add_argument(
         "--initial-wait",
         type=float,
         default=4.0,
@@ -332,6 +343,7 @@ def main() -> None:
             max_pages=args.max_pages,
             max_duration=args.max_duration,
             click_timeout_ms=int(args.click_timeout * 1000),
+            traversal=args.traversal,
             initial_wait=args.initial_wait,
             keep_frames_dir=args.keep_frames,
         )

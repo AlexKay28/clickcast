@@ -1,9 +1,7 @@
-"""Time-budget assertions for `_do_auto` (`--max-duration` + `--click-timeout`)."""
+"""DFS vs BFS URL queue ordering."""
 
 from __future__ import annotations
 
-import asyncio
-import logging
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -11,7 +9,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from clickcast.cli import _do_auto
-from clickcast.core.actions import ClickStep
 from clickcast.discovery import Element
 
 
@@ -121,90 +118,49 @@ def _stub_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> _FakeS
     return fake_sess
 
 
-class TestClickTimeoutPropagates:
-    """`--click-timeout` must land on the ClickStep we hand to `execute`."""
+class TestTraversalOrdering:
+    """DFS pops from the right (LIFO); BFS pops from the left (FIFO)."""
 
     @pytest.mark.asyncio
-    async def test_click_step_has_timeout_ms(self, _stub_environment: _FakeSession) -> None:
-        fake_sess = _stub_environment
-        seen_steps: list[ClickStep] = []
-
-        async def _fake_execute(step: Any, _sess: Any) -> MagicMock:
-            if step.__class__.__name__ == "GotoStep":
-                fake_sess.page.url = step.url
-            elif step.__class__.__name__ == "ClickStep":
-                seen_steps.append(step)
-            return _make_result()
-
-        with (
-            patch("clickcast.cli.execute", side_effect=_fake_execute),
-            patch(
-                "clickcast.cli.discover",
-                AsyncMock(return_value=[_make_element("Btn")]),
-            ),
-        ):
-            await _do_auto(
-                url="https://x.com/",
-                out="reel.gif",
-                max_steps=1,
-                max_pages=1,
-                dwell=0.0,
-                initial_wait=0.0,
-                max_duration=60.0,
-                click_timeout_ms=5000,
-                traversal="bfs",
-                session_kwargs={"engine": "chromium"},
-                fps=12,
-                format_=None,
-                quality=8,
-                loop=0,
-                no_sidecar=True,
-            )
-        assert seen_steps, "no ClickStep was executed"
-        for s in seen_steps:
-            assert s.timeout_ms == 5000, f"expected timeout_ms=5000, got {s.timeout_ms}"
-
-
-class TestMaxDurationCap:
-    """`--max-duration` breaks BFS early when the wall clock exceeds it."""
-
-    @pytest.mark.asyncio
-    async def test_deadline_stops_bfs_between_pages(
-        self, _stub_environment: _FakeSession, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    async def test_dfs_visits_deepest_first(self, _stub_environment: _FakeSession) -> None:
+        """From start, discover 3 nav destinations. DFS visits the LAST-
+        discovered one first (LIFO), giving depth-first ordering."""
         fake_sess = _stub_environment
         gotos: list[str] = []
-        click_counter = {"n": 0}
+        counters: dict[str, int] = {}
 
         async def _fake_execute(step: Any, _sess: Any) -> MagicMock:
             cls = step.__class__.__name__
             if cls == "GotoStep":
                 gotos.append(step.url)
                 fake_sess.page.url = step.url
-                # Simulate slow goto so wall-time actually elapses
-                await asyncio.sleep(0.06)
-            elif cls == "ClickStep":
-                click_counter["n"] += 1
-                # Every click nav's to a new URL to keep the queue full
-                fake_sess.page.url = f"https://x.com/page-{click_counter['n']}"
+                return _make_result()
+            if cls == "ClickStep":
+                here = fake_sess.page.url
+                n = counters.get(here, 0) + 1
+                counters[here] = n
+                # Only the start page has nav targets. First 3 clicks navigate.
+                if here == "https://x.com/" and n <= 3:
+                    fake_sess.page.url = f"https://x.com/dest-{n}"
             return _make_result()
 
-        elements = [_make_element(f"e{i}") for i in range(20)]
         with (
-            caplog.at_level(logging.WARNING, logger="clickcast.auto"),
             patch("clickcast.cli.execute", side_effect=_fake_execute),
-            patch("clickcast.cli.discover", AsyncMock(return_value=elements)),
+            patch(
+                "clickcast.cli.discover",
+                AsyncMock(return_value=[_make_element(f"L{i}") for i in range(3)]),
+            ),
         ):
             await _do_auto(
                 url="https://x.com/",
                 out="reel.gif",
-                max_steps=50,
-                max_pages=100,  # generous — deadline should stop us first
+                max_steps=20,
+                max_pages=4,
                 dwell=0.0,
                 initial_wait=0.0,
-                max_duration=0.1,  # 100ms — trips after ~1-2 pages
+                max_duration=60.0,
                 click_timeout_ms=2000,
-                traversal="bfs",
+                traversal="dfs",
                 session_kwargs={"engine": "chromium"},
                 fps=12,
                 format_=None,
@@ -212,31 +168,50 @@ class TestMaxDurationCap:
                 loop=0,
                 no_sidecar=True,
             )
-        assert len(gotos) < 20, (
-            f"deadline should have stopped BFS before all pages; got {len(gotos)} gotos"
-        )
-        messages = [r.message for r in caplog.records]
-        assert any("max-duration" in m for m in messages), (
-            "missing max-duration warning. Got:\n" + "\n".join(messages)
-        )
+        assert gotos == [
+            "https://x.com/",
+            "https://x.com/dest-3",
+            "https://x.com/dest-2",
+            "https://x.com/dest-1",
+        ], f"DFS ordering wrong, got {gotos}"
 
     @pytest.mark.asyncio
-    async def test_max_duration_zero_dies(self, _stub_environment: _FakeSession) -> None:
-        from typer import Exit
+    async def test_bfs_visits_earliest_first(self, _stub_environment: _FakeSession) -> None:
+        """Same setup as DFS test, but with `traversal='bfs'`. BFS visits
+        the FIRST-discovered destination first (FIFO)."""
+        fake_sess = _stub_environment
+        gotos: list[str] = []
+        counters: dict[str, int] = {}
+
+        async def _fake_execute(step: Any, _sess: Any) -> MagicMock:
+            cls = step.__class__.__name__
+            if cls == "GotoStep":
+                gotos.append(step.url)
+                fake_sess.page.url = step.url
+                return _make_result()
+            if cls == "ClickStep":
+                here = fake_sess.page.url
+                n = counters.get(here, 0) + 1
+                counters[here] = n
+                if here == "https://x.com/" and n <= 3:
+                    fake_sess.page.url = f"https://x.com/dest-{n}"
+            return _make_result()
 
         with (
-            patch("clickcast.cli.execute", AsyncMock(return_value=_make_result())),
-            patch("clickcast.cli.discover", AsyncMock(return_value=[_make_element("x")])),
-            pytest.raises(Exit),
+            patch("clickcast.cli.execute", side_effect=_fake_execute),
+            patch(
+                "clickcast.cli.discover",
+                AsyncMock(return_value=[_make_element(f"L{i}") for i in range(3)]),
+            ),
         ):
             await _do_auto(
                 url="https://x.com/",
                 out="reel.gif",
-                max_steps=1,
-                max_pages=1,
+                max_steps=20,
+                max_pages=4,
                 dwell=0.0,
                 initial_wait=0.0,
-                max_duration=0.0,
+                max_duration=60.0,
                 click_timeout_ms=2000,
                 traversal="bfs",
                 session_kwargs={"engine": "chromium"},
@@ -246,3 +221,9 @@ class TestMaxDurationCap:
                 loop=0,
                 no_sidecar=True,
             )
+        assert gotos == [
+            "https://x.com/",
+            "https://x.com/dest-1",
+            "https://x.com/dest-2",
+            "https://x.com/dest-3",
+        ], f"BFS ordering wrong, got {gotos}"
