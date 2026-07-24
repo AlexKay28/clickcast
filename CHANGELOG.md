@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **AI-eye overlays** (closes #57).
+  - **Light-mode label banner** — new `AnnotateConfig.label_style="light"`
+    (now the default) puts step labels on a white background with dark
+    text. Old dark banner blended into dark-mode sites (react.dev); light
+    reads on both. `label_style="dark"` restores the previous look.
+  - **Actions panel** — new `AnnotateConfig.actions_panel` (default on)
+    composites a top-right side panel listing recent step labels with the
+    current one highlighted. Gives viewers (human and LLM alike) an
+    at-a-glance map of "where we are in the tour" that the progress bar
+    alone can't convey.
+  - Both apply automatically via `annotate_frames_dir` — the pipeline
+    passes `all_labels` (list of every step's label) so the panel can
+    render the tour history.
 - **`--seed-url` on `auto`** (repeatable) — agent-controllable BFS. When any
   `--seed-url` is set, the tour visits exactly the initial URL + your seeds,
   in the order given, and does NOT auto-enqueue navigation destinations
