@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`demo/` folder** — runnable use-case examples (closes part of #66).
+  Four subfolders shipped: `ai-eye-review/`, `site-cartography/`,
+  `regression-visual-diff/`, `bug-report/`. Each has a README with when/why
+  and a concrete command. `regression-visual-diff/` and `bug-report/` also
+  include a scenario YAML template. Remaining four use cases from #66
+  planned for a follow-up.
+
 ## [0.1.2] — 2026-07-24
 
 Big `auto`-mode release: multi-page BFS/DFS tours, hardened time budgets,
