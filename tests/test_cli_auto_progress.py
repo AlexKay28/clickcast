@@ -8,141 +8,34 @@ per-go_back, per-page-summary INFO lines. These tests lock the trace in place.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from clickcast.cli import _do_auto
-from clickcast.discovery import Element
-
-
-def _make_element(text: str) -> Element:
-    return Element(
-        selector=f'text="{text}"',
-        role="link",
-        text=text,
-        bbox=(100, 80, 100, 30),
-        score=3,
-        source="dom-heuristic",
-    )
-
-
-class _FakePage:
-    def __init__(self) -> None:
-        self._url_stack: list[str] = [""]
-
-    @property
-    def url(self) -> str:
-        return self._url_stack[-1]
-
-    @url.setter
-    def url(self, new: str) -> None:
-        self._url_stack.append(new)
-
-    async def go_back(self, **_kwargs: Any) -> None:
-        if len(self._url_stack) > 1:
-            self._url_stack.pop()
-
-
-class _FakeSession:
-    def __init__(self) -> None:
-        self.page = _FakePage()
-
-    async def __aenter__(self) -> _FakeSession:
-        return self
-
-    async def __aexit__(self, *args: Any) -> None:
-        return None
-
-    async def wait(self, _s: float) -> None:
-        return None
-
-
-def _make_result() -> MagicMock:
-    r = MagicMock()
-    r.ok = True
-    r.status = "ok"
-    r.error = None
-    r.cursor_xy = (100, 80)
-    return r
-
-
-@pytest.fixture
-def _stub_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> _FakeSession:
-    fake_sess = _FakeSession()
-
-    class _SessCtor:
-        def __init__(self, **_kwargs: Any) -> None:
-            self._sess = fake_sess
-
-        async def __aenter__(self) -> _FakeSession:
-            return self._sess
-
-        async def __aexit__(self, *args: Any) -> None:
-            return None
-
-    monkeypatch.setattr("clickcast.auto.Session", _SessCtor)
-
-    class _FakeRecorder:
-        def __init__(self, **_kwargs: Any) -> None:
-            self.frames_dir = tmp_path / "frames"
-            self.frames_dir.mkdir(exist_ok=True)
-
-        def __enter__(self) -> _FakeRecorder:
-            return self
-
-        def __exit__(self, *args: Any) -> None:
-            return None
-
-        async def pre_action(self, *_a: Any, **_kw: Any) -> Path:
-            return self.frames_dir / "p.png"
-
-        async def post_action(self, *_a: Any, **_kw: Any) -> list[Path]:
-            return [self.frames_dir / "q.png"]
-
-        def flush(self) -> list[Path]:
-            return []
-
-    monkeypatch.setattr("clickcast.auto.Recorder", _FakeRecorder)
-    monkeypatch.setattr("clickcast.auto.annotate_frames_dir", MagicMock(return_value=0))
-    monkeypatch.setattr(
-        "clickcast.auto.encode",
-        MagicMock(
-            return_value=MagicMock(
-                path=tmp_path / "reel.gif",
-                format="gif",
-                size_bytes=1024,
-                duration_s=1.0,
-                frame_count=10,
-            )
-        ),
-    )
-    monkeypatch.setattr("clickcast.auto._write_sidecar", MagicMock(return_value=None))
-    monkeypatch.setattr("clickcast.auto.ReportBuilder", MagicMock)
-    return fake_sess
+from tests._stubs import FakeSession, make_element, make_result
 
 
 class TestAutoProgressLogging:
     @pytest.mark.asyncio
     async def test_emits_per_click_info_lines(
-        self, _stub_environment: _FakeSession, caplog: pytest.LogCaptureFixture
+        self, stub_environment: FakeSession, caplog: pytest.LogCaptureFixture
     ) -> None:
         """Regression: silent-during-work symptom. Every click must produce an
         INFO log line so the user can see progress in a long run."""
-        fake_sess = _stub_environment
+        fake_sess = stub_environment
         click_counter = {"n": 0}
 
-        async def _fake_execute(step: Any, _sess: Any) -> MagicMock:
+        async def _fake_execute(step: Any, _sess: Any) -> Any:
             cls = step.__class__.__name__
             if cls == "GotoStep":
                 fake_sess.page.url = step.url
             elif cls == "ClickStep":
                 click_counter["n"] += 1
-            return _make_result()
+            return make_result()
 
-        elements = [_make_element(f"Btn{i}") for i in range(5)]
+        elements = [make_element(f"Btn{i}") for i in range(5)]
         with (
             caplog.at_level(logging.INFO, logger="clickcast.auto"),
             patch("clickcast.auto.execute", side_effect=_fake_execute),
@@ -176,14 +69,14 @@ class TestAutoProgressLogging:
 
     @pytest.mark.asyncio
     async def test_emits_nav_and_go_back_lines(
-        self, _stub_environment: _FakeSession, caplog: pytest.LogCaptureFixture
+        self, stub_environment: FakeSession, caplog: pytest.LogCaptureFixture
     ) -> None:
         """Every same-origin navigation must log both the nav and the go_back
         (this is where the demo used to silently spend 5-30 seconds per click)."""
-        fake_sess = _stub_environment
+        fake_sess = stub_environment
         click_counter = {"n": 0}
 
-        async def _fake_execute(step: Any, _sess: Any) -> MagicMock:
+        async def _fake_execute(step: Any, _sess: Any) -> Any:
             cls = step.__class__.__name__
             if cls == "GotoStep":
                 fake_sess.page.url = step.url
@@ -191,14 +84,14 @@ class TestAutoProgressLogging:
                 click_counter["n"] += 1
                 if click_counter["n"] == 1:
                     fake_sess.page.url = "https://x.com/inner"
-            return _make_result()
+            return make_result()
 
         with (
             caplog.at_level(logging.INFO, logger="clickcast.auto"),
             patch("clickcast.auto.execute", side_effect=_fake_execute),
             patch(
                 "clickcast.auto.discover",
-                AsyncMock(return_value=[_make_element("Nav"), _make_element("Other")]),
+                AsyncMock(return_value=[make_element("Nav"), make_element("Other")]),
             ),
         ):
             await _do_auto(
@@ -229,21 +122,21 @@ class TestAutoProgressLogging:
 
     @pytest.mark.asyncio
     async def test_emits_page_summary_line(
-        self, _stub_environment: _FakeSession, caplog: pytest.LogCaptureFixture
+        self, stub_environment: FakeSession, caplog: pytest.LogCaptureFixture
     ) -> None:
         """Each page ends with a `page N/M · done in Ns (X clicks used, ...)` line —
         the summary that used to be missing between pages."""
-        fake_sess = _stub_environment
+        fake_sess = stub_environment
 
-        async def _fake_execute(step: Any, _sess: Any) -> MagicMock:
+        async def _fake_execute(step: Any, _sess: Any) -> Any:
             if step.__class__.__name__ == "GotoStep":
                 fake_sess.page.url = step.url
-            return _make_result()
+            return make_result()
 
         with (
             caplog.at_level(logging.INFO, logger="clickcast.auto"),
             patch("clickcast.auto.execute", side_effect=_fake_execute),
-            patch("clickcast.auto.discover", AsyncMock(return_value=[_make_element("Btn")])),
+            patch("clickcast.auto.discover", AsyncMock(return_value=[make_element("Btn")])),
         ):
             await _do_auto(
                 url="https://x.com/",
@@ -270,16 +163,16 @@ class TestAutoProgressLogging:
 
     @pytest.mark.asyncio
     async def test_attempt_counter_advances_even_on_failed_clicks(
-        self, _stub_environment: _FakeSession, caplog: pytest.LogCaptureFixture
+        self, stub_environment: FakeSession, caplog: pytest.LogCaptureFixture
     ) -> None:
         """Regression: with the old `click N/max` log using `clicked + 1`,
         the number froze at the last successful click's index whenever
         clicks failed. Users saw `click 8/15` repeated 20 times. New log
         uses an `attempt N` counter that always advances."""
-        fake_sess = _stub_environment
+        fake_sess = stub_environment
         click_counter = {"n": 0}
 
-        def _failing_result() -> MagicMock:
+        def _failing_result() -> Any:
             r = MagicMock()
             r.ok = False
             r.status = "failed"
@@ -287,25 +180,25 @@ class TestAutoProgressLogging:
             r.cursor_xy = None
             return r
 
-        async def _fake_execute(step: Any, _sess: Any) -> MagicMock:
+        async def _fake_execute(step: Any, _sess: Any) -> Any:
             cls = step.__class__.__name__
             if cls == "GotoStep":
                 fake_sess.page.url = step.url
-                return _make_result()
+                return make_result()
             if cls == "ClickStep":
                 click_counter["n"] += 1
                 # Clicks 1 and 3 succeed; click 2 fails.
                 if click_counter["n"] == 2:
                     return _failing_result()
-                return _make_result()
-            return _make_result()
+                return make_result()
+            return make_result()
 
         with (
             caplog.at_level(logging.INFO, logger="clickcast.auto"),
             patch("clickcast.auto.execute", side_effect=_fake_execute),
             patch(
                 "clickcast.auto.discover",
-                AsyncMock(return_value=[_make_element(f"E{i}") for i in range(3)]),
+                AsyncMock(return_value=[make_element(f"E{i}") for i in range(3)]),
             ),
         ):
             await _do_auto(
@@ -341,15 +234,15 @@ class TestAutoProgressLogging:
 
     @pytest.mark.asyncio
     async def test_breaks_after_consecutive_click_failures(
-        self, _stub_environment: _FakeSession, caplog: pytest.LogCaptureFixture
+        self, stub_environment: FakeSession, caplog: pytest.LogCaptureFixture
     ) -> None:
         """A page whose discovered elements all fail used to burn the entire
         pool (20+ elements x ~30s Playwright default). Now we break after 3
         consecutive failures."""
-        fake_sess = _stub_environment
+        fake_sess = stub_environment
         click_counter = {"n": 0}
 
-        def _failing_result() -> MagicMock:
+        def _failing_result() -> Any:
             r = MagicMock()
             r.ok = False
             r.status = "failed"
@@ -357,22 +250,22 @@ class TestAutoProgressLogging:
             r.cursor_xy = None
             return r
 
-        async def _fake_execute(step: Any, _sess: Any) -> MagicMock:
+        async def _fake_execute(step: Any, _sess: Any) -> Any:
             cls = step.__class__.__name__
             if cls == "GotoStep":
                 fake_sess.page.url = step.url
-                return _make_result()
+                return make_result()
             if cls == "ClickStep":
                 click_counter["n"] += 1
                 return _failing_result()  # everything fails
-            return _make_result()
+            return make_result()
 
         with (
             caplog.at_level(logging.INFO, logger="clickcast.auto"),
             patch("clickcast.auto.execute", side_effect=_fake_execute),
             patch(
                 "clickcast.auto.discover",
-                AsyncMock(return_value=[_make_element(f"E{i}") for i in range(20)]),
+                AsyncMock(return_value=[make_element(f"E{i}") for i in range(20)]),
             ),
         ):
             await _do_auto(

@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Centralized test fixtures** (closes #79). Five `test_cli_auto_*.py`
+  files used to redefine near-identical `_FakePage` / `_FakeSession` /
+  `_make_element` / `_make_result` / `_stub_environment` stubs — ~500 LOC
+  of duplicated infrastructure. Moved to `tests/_stubs.py` (dataclasses)
+  + `tests/conftest.py` (`stub_environment` fixture). Test files use
+  the shared pieces via imports + fixture injection. Test count unchanged
+  (287); combined test-file LOC drops from 1935 to 1500.
 - **Extracted shared auto engine** (closes #78, closes #81). The BFS/DFS
   orchestration and per-page click loop moved from `clickcast.cli` (as
   `_do_auto` / `_explore_page`) to a new `clickcast.auto` module (as
