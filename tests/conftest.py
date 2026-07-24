@@ -1,8 +1,13 @@
 """Global test config.
 
-Provides ``fixture_site_url``: a session-scoped `http.server` running
-``tests/fixtures/site/`` on an ephemeral port so integration tests can drive
-a real multi-page browser tour without hitting the public internet.
+Provides:
+
+- ``fixture_site_url``: a session-scoped `http.server` running
+  ``tests/fixtures/site/`` on an ephemeral port so integration tests can
+  drive a real multi-page browser tour without hitting the public internet.
+- ``stub_environment``: patches every heavy dependency the auto engine
+  touches (Session, Recorder, encode, annotate_frames_dir, _write_sidecar,
+  ReportBuilder) so unit tests can invoke it without a real browser.
 """
 
 from __future__ import annotations
@@ -14,8 +19,11 @@ from collections.abc import Generator
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
+
+from tests._stubs import FakeRecorder, FakeSession
 
 _FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "site"
 
@@ -64,3 +72,53 @@ def fixture_site_url() -> Generator[str, None, None]:
         server.shutdown()
         server.server_close()
         thread.join(timeout=2.0)
+
+
+@pytest.fixture
+def stub_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FakeSession:
+    """Patch every heavy dependency the auto engine touches so tests can
+    invoke it without a real browser. Returns the shared :class:`FakeSession`
+    the engine will see; tests inspect its ``page`` for URL history +
+    go_back calls.
+    """
+    fake_sess = FakeSession()
+
+    class _SessCtor:
+        def __init__(self, **_kwargs: Any) -> None:
+            self._sess = fake_sess
+
+        async def __aenter__(self) -> FakeSession:
+            return self._sess
+
+        async def __aexit__(self, *args: Any) -> None:
+            return None
+
+    monkeypatch.setattr("clickcast.auto.Session", _SessCtor)
+
+    class _FakeRecorderCtor:
+        def __init__(self, **_kwargs: Any) -> None:
+            self._rec = FakeRecorder(tmp_path)
+
+        def __enter__(self) -> FakeRecorder:
+            return self._rec
+
+        def __exit__(self, *args: Any) -> None:
+            return None
+
+    monkeypatch.setattr("clickcast.auto.Recorder", _FakeRecorderCtor)
+    monkeypatch.setattr("clickcast.auto.annotate_frames_dir", MagicMock(return_value=0))
+    monkeypatch.setattr(
+        "clickcast.auto.encode",
+        MagicMock(
+            return_value=MagicMock(
+                path=tmp_path / "reel.gif",
+                format="gif",
+                size_bytes=1024,
+                duration_s=1.0,
+                frame_count=10,
+            )
+        ),
+    )
+    monkeypatch.setattr("clickcast.auto._write_sidecar", MagicMock(return_value=None))
+    monkeypatch.setattr("clickcast.auto.ReportBuilder", MagicMock)
+    return fake_sess

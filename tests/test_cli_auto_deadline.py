@@ -4,143 +4,35 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from clickcast.cli import _do_auto
-from clickcast.core.actions import ClickStep
-from clickcast.discovery import Element
-
-
-def _make_element(text: str) -> Element:
-    return Element(
-        selector=f'text="{text}"',
-        role="link",
-        text=text,
-        bbox=(100, 80, 100, 30),
-        score=3,
-        source="dom-heuristic",
-    )
-
-
-class _FakePage:
-    def __init__(self) -> None:
-        self._url_stack: list[str] = [""]
-
-    @property
-    def url(self) -> str:
-        return self._url_stack[-1]
-
-    @url.setter
-    def url(self, new: str) -> None:
-        self._url_stack.append(new)
-
-    async def go_back(self, **_kwargs: Any) -> None:
-        if len(self._url_stack) > 1:
-            self._url_stack.pop()
-
-
-class _FakeSession:
-    def __init__(self) -> None:
-        self.page = _FakePage()
-
-    async def __aenter__(self) -> _FakeSession:
-        return self
-
-    async def __aexit__(self, *args: Any) -> None:
-        return None
-
-    async def wait(self, _s: float) -> None:
-        return None
-
-
-def _make_result() -> MagicMock:
-    r = MagicMock()
-    r.ok = True
-    r.status = "ok"
-    r.error = None
-    r.cursor_xy = (100, 80)
-    return r
-
-
-@pytest.fixture
-def _stub_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> _FakeSession:
-    fake_sess = _FakeSession()
-
-    class _SessCtor:
-        def __init__(self, **_kwargs: Any) -> None:
-            self._sess = fake_sess
-
-        async def __aenter__(self) -> _FakeSession:
-            return self._sess
-
-        async def __aexit__(self, *args: Any) -> None:
-            return None
-
-    monkeypatch.setattr("clickcast.auto.Session", _SessCtor)
-
-    class _FakeRecorder:
-        def __init__(self, **_kwargs: Any) -> None:
-            self.frames_dir = tmp_path / "frames"
-            self.frames_dir.mkdir(exist_ok=True)
-
-        def __enter__(self) -> _FakeRecorder:
-            return self
-
-        def __exit__(self, *args: Any) -> None:
-            return None
-
-        async def pre_action(self, *_a: Any, **_kw: Any) -> Path:
-            return self.frames_dir / "p.png"
-
-        async def post_action(self, *_a: Any, **_kw: Any) -> list[Path]:
-            return [self.frames_dir / "q.png"]
-
-        def flush(self) -> list[Path]:
-            return []
-
-    monkeypatch.setattr("clickcast.auto.Recorder", _FakeRecorder)
-    monkeypatch.setattr("clickcast.auto.annotate_frames_dir", MagicMock(return_value=0))
-    monkeypatch.setattr(
-        "clickcast.auto.encode",
-        MagicMock(
-            return_value=MagicMock(
-                path=tmp_path / "reel.gif",
-                format="gif",
-                size_bytes=1024,
-                duration_s=1.0,
-                frame_count=10,
-            )
-        ),
-    )
-    monkeypatch.setattr("clickcast.auto._write_sidecar", MagicMock(return_value=None))
-    monkeypatch.setattr("clickcast.auto.ReportBuilder", MagicMock)
-    return fake_sess
+from tests._stubs import FakeSession, make_element, make_result
 
 
 class TestClickTimeoutPropagates:
     """`--click-timeout` must land on the ClickStep we hand to `execute`."""
 
     @pytest.mark.asyncio
-    async def test_click_step_has_timeout_ms(self, _stub_environment: _FakeSession) -> None:
-        fake_sess = _stub_environment
-        seen_steps: list[ClickStep] = []
+    async def test_click_step_has_timeout_ms(self, stub_environment: FakeSession) -> None:
+        fake_sess = stub_environment
+        seen_steps: list[Any] = []
 
-        async def _fake_execute(step: Any, _sess: Any) -> MagicMock:
+        async def _fake_execute(step: Any, _sess: Any) -> Any:
             if step.__class__.__name__ == "GotoStep":
                 fake_sess.page.url = step.url
             elif step.__class__.__name__ == "ClickStep":
                 seen_steps.append(step)
-            return _make_result()
+            return make_result()
 
         with (
             patch("clickcast.auto.execute", side_effect=_fake_execute),
             patch(
                 "clickcast.auto.discover",
-                AsyncMock(return_value=[_make_element("Btn")]),
+                AsyncMock(return_value=[make_element("Btn")]),
             ),
         ):
             await _do_auto(
@@ -170,13 +62,13 @@ class TestMaxDurationCap:
 
     @pytest.mark.asyncio
     async def test_deadline_stops_bfs_between_pages(
-        self, _stub_environment: _FakeSession, caplog: pytest.LogCaptureFixture
+        self, stub_environment: FakeSession, caplog: pytest.LogCaptureFixture
     ) -> None:
-        fake_sess = _stub_environment
+        fake_sess = stub_environment
         gotos: list[str] = []
         click_counter = {"n": 0}
 
-        async def _fake_execute(step: Any, _sess: Any) -> MagicMock:
+        async def _fake_execute(step: Any, _sess: Any) -> Any:
             cls = step.__class__.__name__
             if cls == "GotoStep":
                 gotos.append(step.url)
@@ -187,9 +79,9 @@ class TestMaxDurationCap:
                 click_counter["n"] += 1
                 # Every click nav's to a new URL to keep the queue full
                 fake_sess.page.url = f"https://x.com/page-{click_counter['n']}"
-            return _make_result()
+            return make_result()
 
-        elements = [_make_element(f"e{i}") for i in range(20)]
+        elements = [make_element(f"e{i}") for i in range(20)]
         with (
             caplog.at_level(logging.WARNING, logger="clickcast.auto"),
             patch("clickcast.auto.execute", side_effect=_fake_execute),
@@ -221,12 +113,12 @@ class TestMaxDurationCap:
         )
 
     @pytest.mark.asyncio
-    async def test_max_duration_zero_dies(self, _stub_environment: _FakeSession) -> None:
+    async def test_max_duration_zero_dies(self, stub_environment: FakeSession) -> None:
         from typer import Exit
 
         with (
-            patch("clickcast.auto.execute", AsyncMock(return_value=_make_result())),
-            patch("clickcast.auto.discover", AsyncMock(return_value=[_make_element("x")])),
+            patch("clickcast.auto.execute", AsyncMock(return_value=make_result())),
+            patch("clickcast.auto.discover", AsyncMock(return_value=[make_element("x")])),
             pytest.raises(Exit),
         ):
             await _do_auto(
