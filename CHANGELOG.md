@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`auto` BFS no longer starves on nav-heavy sites.** The previous
+  click-loop `break`-on-first-nav meant one useless click (e.g. clicking
+  the site logo, which nav's to an already-visited URL) exited the loop
+  and left the queue empty. Now: after a same-origin navigation, we
+  `page.go_back()` and continue clicking the remaining discovered
+  elements, so multi-page journeys actually get more than 1 candidate
+  per page. Cross-origin nav still bails without go_back.
+
 ### Added
 - **Overlays on `auto` recordings.** `auto` now composites the existing
   `Annotator` overlays (click ripples, per-step label banner, slide-number

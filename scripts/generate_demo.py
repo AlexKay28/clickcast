@@ -92,7 +92,14 @@ async def _tour_one_page(
         url_after = sess.page.url
         if url_after != url_before:
             discovered_urls.append(url_after)
-            break
+            if not is_same_origin(url_after, url_before):
+                break
+            try:
+                await sess.page.go_back(wait_until="networkidle")
+            except Exception:
+                break
+            if sess.page.url != url_before:
+                break
         await sess.wait(0.3)
 
     scroll = ScrollStep(by=600, dwell=dwell)

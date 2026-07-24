@@ -31,11 +31,28 @@ def _make_element(text: str, x: int = 100, y: int = 80) -> Element:
 class _FakePage:
     """Just enough of playwright.Page to satisfy `_explore_page`.
 
-    ``url`` is mutated between clicks to simulate navigation.
+    Assigning to ``url`` is tracked in a stack so ``go_back()`` can restore
+    the previous URL — the click-and-observe fix relies on go_back to keep
+    clicking after a nav. ``go_back_history`` records the URLs go_back was
+    called from (tests assert on this).
     """
 
     def __init__(self) -> None:
-        self.url = ""
+        self._url_stack: list[str] = [""]
+        self.go_back_history: list[str] = []
+
+    @property
+    def url(self) -> str:
+        return self._url_stack[-1]
+
+    @url.setter
+    def url(self, new: str) -> None:
+        self._url_stack.append(new)
+
+    async def go_back(self, **_kwargs: Any) -> None:
+        self.go_back_history.append(self._url_stack[-1])
+        if len(self._url_stack) > 1:
+            self._url_stack.pop()
 
 
 class _FakeSession:
@@ -298,6 +315,112 @@ class TestBfsQueue:
         assert gotos == ["https://x.com/", "https://x.com/about"], (
             "start page should not have been visited twice"
         )
+
+    @pytest.mark.asyncio
+    async def test_go_back_lets_bfs_enqueue_multiple_destinations(
+        self, _stub_environment: dict[str, MagicMock]
+    ) -> None:
+        """Regression: `break`-on-first-nav starved BFS. First click was a
+        nav-to-already-visited (like clicking the site logo) → BFS enqueued
+        nothing new and exited after 1 page. With go_back-and-continue, we
+        return to the start page and click the next element, which navigates
+        to a *new* URL that gets enqueued."""
+        fake_sess: _FakeSession = _stub_environment["session"]
+        gotos: list[str] = []
+        click_counter = {"n": 0}
+
+        async def _fake_execute(step: Any, _sess: Any) -> MagicMock:
+            cls = step.__class__.__name__
+            if cls == "GotoStep":
+                gotos.append(step.url)
+                fake_sess.page.url = step.url
+                return _make_result()
+            if cls == "ClickStep":
+                click_counter["n"] += 1
+                # Click #1: logo → same URL (already visited)
+                # Click #2: nav to /about → new URL (should be enqueued)
+                if click_counter["n"] == 1:
+                    fake_sess.page.url = "https://x.com/"  # same as start
+                elif click_counter["n"] == 2:
+                    fake_sess.page.url = "https://x.com/about"
+            return _make_result()
+
+        with (
+            patch("clickcast.cli.execute", side_effect=_fake_execute),
+            patch(
+                "clickcast.cli.discover",
+                AsyncMock(return_value=[_make_element("Logo"), _make_element("About")]),
+            ),
+        ):
+            await _do_auto(
+                url="https://x.com/",
+                out="reel.gif",
+                max_steps=5,  # generous — we want to see both clicks happen
+                max_pages=3,
+                dwell=0.0,
+                initial_wait=0.0,
+                session_kwargs={"engine": "chromium"},
+                fps=12,
+                format_=None,
+                quality=8,
+                loop=0,
+                no_sidecar=True,
+            )
+        # go_back should have been called after click #1 (logo → same URL is
+        # still a "nav" event for us since URL was pushed onto stack).
+        assert len(fake_sess.page.go_back_history) >= 1, (
+            "go_back never called — BFS is still exiting on first nav"
+        )
+        # Both start page + /about must have been goto'd; the whole point of
+        # the fix is that /about got enqueued after the useless first click.
+        assert gotos == ["https://x.com/", "https://x.com/about"], (
+            f"expected [/, /about], got {gotos}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_cross_origin_nav_bails_no_go_back(
+        self, _stub_environment: dict[str, MagicMock]
+    ) -> None:
+        """Cross-origin nav is a stronger signal that we shouldn't drive on
+        the site (privacy, TOS, whatever). Bail without go_back."""
+        fake_sess: _FakeSession = _stub_environment["session"]
+        clicked = {"n": 0}
+
+        async def _fake_execute(step: Any, _sess: Any) -> MagicMock:
+            cls = step.__class__.__name__
+            if cls == "GotoStep":
+                fake_sess.page.url = step.url
+                return _make_result()
+            if cls == "ClickStep":
+                clicked["n"] += 1
+                if clicked["n"] == 1:
+                    fake_sess.page.url = "https://other.example.com/"
+            return _make_result()
+
+        with (
+            patch("clickcast.cli.execute", side_effect=_fake_execute),
+            patch(
+                "clickcast.cli.discover",
+                AsyncMock(return_value=[_make_element("External"), _make_element("Other")]),
+            ),
+        ):
+            await _do_auto(
+                url="https://x.com/",
+                out="reel.gif",
+                max_steps=5,
+                max_pages=3,
+                dwell=0.0,
+                initial_wait=0.0,
+                session_kwargs={"engine": "chromium"},
+                fps=12,
+                format_=None,
+                quality=8,
+                loop=0,
+                no_sidecar=True,
+            )
+        assert fake_sess.page.go_back_history == [], "cross-origin nav should NOT trigger go_back"
+        # Only one click landed before we bailed out.
+        assert clicked["n"] == 1
 
     @pytest.mark.asyncio
     async def test_max_pages_zero_dies(self, _stub_environment: dict[str, MagicMock]) -> None:
