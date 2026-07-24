@@ -299,10 +299,24 @@ def auto(
                 "Queue policy for the URL queue: 'dfs' (default, follow the most "
                 "recently discovered link first — coherent narrative reels) or "
                 "'bfs' (visit every top-level nav destination before going deeper "
-                "— better for site-map style coverage under a tight page cap)."
+                "— better for site-map style coverage under a tight page cap). "
+                "Ignored when --seed-url is set (order is exactly what you gave)."
             ),
         ),
     ] = "dfs",
+    seed_url: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--seed-url",
+            help=(
+                "Additional URL to include in the tour. Pass multiple times, "
+                "e.g. --seed-url /pricing --seed-url /docs. When set, the tour "
+                "visits exactly the initial URL + these seeds (in order) and "
+                "does NOT auto-enqueue navigation destinations discovered during "
+                "clicks. For AI agents that want to drive a deterministic path."
+            ),
+        ),
+    ] = None,
     dwell: Annotated[
         float, typer.Option("--dwell", help="Seconds to hold after each action.")
     ] = 1.0,
@@ -338,6 +352,7 @@ def auto(
             max_duration=max_duration,
             click_timeout_ms=int(click_timeout * 1000),
             traversal=traversal,
+            seed_urls=list(seed_url) if seed_url else [],
             dwell=dwell,
             initial_wait=initial_wait,
             session_kwargs=_session_kwargs(engine, viewport, device, headful, lang, dark),
@@ -533,6 +548,7 @@ async def _do_auto(
     max_duration: float,
     click_timeout_ms: int,
     traversal: str = "dfs",
+    seed_urls: list[str] | None = None,
     dwell: float,
     initial_wait: float,
     session_kwargs: dict[str, Any],
@@ -547,17 +563,19 @@ async def _do_auto(
     if max_duration <= 0:
         _die("--max-duration must be > 0")
 
+    seeded = bool(seed_urls)
     tour_started = time.monotonic()
     deadline = tour_started + max_duration
     log.info(
         "starting auto tour: url=%s max_pages=%d max_steps=%d max_duration=%.1fs "
-        "click_timeout=%dms traversal=%s dwell=%.2fs fps=%d",
+        "click_timeout=%dms traversal=%s seeded=%s dwell=%.2fs fps=%d",
         url,
         max_pages,
         max_steps,
         max_duration,
         click_timeout_ms,
         traversal,
+        seeded,
         dwell,
         fps,
     )
@@ -576,15 +594,20 @@ async def _do_auto(
             step_annotations: dict[int, StepAnnotation] = {}
             step_index = 0
             visited: set[str] = set()
-            queue: deque[str] = deque([url])
+            # Seeded tours: queue is exactly what the caller specified (initial
+            # URL + seeds), in order. Traversal policy is FIFO regardless of
+            # `--traversal` — the whole point is a deterministic path.
+            initial_queue = [url, *(seed_urls or [])]
+            queue: deque[str] = deque(initial_queue)
             pages_visited = 0
             clicks_remaining = max_steps
 
             # Traversal policy: DFS pops from the right (LIFO — most recently
             # discovered destination first, giving a coherent narrative that
             # follows one link tree at a time). BFS pops from the left (FIFO —
-            # every top-level nav gets visited before going deeper).
-            pop_next = queue.pop if traversal == "dfs" else queue.popleft
+            # every top-level nav gets visited before going deeper). Seeded
+            # tours always FIFO so seeds run in the order given.
+            pop_next = queue.popleft if (seeded or traversal == "bfs") else queue.pop
             while queue and pages_visited < max_pages and clicks_remaining > 0:
                 if time.monotonic() >= deadline:
                     log.warning(
@@ -624,14 +647,17 @@ async def _do_auto(
                 if pages_visited == 1 and step_index == 1:
                     _die("no interactive elements discovered on start page")
 
+                # Seeded tours don't auto-enqueue: the caller specified the
+                # exact path and shouldn't be surprised by extra URLs.
                 new_enqueued = 0
-                for candidate in discovered:
-                    if not is_same_origin(candidate, url):
-                        continue
-                    if normalize_url(candidate) in visited:
-                        continue
-                    queue.append(candidate)
-                    new_enqueued += 1
+                if not seeded:
+                    for candidate in discovered:
+                        if not is_same_origin(candidate, url):
+                            continue
+                        if normalize_url(candidate) in visited:
+                            continue
+                        queue.append(candidate)
+                        new_enqueued += 1
                 log.info(
                     "%s · budget: %d clicks left, queue: %d urls (+%d new)",
                     page_label,

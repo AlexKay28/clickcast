@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`--seed-url` on `auto`** (repeatable) — agent-controllable BFS. When any
+  `--seed-url` is set, the tour visits exactly the initial URL + your seeds,
+  in the order given, and does NOT auto-enqueue navigation destinations
+  discovered during clicks. `--traversal` becomes moot (order is
+  deterministic). For AI agents that want to drive a specific path:
+  `clickcast auto https://x.com/ --seed-url https://x.com/pricing --seed-url https://x.com/docs`
 - **`--traversal={dfs,bfs}` on `auto`** (default `dfs`). Changed the default
   URL queue policy from FIFO (BFS) to LIFO (DFS). DFS gives a coherent
   narrative reel that follows one link tree at a time — e.g. `Home → click
