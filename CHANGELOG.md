@@ -7,8 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] — 2026-07-24
+
+A polish release. New `--pace` flag, scenario reels finally get overlays,
+a fully populated `demo/` folder, and a big internal refactor that pulls
+the auto engine into its own module + centralizes test infrastructure.
+
 ### Changed
-- **Scenario reels now get overlays too** (closes #83). `clickcast run
+- **Scenario reels now get overlays too** (closes [#83]). `clickcast run
   <scenario.yml>` used to produce plain unannotated screenshots because
   `_do_run` never called `annotate_frames_dir` — the annotator was wired
   into `_do_auto` in PR #53 but never `_do_run`. Now: after the scenario
@@ -19,14 +25,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `annotate_frames_dir` then paints the same overlays scenario users see
   from auto. `demo/bug-report/reel.gif` visibly grew from 13 KB → 48 KB
   (overlays add pixel variance).
-- **Centralized test fixtures** (closes #79). Five `test_cli_auto_*.py`
+- **Centralized test fixtures** (closes [#79]). Five `test_cli_auto_*.py`
   files used to redefine near-identical `_FakePage` / `_FakeSession` /
   `_make_element` / `_make_result` / `_stub_environment` stubs — ~500 LOC
   of duplicated infrastructure. Moved to `tests/_stubs.py` (dataclasses)
   + `tests/conftest.py` (`stub_environment` fixture). Test files use
   the shared pieces via imports + fixture injection. Test count unchanged
   (287); combined test-file LOC drops from 1935 to 1500.
-- **Extracted shared auto engine** (closes #78, closes #81). The BFS/DFS
+- **Extracted shared auto engine** (closes [#78], closes [#81]). The BFS/DFS
   orchestration and per-page click loop moved from `clickcast.cli` (as
   `_do_auto` / `_explore_page`) to a new `clickcast.auto` module (as
   `run_tour` / `explore_page`) with a typed `AutoConfig` for inputs. Both
@@ -39,13 +45,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   one place instead of two.
 
 ### Added
-- **`--pace={fast,natural,slow,onboarding}` on `auto`** (closes #76). One
+- **`--pace={fast,natural,slow,onboarding}` on `auto`** (closes [#76]). One
   flag sets `--fps` and `--dwell` together so users don't have to think
   about frame math. Explicit `--fps` / `--dwell` still win when set.
   Preset table: `fast` (15/0.15), `natural` (12/0.4, default), `slow`
   (10/0.7), `onboarding` (8/1.2). Plumbed into the layered `Config` so
   `CLICKCAST_PACE=slow` works. Also exposed on `scripts/generate_demo.py`.
-- **`demo/` folder complete** (closes #66). All 8 use cases from the
+- **`demo/` folder complete** (closes [#66]). All 8 use cases from the
   original issue now have subfolders with README + committed sample reel:
   `ai-eye-review/`, `site-cartography/`, `regression-visual-diff/`,
   `bug-report/`, `onboarding-tutorial/`, `a-b-comparison/`,
@@ -192,7 +198,8 @@ Initial public release.
 - Automated release pipeline: tag `v*` → TestPyPI → smoke matrix (Linux/macOS
   × Python 3.10–3.13) → PyPI → GitHub release, all via Trusted Publishing.
 
-[Unreleased]: https://github.com/AlexKay28/clickcast/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/AlexKay28/clickcast/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/AlexKay28/clickcast/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/AlexKay28/clickcast/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/AlexKay28/clickcast/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/AlexKay28/clickcast/releases/tag/v0.1.0
@@ -217,3 +224,9 @@ Initial public release.
 [#65]: https://github.com/AlexKay28/clickcast/pull/65
 [#67]: https://github.com/AlexKay28/clickcast/pull/67
 [#69]: https://github.com/AlexKay28/clickcast/pull/69
+[#66]: https://github.com/AlexKay28/clickcast/issues/66
+[#76]: https://github.com/AlexKay28/clickcast/issues/76
+[#78]: https://github.com/AlexKay28/clickcast/issues/78
+[#79]: https://github.com/AlexKay28/clickcast/issues/79
+[#81]: https://github.com/AlexKay28/clickcast/issues/81
+[#83]: https://github.com/AlexKay28/clickcast/issues/83
