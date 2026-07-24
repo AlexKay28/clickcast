@@ -99,9 +99,27 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Wait for TestPyPI index to catch up
-        # TestPyPI's simple index can take up to ~30s to reflect a new upload.
-        run: sleep 30
+      - name: Wait for TestPyPI to serve this version
+        # Poll TestPyPI's simple index from THIS runner's POP until the freshly-
+        # uploaded version is visible. Cheaper than a blind sleep (early exits
+        # when the edge is fast) and more reliable (curl and pip share the same
+        # Fastly cache, so what curl sees, pip will see too). See #89 — every
+        # release since v0.1.1 hit the flake with the previous `sleep 30`.
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            if curl -sf "https://test.pypi.org/simple/clickcast/" \
+                 | grep -q "clickcast-${VERSION}"; then
+              echo "clickcast==${VERSION} visible on TestPyPI simple index after ${i} attempts"
+              exit 0
+            fi
+            echo "attempt $i/30: clickcast==${VERSION} not yet on simple index; sleeping 5s..."
+            sleep 5
+          done
+          echo "::error::TestPyPI simple index never returned clickcast==${VERSION} within 150s"
+          exit 1
 
       - name: Install from TestPyPI
         env:
