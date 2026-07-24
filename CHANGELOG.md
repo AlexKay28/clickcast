@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Scenario reels now get overlays too** (closes #83). `clickcast run
+  <scenario.yml>` used to produce plain unannotated screenshots because
+  `_do_run` never called `annotate_frames_dir` — the annotator was wired
+  into `_do_auto` in PR #53 but never `_do_run`. Now: after the scenario
+  finishes, `_scenario_step_annotations` walks the scenario steps + the
+  RunResult in lockstep with the recorder's step_index (repeat counts
+  handled), synthesizes labels (`click: #save`) when the scenario doesn't
+  set one, and adds click ripples for successful click/dblclick actions.
+  `annotate_frames_dir` then paints the same overlays scenario users see
+  from auto. `demo/bug-report/reel.gif` visibly grew from 13 KB → 48 KB
+  (overlays add pixel variance).
 - **Centralized test fixtures** (closes #79). Five `test_cli_auto_*.py`
   files used to redefine near-identical `_FakePage` / `_FakeSession` /
   `_make_element` / `_make_result` / `_stub_environment` stubs — ~500 LOC

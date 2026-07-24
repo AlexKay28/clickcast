@@ -20,6 +20,7 @@ import typer
 from platformdirs import user_config_dir
 
 from clickcast import __version__
+from clickcast.annotate import StepAnnotation, annotate_frames_dir
 from clickcast.auto import AutoConfig, run_tour
 from clickcast.capture import Recorder
 from clickcast.config import (
@@ -516,6 +517,44 @@ def _is_explicit(ctx: typer.Context, name: str) -> bool:
     return getattr(source, "name", None) == "COMMANDLINE"
 
 
+def _scenario_step_annotations(scenario: Any, result: Any) -> dict[int, StepAnnotation]:
+    """Build per-recorder-step annotations from a completed scenario run.
+
+    The recorder assigns ``step_index`` sequentially — every ``pre_action``
+    call bumps it once. A step with ``repeat=3`` therefore produces 3
+    distinct ``step_index`` values. Walk ``scenario.steps`` and
+    ``result.results`` in lockstep with this bump so each frame's overlay
+    label matches the action that produced it.
+    """
+    out: dict[int, StepAnnotation] = {}
+    frame_step_index = 0
+    result_index = 0
+    for step in scenario.steps:
+        for _ in range(step.repeat):
+            if result_index >= len(result.results):
+                # Scenario failed early — remaining steps never ran.
+                return out
+            r = result.results[result_index]
+            label = step.label
+            if not label:
+                # Synthesize a label from the action + primary field.
+                primary = (
+                    getattr(step, "selector", None)
+                    or getattr(step, "into", None)
+                    or getattr(step, "url", None)
+                    or ""
+                )
+                label = f"{step.action}: {primary[:40]}" if primary else step.action
+            # Ripple only fires on click-shaped actions where the click landed.
+            click_at = (
+                r.cursor_xy if step.action in ("click", "dblclick") and r.status == "ok" else None
+            )
+            out[frame_step_index] = StepAnnotation(label=label, click_at=click_at)
+            frame_step_index += 1
+            result_index += 1
+    return out
+
+
 async def _do_run(
     *,
     scenario: Any,
@@ -538,6 +577,10 @@ async def _do_run(
     with Recorder(fps=scenario.meta.fps, default_dwell=scenario.meta.dwell) as rec:
         result = await run_scenario(scenario, recorder=rec, builder=builder)
         rec.flush()
+        # Overlays for scenario reels — same pipeline as `auto`. Every executed
+        # step maps to one recorder step_index (repeat counts multiply); walk
+        # them in parallel with `result.results` to build per-step annotations.
+        annotate_frames_dir(rec.frames_dir, steps=_scenario_step_annotations(scenario, result))
         out_path = Path(out)
         enc = encode(
             rec.frames_dir,
