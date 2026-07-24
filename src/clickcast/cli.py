@@ -291,6 +291,18 @@ def auto(
             ),
         ),
     ] = 5.0,
+    traversal: Annotated[
+        str,
+        typer.Option(
+            "--traversal",
+            help=(
+                "Queue policy for the URL queue: 'dfs' (default, follow the most "
+                "recently discovered link first — coherent narrative reels) or "
+                "'bfs' (visit every top-level nav destination before going deeper "
+                "— better for site-map style coverage under a tight page cap)."
+            ),
+        ),
+    ] = "dfs",
     dwell: Annotated[
         float, typer.Option("--dwell", help="Seconds to hold after each action.")
     ] = 1.0,
@@ -315,6 +327,8 @@ def auto(
     verbose: Verbose = 0,
 ) -> None:
     _setup_logging(verbose)
+    if traversal not in ("dfs", "bfs"):
+        _die(f"--traversal must be 'dfs' or 'bfs', got {traversal!r}")
     asyncio.run(
         _do_auto(
             url=url,
@@ -323,6 +337,7 @@ def auto(
             max_pages=max_pages,
             max_duration=max_duration,
             click_timeout_ms=int(click_timeout * 1000),
+            traversal=traversal,
             dwell=dwell,
             initial_wait=initial_wait,
             session_kwargs=_session_kwargs(engine, viewport, device, headful, lang, dark),
@@ -517,6 +532,7 @@ async def _do_auto(
     max_pages: int,
     max_duration: float,
     click_timeout_ms: int,
+    traversal: str = "dfs",
     dwell: float,
     initial_wait: float,
     session_kwargs: dict[str, Any],
@@ -535,12 +551,13 @@ async def _do_auto(
     deadline = tour_started + max_duration
     log.info(
         "starting auto tour: url=%s max_pages=%d max_steps=%d max_duration=%.1fs "
-        "click_timeout=%dms dwell=%.2fs fps=%d",
+        "click_timeout=%dms traversal=%s dwell=%.2fs fps=%d",
         url,
         max_pages,
         max_steps,
         max_duration,
         click_timeout_ms,
+        traversal,
         dwell,
         fps,
     )
@@ -563,16 +580,21 @@ async def _do_auto(
             pages_visited = 0
             clicks_remaining = max_steps
 
+            # Traversal policy: DFS pops from the right (LIFO — most recently
+            # discovered destination first, giving a coherent narrative that
+            # follows one link tree at a time). BFS pops from the left (FIFO —
+            # every top-level nav gets visited before going deeper).
+            pop_next = queue.pop if traversal == "dfs" else queue.popleft
             while queue and pages_visited < max_pages and clicks_remaining > 0:
                 if time.monotonic() >= deadline:
                     log.warning(
-                        "max-duration %.0fs reached before page %d/%d → stopping BFS",
+                        "max-duration %.0fs reached before page %d/%d → stopping tour",
                         max_duration,
                         pages_visited + 1,
                         max_pages,
                     )
                     break
-                current = queue.popleft()
+                current = pop_next()
                 key = normalize_url(current)
                 if key in visited:
                     log.debug("skipping already-visited %s", current)

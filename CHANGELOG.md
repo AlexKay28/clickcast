@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`--traversal={dfs,bfs}` on `auto`** (default `dfs`). Changed the default
+  URL queue policy from FIFO (BFS) to LIFO (DFS). DFS gives a coherent
+  narrative reel that follows one link tree at a time — e.g. `Home → click
+  Docs → Docs → click Getting-Started → Getting-Started`. Better for both
+  human viewers and AI-eye consumption (semantic locality). Pass
+  `--traversal=bfs` to opt back into the old behavior for site-map style
+  coverage.
+
 ### Fixed
 - **Discovery disambiguates non-unique selectors** (closes #62). Real doc
   sites (react.dev, most SPA docs) use the same accessible name in header

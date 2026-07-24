@@ -170,6 +170,7 @@ class TestBfsQueue:
                 initial_wait=0.0,
                 max_duration=60.0,
                 click_timeout_ms=2000,
+                traversal="bfs",  # existing tests were written assuming BFS ordering
                 session_kwargs={"engine": "chromium"},
                 fps=12,
                 format_=None,
@@ -219,6 +220,7 @@ class TestBfsQueue:
                 initial_wait=0.0,
                 max_duration=60.0,
                 click_timeout_ms=2000,
+                traversal="bfs",  # existing tests were written assuming BFS ordering
                 session_kwargs={"engine": "chromium"},
                 fps=12,
                 format_=None,
@@ -264,6 +266,7 @@ class TestBfsQueue:
                 initial_wait=0.0,
                 max_duration=60.0,
                 click_timeout_ms=2000,
+                traversal="bfs",  # existing tests were written assuming BFS ordering
                 session_kwargs={"engine": "chromium"},
                 fps=12,
                 format_=None,
@@ -315,6 +318,7 @@ class TestBfsQueue:
                 initial_wait=0.0,
                 max_duration=60.0,
                 click_timeout_ms=2000,
+                traversal="bfs",  # existing tests were written assuming BFS ordering
                 session_kwargs={"engine": "chromium"},
                 fps=12,
                 format_=None,
@@ -371,6 +375,7 @@ class TestBfsQueue:
                 initial_wait=0.0,
                 max_duration=60.0,
                 click_timeout_ms=2000,
+                traversal="bfs",  # existing tests were written assuming BFS ordering
                 session_kwargs={"engine": "chromium"},
                 fps=12,
                 format_=None,
@@ -425,6 +430,7 @@ class TestBfsQueue:
                 initial_wait=0.0,
                 max_duration=60.0,
                 click_timeout_ms=2000,
+                traversal="bfs",  # existing tests were written assuming BFS ordering
                 session_kwargs={"engine": "chromium"},
                 fps=12,
                 format_=None,
@@ -473,6 +479,7 @@ class TestBfsQueue:
                 initial_wait=0.0,
                 max_duration=60.0,
                 click_timeout_ms=2000,
+                traversal="bfs",  # existing tests were written assuming BFS ordering
                 session_kwargs={"engine": "chromium"},
                 fps=12,
                 format_=None,
@@ -527,6 +534,7 @@ class TestBfsQueue:
                 initial_wait=0.0,
                 max_duration=60.0,
                 click_timeout_ms=2000,
+                traversal="bfs",  # existing tests were written assuming BFS ordering
                 session_kwargs={"engine": "chromium"},
                 fps=12,
                 format_=None,
@@ -556,6 +564,7 @@ class TestBfsQueue:
                 initial_wait=0.0,
                 max_duration=60.0,
                 click_timeout_ms=2000,
+                traversal="bfs",  # existing tests were written assuming BFS ordering
                 session_kwargs={"engine": "chromium"},
                 fps=12,
                 format_=None,
