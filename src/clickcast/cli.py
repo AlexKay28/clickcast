@@ -28,6 +28,9 @@ from clickcast.config import (
     set_user_value,
     user_config_path,
 )
+from clickcast.config import (
+    load as load_config,
+)
 from clickcast.core.actions import ClickStep, GotoStep, ScrollStep, execute
 from clickcast.core.session import Session
 from clickcast.discovery import Element, discover
@@ -154,8 +157,49 @@ def _write_sidecar(
 # ==========================================================================
 
 
+# Which Config fields are consumed by which subcommand. Keeping the mapping
+# explicit rather than reflecting on option lists — Click's `default_map`
+# errors on unknown keys, so a typo here would fail loudly.
+_CONFIG_KEYS_PER_COMMAND: dict[str, tuple[str, ...]] = {
+    "auto": (
+        "viewport",
+        "device",
+        "engine",
+        "headful",
+        "lang",
+        "dark",
+        "fps",
+        "dwell",
+        "format",
+        "quality",
+        "loop",
+    ),
+    "run": ("format", "headful", "slowmo"),
+    "shot": ("viewport", "device", "engine", "dark"),
+    "elements": ("viewport", "engine"),
+}
+
+
+def _config_default_map() -> dict[str, dict[str, Any]]:
+    """Build Click's per-command `default_map` from the layered Config.
+
+    Load-once per invocation: env vars + project TOML + user TOML resolved
+    now, then Click uses these as fallbacks unless an explicit CLI flag wins.
+    """
+    try:
+        cfg = load_config()
+    except Exception:
+        return {}
+    fields = cfg.model_dump()
+    return {
+        cmd: {k: fields[k] for k in keys if k in fields}
+        for cmd, keys in _CONFIG_KEYS_PER_COMMAND.items()
+    }
+
+
 @app.callback()
 def _root(
+    ctx: typer.Context,
     version: Annotated[
         bool,
         typer.Option(
@@ -167,7 +211,7 @@ def _root(
         ),
     ] = False,
 ) -> None:
-    pass
+    ctx.default_map = _config_default_map()
 
 
 # ==========================================================================
@@ -323,6 +367,7 @@ async def _do_auto(
 
 @app.command(help="Run a YAML scenario end-to-end.")
 def run(
+    ctx: typer.Context,
     scenario_path: Annotated[Path, typer.Argument(help="Path to a scenario file.")],
     out: Annotated[
         str | None, typer.Option("--out", "-o", help="Override scenario meta.out.")
@@ -349,22 +394,44 @@ def run(
     except ScenarioError as e:
         _die(f"scenario: {e}")
 
-    # CLI overrides on top of scenario.meta
-    meta = scenario.meta
+    # Precedence for `run`: explicit CLI flag > scenario meta > Config > default.
+    # Values arriving here come from one of two sources:
+    #   - COMMANDLINE : user explicitly typed --flag  → wins over meta
+    #   - DEFAULT / DEFAULT_MAP / ENVIRONMENT : filled through Config → meta wins
+    # Compared on `.name` so we don't need to import Typer's vendored Click.
+    meta = scenario.meta.model_copy()
     final_out = out or meta.out
-    if headful:
-        meta.headful = True
-    if slowmo:
+    if _is_explicit(ctx, "headful"):
+        meta.headful = headful
+    if _is_explicit(ctx, "slowmo"):
         meta.slowmo = slowmo
+    if _is_explicit(ctx, "format") and format:
+        effective_format: str | None = format
+    else:
+        effective_format = meta.format
 
     asyncio.run(
         _do_run(
-            scenario=scenario,
+            scenario=scenario.model_copy(update={"meta": meta}),
             out=final_out,
-            format_=format or meta.format,
+            format_=effective_format,
             no_sidecar=no_sidecar,
         )
     )
+
+
+def _is_explicit(ctx: typer.Context, name: str) -> bool:
+    """True if ``name`` was set explicitly on the command line.
+
+    Typer 0.13+ vendors Click, so we can't `import click` for the
+    ``ParameterSource`` enum. Compare on ``.name`` — stable across the
+    Click versions Typer has shipped since 0.13.
+    """
+    try:
+        source = ctx.get_parameter_source(name)
+    except (AttributeError, LookupError):
+        return False
+    return getattr(source, "name", None) == "COMMANDLINE"
 
 
 async def _do_run(
