@@ -1,5 +1,9 @@
-name: demo
+name: Regenerate README demo GIF
 
+# Two triggers:
+# 1. `workflow_dispatch` — manual re-runs with custom inputs.
+# 2. `workflow_run` — auto-fires after a successful `Publish release` so the
+#    demo GIF in the README stays in sync with the published version.
 on:
   workflow_dispatch:
     inputs:
@@ -23,6 +27,9 @@ on:
         description: Seconds to hold after networkidle before first click
         default: "4"
         required: true
+  workflow_run:
+    workflows: ["Publish release (TestPyPI → PyPI → GitHub release)"]
+    types: [completed]
 
 permissions:
   contents: read
@@ -30,8 +37,21 @@ permissions:
 jobs:
   regenerate:
     runs-on: ubuntu-latest
+    # On `workflow_run` triggers, only regenerate if the upstream release
+    # succeeded. `workflow_dispatch` runs unconditionally.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
     permissions:
       contents: write
+    # `inputs.*` is empty on `workflow_run` — fall back to the same defaults
+    # exposed to `workflow_dispatch` so both trigger paths behave identically.
+    env:
+      URL: ${{ inputs.url || 'https://worldsight-weld.vercel.app/' }}
+      VIEWPORT: ${{ inputs.viewport || '1280x800' }}
+      FPS: ${{ inputs.fps || '12' }}
+      MAX_CLICKS: ${{ inputs['max-clicks'] || '3' }}
+      INITIAL_WAIT: ${{ inputs['initial-wait'] || '4' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -59,11 +79,11 @@ jobs:
       - name: Generate demo GIF
         run: |
           python scripts/generate_demo.py \
-            --url "${{ inputs.url }}" \
-            --viewport "${{ inputs.viewport }}" \
-            --fps "${{ inputs.fps }}" \
-            --max-clicks "${{ inputs['max-clicks'] }}" \
-            --initial-wait "${{ inputs['initial-wait'] }}" \
+            --url "$URL" \
+            --viewport "$VIEWPORT" \
+            --fps "$FPS" \
+            --max-clicks "$MAX_CLICKS" \
+            --initial-wait "$INITIAL_WAIT" \
             --keep-frames debug-frames \
             --out docs/demo.gif \
             --verbose
