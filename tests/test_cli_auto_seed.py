@@ -220,6 +220,64 @@ class TestSeededTours:
         )
 
     @pytest.mark.asyncio
+    async def test_seeds_still_visited_when_click_budget_exhausted(
+        self, _stub_environment: _FakeSession
+    ) -> None:
+        """Regression from the manual smoke test: with `--seed-url` set and a
+        tight `--max-steps`, the tour used to exit after page 1 (loop guard
+        `clicks_remaining > 0`) — silently dropping the seeds the caller had
+        committed to. Now seeded tours continue even at zero budget; remaining
+        seeds get goto + scroll (no clicks) so they still appear in the reel."""
+        fake_sess = _stub_environment
+        gotos: list[str] = []
+        click_counter = {"n": 0}
+
+        async def _fake_execute(step: Any, _sess: Any) -> MagicMock:
+            cls = step.__class__.__name__
+            if cls == "GotoStep":
+                gotos.append(step.url)
+                fake_sess.page.url = step.url
+            elif cls == "ClickStep":
+                click_counter["n"] += 1
+            return _make_result()
+
+        with (
+            patch("clickcast.cli.execute", side_effect=_fake_execute),
+            patch(
+                "clickcast.cli.discover",
+                AsyncMock(return_value=[_make_element(f"E{i}") for i in range(3)]),
+            ),
+        ):
+            await _do_auto(
+                url="https://x.com/",
+                out="reel.gif",
+                max_steps=3,  # tight — page 1 alone will exhaust it
+                max_pages=5,
+                dwell=0.0,
+                initial_wait=0.0,
+                max_duration=60.0,
+                click_timeout_ms=2000,
+                traversal="dfs",
+                seed_urls=[
+                    "https://x.com/promised-1",
+                    "https://x.com/promised-2",
+                ],
+                session_kwargs={"engine": "chromium"},
+                fps=12,
+                format_=None,
+                quality=8,
+                loop=0,
+                no_sidecar=True,
+            )
+        assert gotos == [
+            "https://x.com/",
+            "https://x.com/promised-1",
+            "https://x.com/promised-2",
+        ], f"seeded pages must be visited even at budget=0; got {gotos}"
+        # Sanity: budget was 3, page 1 used it all.
+        assert click_counter["n"] == 3
+
+    @pytest.mark.asyncio
     async def test_empty_seed_urls_falls_back_to_normal(
         self, _stub_environment: _FakeSession
     ) -> None:

@@ -608,7 +608,14 @@ async def _do_auto(
             # every top-level nav gets visited before going deeper). Seeded
             # tours always FIFO so seeds run in the order given.
             pop_next = queue.popleft if (seeded or traversal == "bfs") else queue.pop
-            while queue and pages_visited < max_pages and clicks_remaining > 0:
+            # Seeded tours honor the caller's URL commitment even after the
+            # click budget is exhausted — remaining seeds get a goto + scroll
+            # (no per-page clicks) so every promised page still lands in the
+            # reel. Unseeded tours exit when the click budget hits 0 to avoid
+            # visiting more pages we can't meaningfully interact with.
+            while queue and pages_visited < max_pages:
+                if not seeded and clicks_remaining <= 0:
+                    break
                 if time.monotonic() >= deadline:
                     log.warning(
                         "max-duration %.0fs reached before page %d/%d → stopping tour",
