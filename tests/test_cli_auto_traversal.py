@@ -77,7 +77,7 @@ def _stub_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> _FakeS
         async def __aexit__(self, *args: Any) -> None:
             return None
 
-    monkeypatch.setattr("clickcast.cli.Session", _SessCtor)
+    monkeypatch.setattr("clickcast.auto.Session", _SessCtor)
 
     class _FakeRecorder:
         def __init__(self, **_kwargs: Any) -> None:
@@ -99,10 +99,10 @@ def _stub_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> _FakeS
         def flush(self) -> list[Path]:
             return []
 
-    monkeypatch.setattr("clickcast.cli.Recorder", _FakeRecorder)
-    monkeypatch.setattr("clickcast.cli.annotate_frames_dir", MagicMock(return_value=0))
+    monkeypatch.setattr("clickcast.auto.Recorder", _FakeRecorder)
+    monkeypatch.setattr("clickcast.auto.annotate_frames_dir", MagicMock(return_value=0))
     monkeypatch.setattr(
-        "clickcast.cli.encode",
+        "clickcast.auto.encode",
         MagicMock(
             return_value=MagicMock(
                 path=tmp_path / "reel.gif",
@@ -113,8 +113,8 @@ def _stub_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> _FakeS
             )
         ),
     )
-    monkeypatch.setattr("clickcast.cli._write_sidecar", MagicMock(return_value=None))
-    monkeypatch.setattr("clickcast.cli.ReportBuilder", MagicMock)
+    monkeypatch.setattr("clickcast.auto._write_sidecar", MagicMock(return_value=None))
+    monkeypatch.setattr("clickcast.auto.ReportBuilder", MagicMock)
     return fake_sess
 
 
@@ -145,9 +145,9 @@ class TestTraversalOrdering:
             return _make_result()
 
         with (
-            patch("clickcast.cli.execute", side_effect=_fake_execute),
+            patch("clickcast.auto.execute", side_effect=_fake_execute),
             patch(
-                "clickcast.cli.discover",
+                "clickcast.auto.discover",
                 AsyncMock(return_value=[_make_element(f"L{i}") for i in range(3)]),
             ),
         ):
@@ -198,9 +198,9 @@ class TestTraversalOrdering:
             return _make_result()
 
         with (
-            patch("clickcast.cli.execute", side_effect=_fake_execute),
+            patch("clickcast.auto.execute", side_effect=_fake_execute),
             patch(
-                "clickcast.cli.discover",
+                "clickcast.auto.discover",
                 AsyncMock(return_value=[_make_element(f"L{i}") for i in range(3)]),
             ),
         ):

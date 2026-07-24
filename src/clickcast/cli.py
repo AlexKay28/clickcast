@@ -13,8 +13,6 @@ import logging
 import shutil
 import subprocess
 import sys
-import time
-from collections import deque
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -22,7 +20,7 @@ import typer
 from platformdirs import user_config_dir
 
 from clickcast import __version__
-from clickcast.annotate import StepAnnotation, annotate_frames_dir
+from clickcast.auto import AutoConfig, run_tour
 from clickcast.capture import Recorder
 from clickcast.config import (
     Config as ConfigModel,
@@ -35,10 +33,8 @@ from clickcast.config import (
 from clickcast.config import (
     load as load_config,
 )
-from clickcast.core.actions import ClickStep, GotoStep, ScrollStep, execute
 from clickcast.core.session import Session
 from clickcast.discovery import Element, discover
-from clickcast.discovery.urlutil import is_same_origin, normalize_url
 from clickcast.encode import encode
 from clickcast.feedback import Media, ReportBuilder
 from clickcast.feedback import write as write_report
@@ -402,180 +398,9 @@ def auto(
     )
 
 
-async def _explore_page(
-    *,
-    sess: Session,
-    rec: Recorder,
-    builder: ReportBuilder | None,
-    url: str,
-    dwell: float,
-    initial_wait: float,
-    click_budget: int,
-    click_timeout_ms: int,
-    deadline_monotonic: float | None,
-    step_index: int,
-    step_annotations: dict[int, StepAnnotation],
-    page_label: str,
-) -> tuple[int, int, list[str]]:
-    """Goto ``url``, discover, click up to ``click_budget`` elements, scroll.
-
-    Returns ``(next_step_index, clicks_used, discovered_urls)``. ``clicks_used``
-    lets the caller decrement its global budget; ``discovered_urls`` are the
-    same-origin destinations noticed while clicking (dedup happens in the
-    caller).
-    """
-    discovered_urls: list[str] = []
-    page_started = time.monotonic()
-    log.info("%s → open %s", page_label, url)
-
-    goto = GotoStep(url=url, wait="networkidle", dwell=dwell)
-    await rec.pre_action(sess)
-    result = await execute(goto, sess)
-    if not result.ok:
-        typer.secho(f"  skipped {url}: {result.error}", fg=typer.colors.YELLOW, err=True)
-        log.warning("%s · skipped: %s", page_label, result.error)
-        return step_index, 0, discovered_urls
-    if initial_wait > 0:
-        log.debug("%s · held %.1fs after networkidle for hydration", page_label, initial_wait)
-        await sess.wait(initial_wait)
-    frames_goto = await rec.post_action(sess, result, goto)
-    step_annotations[step_index] = StepAnnotation(label=f"{page_label} · open")
-    if builder:
-        await builder.record_step(index=step_index, step=goto, result=result, frames=frames_goto)
-    step_index += 1
-
-    # Discover a generous pool so we don't starve when max_steps is small;
-    # the click budget still caps how many we actually invoke.
-    elements = await discover(sess, limit=max(click_budget * 2, 20))
-    log.info(
-        "%s · discovered %d elements, click budget: %d", page_label, len(elements), click_budget
-    )
-    if builder and step_index == 1:
-        builder.set_discovered(elements[:click_budget])
-
-    # A page whose discovered elements all fail (post-hydration DOM drift is
-    # the usual culprit) used to burn the full pool trying every one — 20+
-    # timeouts in a row at ~30s each. Bail after N consecutive failures.
-    _MAX_CONSECUTIVE_FAILURES = 3
-
-    clicked = 0
-    consecutive_failures = 0
-    for attempt, element in enumerate(elements, start=1):
-        if clicked >= click_budget:
-            break
-        if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
-            log.warning("%s · tour deadline reached during clicks → stopping page", page_label)
-            break
-        step = ClickStep(
-            selector=element.selector,
-            dwell=dwell,
-            optional=True,
-            label=element.text[:60] or element.role,
-            timeout_ms=click_timeout_ms,
-        )
-        url_before = sess.page.url
-        log.info(
-            "%s · attempt %d (%d/%d clicked) · %s:%s",
-            page_label,
-            attempt,
-            clicked,
-            click_budget,
-            element.role,
-            (element.text[:40] or "").strip() or element.selector,
-        )
-        await rec.pre_action(sess)
-        r = await execute(step, sess)
-        frames_step = await rec.post_action(sess, r, step)
-        step_annotations[step_index] = StepAnnotation(
-            label=f"{page_label} · click · {step.label}" if step.label else f"{page_label} · click",
-            click_at=r.cursor_xy if r.status == "ok" else None,
-        )
-        if r.status == "ok":
-            clicked += 1
-            consecutive_failures = 0
-        else:
-            consecutive_failures += 1
-            log.warning(
-                "%s · attempt %d failed (%d/%d in a row): %s",
-                page_label,
-                attempt,
-                consecutive_failures,
-                _MAX_CONSECUTIVE_FAILURES,
-                r.error,
-            )
-            if consecutive_failures >= _MAX_CONSECUTIVE_FAILURES:
-                log.warning(
-                    "%s · %d consecutive click failures → stopping page early",
-                    page_label,
-                    consecutive_failures,
-                )
-                if builder:
-                    await builder.record_step(
-                        index=step_index, step=step, result=r, frames=frames_step
-                    )
-                step_index += 1
-                break
-        if builder:
-            await builder.record_step(index=step_index, step=step, result=r, frames=frames_step)
-        step_index += 1
-
-        # Post-click: did we navigate? Note the destination and try to restore
-        # the page so we can keep clicking the remaining discovered elements.
-        # Same-origin nav: page.go_back() and continue. Cross-origin nav:
-        # bail (we shouldn't drive further on someone else's site).
-        #
-        # `wait_until="domcontentloaded"` + 5s hard timeout: networkidle can
-        # hang forever on sites with WebSockets / SSE / dev-server HMR (react.dev
-        # was our smoking gun — the fix in #56 made the demo run 30+ minutes).
-        # DOM-ready is enough since we're just going back to re-select elements.
-        url_after = sess.page.url
-        if url_after != url_before:
-            discovered_urls.append(url_after)
-            if not is_same_origin(url_after, url_before):
-                log.info("%s · nav to cross-origin %s → bailing", page_label, url_after)
-                break
-            log.info("%s · nav to %s → going back", page_label, url_after)
-            back_started = time.monotonic()
-            try:
-                await sess.page.go_back(wait_until="domcontentloaded", timeout=5000)
-            except Exception as e:
-                # Some sites (chained redirects, popstate handlers) refuse
-                # go_back cleanly. Give up on further clicks on this page.
-                log.warning("%s · go_back failed (%s) → stopping page", page_label, e)
-                break
-            # Verify we actually returned to the original page — some sites
-            # replace history so go_back lands somewhere else.
-            if sess.page.url != url_before:
-                log.warning(
-                    "%s · go_back landed at %s (expected %s) → stopping page",
-                    page_label,
-                    sess.page.url,
-                    url_before,
-                )
-                break
-            log.debug("%s · go_back OK in %.2fs", page_label, time.monotonic() - back_started)
-        await sess.wait(0.3)
-
-    scroll = ScrollStep(by=600, dwell=dwell)
-    log.info("%s · scroll +600px", page_label)
-    await rec.pre_action(sess)
-    r = await execute(scroll, sess)
-    frames_scroll = await rec.post_action(sess, r, scroll)
-    step_annotations[step_index] = StepAnnotation(label=f"{page_label} · scroll")
-    if builder:
-        await builder.record_step(index=step_index, step=scroll, result=r, frames=frames_scroll)
-    step_index += 1
-
-    log.info(
-        "%s · done in %.1fs (%d clicks used, %d nav candidates)",
-        page_label,
-        time.monotonic() - page_started,
-        clicked,
-        len(discovered_urls),
-    )
-    return step_index, clicked, discovered_urls
-
-
+# The auto engine lives in `clickcast.auto`. This shim exists purely so tests
+# that patch `clickcast.cli._do_auto` (5 test files) keep working after the
+# extraction. New callers should import `run_tour` from `clickcast.auto`.
 async def _do_auto(
     *,
     url: str,
@@ -595,146 +420,26 @@ async def _do_auto(
     loop: int,
     no_sidecar: bool,
 ) -> None:
-    if max_pages < 1:
-        _die("--max-pages must be >= 1")
-    if max_duration <= 0:
-        _die("--max-duration must be > 0")
-
-    seeded = bool(seed_urls)
-    tour_started = time.monotonic()
-    deadline = tour_started + max_duration
-    log.info(
-        "starting auto tour: url=%s max_pages=%d max_steps=%d max_duration=%.1fs "
-        "click_timeout=%dms traversal=%s seeded=%s dwell=%.2fs fps=%d",
-        url,
-        max_pages,
-        max_steps,
-        max_duration,
-        click_timeout_ms,
-        traversal,
-        seeded,
-        dwell,
-        fps,
+    await run_tour(
+        AutoConfig(
+            url=url,
+            out=out,
+            max_steps=max_steps,
+            max_pages=max_pages,
+            max_duration=max_duration,
+            click_timeout_ms=click_timeout_ms,
+            traversal=traversal,
+            seed_urls=list(seed_urls or []),
+            dwell=dwell,
+            initial_wait=initial_wait,
+            session_kwargs=session_kwargs,
+            fps=fps,
+            format=format_,
+            quality=quality,
+            loop=loop,
+            no_sidecar=no_sidecar,
+        )
     )
-
-    async with Session(**session_kwargs) as sess:
-        builder: ReportBuilder | None = None
-        if not no_sidecar:
-            builder = ReportBuilder(
-                url=url,
-                engine=session_kwargs.get("engine", "chromium"),
-                viewport=session_kwargs.get("viewport"),
-            )
-            builder.attach(sess)
-
-        with Recorder(fps=fps, default_dwell=dwell) as rec:
-            step_annotations: dict[int, StepAnnotation] = {}
-            step_index = 0
-            visited: set[str] = set()
-            # Seeded tours: queue is exactly what the caller specified (initial
-            # URL + seeds), in order. Traversal policy is FIFO regardless of
-            # `--traversal` — the whole point is a deterministic path.
-            initial_queue = [url, *(seed_urls or [])]
-            queue: deque[str] = deque(initial_queue)
-            pages_visited = 0
-            clicks_remaining = max_steps
-
-            # Traversal policy: DFS pops from the right (LIFO — most recently
-            # discovered destination first, giving a coherent narrative that
-            # follows one link tree at a time). BFS pops from the left (FIFO —
-            # every top-level nav gets visited before going deeper). Seeded
-            # tours always FIFO so seeds run in the order given.
-            pop_next = queue.popleft if (seeded or traversal == "bfs") else queue.pop
-            # Seeded tours honor the caller's URL commitment even after the
-            # click budget is exhausted — remaining seeds get a goto + scroll
-            # (no per-page clicks) so every promised page still lands in the
-            # reel. Unseeded tours exit when the click budget hits 0 to avoid
-            # visiting more pages we can't meaningfully interact with.
-            while queue and pages_visited < max_pages:
-                if not seeded and clicks_remaining <= 0:
-                    break
-                if time.monotonic() >= deadline:
-                    log.warning(
-                        "max-duration %.0fs reached before page %d/%d → stopping tour",
-                        max_duration,
-                        pages_visited + 1,
-                        max_pages,
-                    )
-                    break
-                current = pop_next()
-                key = normalize_url(current)
-                if key in visited:
-                    log.debug("skipping already-visited %s", current)
-                    continue
-                visited.add(key)
-                pages_visited += 1
-                page_label = f"page {pages_visited}/{max_pages}"
-
-                step_index, clicks_used, discovered = await _explore_page(
-                    sess=sess,
-                    rec=rec,
-                    builder=builder,
-                    url=current,
-                    dwell=dwell,
-                    initial_wait=initial_wait,
-                    click_budget=clicks_remaining,
-                    click_timeout_ms=click_timeout_ms,
-                    deadline_monotonic=deadline,
-                    step_index=step_index,
-                    step_annotations=step_annotations,
-                    page_label=page_label,
-                )
-                clicks_remaining -= clicks_used
-
-                # First page must have discovered elements; downstream pages
-                # can be scroll-only (a legitimate destination).
-                if pages_visited == 1 and step_index == 1:
-                    _die("no interactive elements discovered on start page")
-
-                # Seeded tours don't auto-enqueue: the caller specified the
-                # exact path and shouldn't be surprised by extra URLs.
-                new_enqueued = 0
-                if not seeded:
-                    for candidate in discovered:
-                        if not is_same_origin(candidate, url):
-                            continue
-                        if normalize_url(candidate) in visited:
-                            continue
-                        queue.append(candidate)
-                        new_enqueued += 1
-                log.info(
-                    "%s · budget: %d clicks left, queue: %d urls (+%d new)",
-                    page_label,
-                    clicks_remaining,
-                    len(queue),
-                    new_enqueued,
-                )
-
-            log.info("BFS done. Flushing %d step annotations...", len(step_annotations))
-            rec.flush()
-            log.info("annotating frames...")
-            annotate_frames_dir(rec.frames_dir, steps=step_annotations)
-            log.info("encoding %s...", out)
-            out_path = Path(out)
-            enc = encode(
-                rec.frames_dir,
-                out_path,
-                fps=fps,
-                quality=quality,
-                loop=loop,
-                format=format_,  # type: ignore[arg-type]
-            )
-            media = _make_media(enc, fps)
-            sidecar = _write_sidecar(out_path, no_sidecar, builder, media)
-
-    tour_elapsed = time.monotonic() - tour_started
-    typer.echo(
-        f"✔ {enc.path} ({enc.size_bytes // 1024} KB, {enc.frame_count} frames, "
-        f"{enc.duration_s:.1f}s reel, {pages_visited} page(s), "
-        f"{max_steps - clicks_remaining} clicks, wall {tour_elapsed:.1f}s)"
-    )
-    if sidecar:
-        typer.echo(f"  sidecar: {sidecar}")
 
 
 # ==========================================================================
