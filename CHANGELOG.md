@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`--pace={fast,natural,slow,onboarding}` on `auto`** (closes #76). One
+  flag sets `--fps` and `--dwell` together so users don't have to think
+  about frame math. Explicit `--fps` / `--dwell` still win when set.
+  Preset table: `fast` (15/0.15), `natural` (12/0.4, default), `slow`
+  (10/0.7), `onboarding` (8/1.2). Plumbed into the layered `Config` so
+  `CLICKCAST_PACE=slow` works. Also exposed on `scripts/generate_demo.py`.
 - **`demo/` folder complete** (closes #66). All 8 use cases from the
   original issue now have subfolders with README + committed sample reel:
   `ai-eye-review/`, `site-cartography/`, `regression-visual-diff/`,
