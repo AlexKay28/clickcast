@@ -111,7 +111,12 @@ def _sample_frames_for_palette(frames: list[Path], *, max_samples: int = 8) -> I
     step = max(1, len(frames) // sample_count)
     picks = frames[::step][:sample_count]
 
-    samples = [Image.open(f).convert("RGB") for f in picks]
+    # Open + convert with a `with` block so the file-backed handle from
+    # `Image.open()` is released as soon as we've copied pixels into `strip`.
+    samples: list[Image.Image] = []
+    for f in picks:
+        with Image.open(f) as src:
+            samples.append(src.convert("RGB"))
     width = samples[0].width
     total_h = sum(s.height for s in samples)
     strip = Image.new("RGB", (width, total_h))
@@ -160,7 +165,12 @@ def _encode_gif(frames: list[Path], out: Path, fps: int, quality: int, loop: int
 
 def _encode_webp(frames: list[Path], out: Path, fps: int, quality: int, loop: int) -> EncodeResult:
     out.parent.mkdir(parents=True, exist_ok=True)
-    images = [Image.open(f).convert("RGB") for f in frames]
+    # Open + convert with a `with` block so the file-backed handle from
+    # `Image.open()` is released as soon as we've copied pixels into memory.
+    images: list[Image.Image] = []
+    for f in frames:
+        with Image.open(f) as src:
+            images.append(src.convert("RGB"))
     # Map quality 1..30 → Pillow WebP quality 98..40 (higher WebP = better).
     pillow_quality = max(1, min(100, 100 - (quality - 1) * 2))
     images[0].save(

@@ -111,7 +111,7 @@ class ReportBuilder:
         self._errors.append(msg)
 
     def build(self, media: Media) -> Report:
-        return Report(
+        report = Report(
             clickcast_version=_package_version(),
             url=self._url,
             engine=self._engine,
@@ -124,3 +124,8 @@ class ReportBuilder:
             warnings=self._warnings,
             errors=self._errors,
         )
+        # Detach page listeners so the collector doesn't outlive the builder.
+        # Idempotent — safe to call even if we were never attached.
+        if self._collector is not None:
+            self._collector.detach()
+        return report

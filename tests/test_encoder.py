@@ -224,3 +224,36 @@ class TestGifPaletteRegression:
             pixels = rgb.getcolors(maxcolors=100_000) or []
             dark = [c for c in pixels if sum(c[1]) < 200]
             assert dark, "expected dark pixels in a mid-animation frame"
+
+
+class TestFileHandleHygiene:
+    """Regression: `_encode_webp` and `_sample_frames_for_palette` used to leak
+    the file handle from `Image.open()` — `.convert()` returns a new image but
+    the source handle was dropped without `.close()`. On CPython refcounting
+    saved us on short reels; on PyPy or long reels this hit the ulimit.
+    """
+
+    def _make_many_frames(self, tmp_path: Path, n: int) -> Path:
+        d = tmp_path / "frames"
+        d.mkdir()
+        for i in range(n):
+            _make_varied_frame(i, (60, 40)).save(d / f"frame-0000-{i:03d}.png")
+        return d
+
+    def test_gif_encode_does_not_hold_open_source_handles(self, tmp_path: Path) -> None:
+        # 40 frames at 60x40 px; encode + immediately remove the source dir.
+        # If PIL is still holding descriptors on the source files, this will
+        # fail on Windows (locked) or leave zombie handles on POSIX.
+        src = self._make_many_frames(tmp_path, 40)
+        encode(src, tmp_path / "out.gif", fps=8)
+        # After encode returns, every source frame should be closable.
+        # We can't easily observe fd counts portably, so we assert the
+        # secondary contract: unlink succeeds cleanly.
+        for f in src.iterdir():
+            f.unlink()
+
+    def test_webp_encode_does_not_hold_open_source_handles(self, tmp_path: Path) -> None:
+        src = self._make_many_frames(tmp_path, 40)
+        encode(src, tmp_path / "out.webp", fps=8)
+        for f in src.iterdir():
+            f.unlink()
