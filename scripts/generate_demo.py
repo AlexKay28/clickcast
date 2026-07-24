@@ -39,6 +39,8 @@ async def _tour_one_page(
     dwell: float,
     initial_wait: float,
     click_budget: int,
+    click_timeout_ms: int,
+    deadline_monotonic: float | None,
     step_index: int,
     step_annotations: dict[int, StepAnnotation],
     page_label: str,
@@ -79,11 +81,15 @@ async def _tour_one_page(
     for attempt, element in enumerate(elements, start=1):
         if clicked >= click_budget:
             break
+        if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
+            log.warning("%s · tour deadline reached during clicks → stopping page", page_label)
+            break
         step = ClickStep(
             selector=element.selector,
             dwell=dwell,
             optional=True,
             label=element.text[:40] or element.role,
+            timeout_ms=click_timeout_ms,
         )
         url_before = sess.page.url
         log.info(
@@ -179,9 +185,13 @@ async def _run(
     dwell: float,
     max_clicks: int,
     max_pages: int,
+    max_duration: float,
+    click_timeout_ms: int,
     initial_wait: float,
     keep_frames_dir: Path | None,
 ) -> None:
+    tour_started = time.monotonic()
+    deadline = tour_started + max_duration
     async with Session(viewport=viewport) as sess:
         with Recorder(
             fps=fps,
@@ -197,6 +207,14 @@ async def _run(
             clicks_remaining = max_clicks
 
             while queue and pages_visited < max_pages and clicks_remaining > 0:
+                if time.monotonic() >= deadline:
+                    log.warning(
+                        "max-duration %.0fs reached before page %d/%d → stopping BFS",
+                        max_duration,
+                        pages_visited + 1,
+                        max_pages,
+                    )
+                    break
                 current = queue.popleft()
                 key = normalize_url(current)
                 if key in visited:
@@ -212,6 +230,8 @@ async def _run(
                     dwell=dwell,
                     initial_wait=initial_wait,
                     click_budget=clicks_remaining,
+                    click_timeout_ms=click_timeout_ms,
+                    deadline_monotonic=deadline,
                     step_index=step_index,
                     step_annotations=step_annotations,
                     page_label=page_label,
@@ -269,6 +289,18 @@ def main() -> None:
         help="Cap on how many pages the tour visits (including the start URL).",
     )
     parser.add_argument(
+        "--max-duration",
+        type=float,
+        default=120.0,
+        help="Hard wall-time cap on the whole tour in seconds.",
+    )
+    parser.add_argument(
+        "--click-timeout",
+        type=float,
+        default=5.0,
+        help="Per-click timeout in seconds (Playwright default is 30s).",
+    )
+    parser.add_argument(
         "--initial-wait",
         type=float,
         default=4.0,
@@ -298,6 +330,8 @@ def main() -> None:
             dwell=args.dwell,
             max_clicks=args.max_clicks,
             max_pages=args.max_pages,
+            max_duration=args.max_duration,
+            click_timeout_ms=int(args.click_timeout * 1000),
             initial_wait=args.initial_wait,
             keep_frames_dir=args.keep_frames,
         )

@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **"Fast as light" time budgets on `auto`.** New `--max-duration` (default
+  120s) hard-caps the whole tour wall time; new `--click-timeout` (default
+  5s) shortens Playwright's 30s per-op default so one stuck click can't
+  stall for 30 seconds. Both invariants are enforced in-loop: BFS checks
+  the deadline before dequeuing each URL and before each click; on hit,
+  logs a WARNING and encodes whatever frames were captured. Also plumbed
+  `timeout_ms` through `BaseStep` so scenarios can request short timeouts
+  too (backward-compat: default `None` preserves Playwright's 30s).
 - **`auto` click loop bails after 3 consecutive failures.** Post-hydration DOM
   drift meant a page's discovered selectors could all fail after the first
   successful click — the loop then walked the whole 20-element pool clicking
