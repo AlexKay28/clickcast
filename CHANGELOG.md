@@ -7,114 +7,92 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] — 2026-07-24
+
+Big `auto`-mode release: multi-page BFS/DFS tours, hardened time budgets,
+richer overlays for AI-eye consumption, and live progress logging.
+
 ### Added
-- **AI-eye overlays** (closes #57).
-  - **Light-mode label banner** — new `AnnotateConfig.label_style="light"`
-    (now the default) puts step labels on a white background with dark
-    text. Old dark banner blended into dark-mode sites (react.dev); light
-    reads on both. `label_style="dark"` restores the previous look.
-  - **Actions panel** — new `AnnotateConfig.actions_panel` (default on)
+- **Multi-page BFS tour in `auto`** ([#55]). `--max-pages` flag (default 5).
+  Starting from the URL you pass, `auto` discovers elements, clicks them,
+  and if a click navigates to a same-origin destination, that URL is queued
+  for a follow-up tour. Cross-origin destinations ignored; visited URLs
+  deduped by scheme/host/port/path (fragment stripped). New
+  `clickcast.discovery.urlutil` module and page-labelled overlays.
+- **`--traversal={dfs,bfs}` on `auto`** ([#65], default `dfs`). Changed the
+  default URL queue policy from FIFO (BFS) to LIFO (DFS). DFS gives a
+  coherent narrative reel that follows one link tree at a time — e.g.
+  `Home → click Docs → Docs → click Getting-Started`. Better for both
+  human viewers and AI-eye consumption. Pass `--traversal=bfs` for the
+  old site-map style coverage.
+- **`--seed-url` on `auto`** ([#67], repeatable). Agent-controllable BFS.
+  When set, the tour visits exactly the initial URL + your seeds, in the
+  order given, and does NOT auto-enqueue navigation destinations
+  discovered during clicks. For AI agents that want a deterministic path.
+- **`--max-duration` on `auto`** ([#63], default 120s). Hard wall-time cap
+  on the whole tour. When hit, BFS stops and encodes whatever frames were
+  captured. No more silent 30-minute hangs.
+- **`--click-timeout` on `auto`** ([#63], default 5s). Overrides Playwright's
+  30s per-op default so one stuck click can't stall the tour. Also plumbed
+  `timeout_ms` through `BaseStep` for scenario authors.
+- **Overlays on `auto` recordings** ([#53]). `auto` now composites the
+  existing `Annotator` overlays (click ripples, per-step label banner,
+  progress bar, cursor trail) onto captured frames before encoding. New
+  `annotate_frames_dir()` helper + `StepAnnotation` dataclass under
+  `clickcast.annotate`.
+- **AI-eye overlays** ([#69], closes [#57]).
+  - **Light-mode label banner** — `AnnotateConfig.label_style="light"`
+    (now default) puts step labels on white with dark text. Old dark
+    banner blended into dark-mode sites (react.dev); light reads on both.
+  - **Actions panel** — `AnnotateConfig.actions_panel` (default on)
     composites a top-right side panel listing recent step labels with the
-    current one highlighted. Gives viewers (human and LLM alike) an
-    at-a-glance map of "where we are in the tour" that the progress bar
-    alone can't convey.
-  - Both apply automatically via `annotate_frames_dir` — the pipeline
-    passes `all_labels` (list of every step's label) so the panel can
-    render the tour history.
-- **`--seed-url` on `auto`** (repeatable) — agent-controllable BFS. When any
-  `--seed-url` is set, the tour visits exactly the initial URL + your seeds,
-  in the order given, and does NOT auto-enqueue navigation destinations
-  discovered during clicks. `--traversal` becomes moot (order is
-  deterministic). For AI agents that want to drive a specific path:
-  `clickcast auto https://x.com/ --seed-url https://x.com/pricing --seed-url https://x.com/docs`
-- **`--traversal={dfs,bfs}` on `auto`** (default `dfs`). Changed the default
-  URL queue policy from FIFO (BFS) to LIFO (DFS). DFS gives a coherent
-  narrative reel that follows one link tree at a time — e.g. `Home → click
-  Docs → Docs → click Getting-Started → Getting-Started`. Better for both
-  human viewers and AI-eye consumption (semantic locality). Pass
-  `--traversal=bfs` to opt back into the old behavior for site-map style
-  coverage.
+    current one highlighted. Gives viewers an at-a-glance map of "where
+    we are in the tour."
+- **Live progress logging during `auto` tours** ([#60], closes [#59]).
+  With `-v` you now get an INFO line for every click, every same-origin
+  nav → go_back, per-page summary, and wall-clock time in the success
+  line. `-vv` adds DEBUG traces.
 
 ### Fixed
-- **Discovery disambiguates non-unique selectors** (closes #62). Real doc
-  sites (react.dev, most SPA docs) use the same accessible name in header
-  and footer nav, so `role=link[name="Community"]` matches 2+ elements and
-  Playwright's strict mode blocks the click — every attempt was ~5s of
-  wasted timeout. `_discover_on_page` now checks `page.locator(sel).count()`
-  per element; when >1, appends `>> nth=0` so the locator picks the first
-  match instead of failing. Selectors starting with `#` or `[data-testid=`
-  skip the check (inherently unique). Malformed selectors leave the string
-  alone so downstream click errors surface the real problem.
-- **"Fast as light" time budgets on `auto`.** New `--max-duration` (default
-  120s) hard-caps the whole tour wall time; new `--click-timeout` (default
-  5s) shortens Playwright's 30s per-op default so one stuck click can't
-  stall for 30 seconds. Both invariants are enforced in-loop: BFS checks
-  the deadline before dequeuing each URL and before each click; on hit,
-  logs a WARNING and encodes whatever frames were captured. Also plumbed
-  `timeout_ms` through `BaseStep` so scenarios can request short timeouts
-  too (backward-compat: default `None` preserves Playwright's 30s).
-- **`auto` click loop bails after 3 consecutive failures.** Post-hydration DOM
-  drift meant a page's discovered selectors could all fail after the first
-  successful click — the loop then walked the whole 20-element pool clicking
-  timeout-inducing dead targets (~30s each, so ~500s wasted per page).
-  Now: 3 failures in a row → stop the page early, hand control back to BFS.
-- **Progress counter now reflects attempts, not successes.** Old `click N/max`
-  log froze at the last successful click number, so `click 8/15` could
-  appear 20 times in a row while nothing was actually working. New format
-  `attempt N (X/max clicked)` — attempt counter always advances so users
-  see progress even during failure streaks.
-- **`auto` go_back no longer hangs on WebSocket / HMR sites.** The go_back
-  restore step introduced in the previous entry used `wait_until="networkidle"`,
-  which hung indefinitely on sites that keep WebSockets / SSE / dev-server
-  HMR channels open (react.dev burned 30+ minutes of CI). Switched to
-  `wait_until="domcontentloaded"` with a hard 5-second `timeout`. DOM-ready
-  is enough — we're just returning to a page we already know how to select
-  elements on.
-- **`--max-steps` is now a global click budget**, not per-page. Old semantics
-  meant `--max-steps=25 --max-pages=5` could fire 125 clicks (25 × 5) and
-  overrun even a modest CI budget. New: 25 total clicks across the whole
-  tour, whichever pages they land on. Default bumped to 15 (roughly matches
-  the previous per-page default × a typical page count).
-- **`auto` BFS no longer starves on nav-heavy sites.** The previous
+- **`auto` BFS no longer starves on nav-heavy sites** ([#56]). The previous
   click-loop `break`-on-first-nav meant one useless click (e.g. clicking
   the site logo, which nav's to an already-visited URL) exited the loop
-  and left the queue empty. Now: after a same-origin navigation, we
-  `page.go_back()` and continue clicking the remaining discovered
-  elements, so multi-page journeys actually get more than 1 candidate
-  per page. Cross-origin nav still bails without go_back.
-
-### Added
-- **Live progress logging during `auto` tours** (closes #59). With `-v` /
-  `--verbose` you now get an INFO line for every click, every same-origin
-  nav → go_back, per-page discovery/summary, and a final wall-time in the
-  success line. `-vv` adds DEBUG traces (hydration wait, go_back duration).
-  Motivation: the react.dev demo was silent for 9 minutes between page 1
-  and page 2 discovery — from the terminal it looked hung.
-- **Overlays on `auto` recordings.** `auto` now composites the existing
-  `Annotator` overlays (click ripples, per-step label banner, slide-number
-  progress bar, cursor trail) onto captured frames before encoding. The
-  `Annotator` class existed but was never wired to any command — now the
-  reels tell the viewer what's happening. `scripts/generate_demo.py` picks
-  this up automatically. New `annotate_frames_dir()` helper +
-  `StepAnnotation` dataclass under `clickcast.annotate`.
-- **Multi-page BFS tour in `auto`.** New `--max-pages` flag (default 5).
-  Starting from the URL you pass, `auto` discovers elements, clicks them,
-  and if a click navigates to a **same-origin** destination, that URL is
-  queued for a follow-up tour. BFS-style (breadth first), 1 level deep in
-  practice — depth is bounded by `--max-pages`. Cross-origin destinations
-  are ignored; visited URLs are deduped by scheme/host/port/path (fragment
-  stripped). New `clickcast.discovery.urlutil` module (`normalize_url`,
-  `is_same_origin`) and page-labelled `page N/M · click · …` overlays so
-  the reel is legible even when it jumps between pages.
+  and left the queue empty. Now: after a same-origin nav, `page.go_back()`
+  and continue clicking the remaining discovered elements.
+- **`auto` go_back no longer hangs on WebSocket / HMR sites** ([#58]).
+  `wait_until="networkidle"` hung indefinitely on sites that keep
+  WebSockets / SSE / dev-server HMR channels open (react.dev burned 30+
+  min of CI). Switched to `wait_until="domcontentloaded"` with a hard 5s
+  timeout.
+- **`--max-steps` is now a global click budget** ([#58]), not per-page. Old
+  semantics could fire 125 clicks (25 × 5) and overrun even modest CI
+  budgets. Default bumped to 15.
+- **`auto` click loop bails after 3 consecutive failures** ([#61]).
+  Post-hydration DOM drift meant a page's discovered selectors could all
+  fail — the loop then walked the whole 20-element pool clicking dead
+  targets (~30s each, ~500s wasted per page).
+- **Progress counter now reflects attempts, not successes** ([#61]). Old
+  log froze at the last successful click number. New format
+  `attempt N (X/max clicked)` — attempt counter always advances.
+- **Discovery disambiguates non-unique selectors** ([#64], closes [#62]).
+  Real doc sites use the same accessible name in header and footer nav,
+  so `role=link[name="Community"]` matches 2+ elements and Playwright's
+  strict mode blocks the click. `_discover_on_page` now checks
+  `page.locator(sel).count()` per element; when >1, appends `>> nth=0` so
+  the locator picks the first match.
+- **Seeded tours honor URL commitment past click budget** ([#67]). With
+  `--seed-url` set and a tight `--max-steps`, the outer BFS loop used to
+  exit after page 1, silently dropping the seeds the caller committed to.
+  Now seeded tours continue past budget exhaustion (remaining seeds get
+  goto + scroll only).
 
 ### CI
-- **Descriptive workflow names.** `ci` → `CI (lint + test matrix)`,
+- **Descriptive workflow names** ([#53]). `ci` → `CI (lint + test matrix)`,
   `release` → `Publish release (TestPyPI → PyPI → GitHub release)`,
   `demo` → `Regenerate README demo GIF`. Makes the Actions tab readable.
-- **Demo GIF auto-regenerates after each release.** `demo.yml` gains a
-  `workflow_run` trigger fired on successful completion of the release
-  workflow, so `docs/demo.gif` stays in sync with the published version
-  without a manual dispatch.
+- **Demo GIF auto-regenerates after each release** ([#53]). `demo.yml`
+  gains a `workflow_run` trigger fired on successful release, so
+  `docs/demo.gif` stays in sync with the published version.
 
 ## [0.1.1] — 2026-07-24
 
@@ -163,7 +141,8 @@ Initial public release.
 - Automated release pipeline: tag `v*` → TestPyPI → smoke matrix (Linux/macOS
   × Python 3.10–3.13) → PyPI → GitHub release, all via Trusted Publishing.
 
-[Unreleased]: https://github.com/AlexKay28/clickcast/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/AlexKay28/clickcast/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/AlexKay28/clickcast/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/AlexKay28/clickcast/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/AlexKay28/clickcast/releases/tag/v0.1.0
 
@@ -173,3 +152,17 @@ Initial public release.
 [#48]: https://github.com/AlexKay28/clickcast/pull/48
 [#49]: https://github.com/AlexKay28/clickcast/pull/49
 [#50]: https://github.com/AlexKay28/clickcast/pull/50
+[#53]: https://github.com/AlexKay28/clickcast/pull/53
+[#55]: https://github.com/AlexKay28/clickcast/pull/55
+[#56]: https://github.com/AlexKay28/clickcast/pull/56
+[#57]: https://github.com/AlexKay28/clickcast/issues/57
+[#58]: https://github.com/AlexKay28/clickcast/pull/58
+[#59]: https://github.com/AlexKay28/clickcast/issues/59
+[#60]: https://github.com/AlexKay28/clickcast/pull/60
+[#61]: https://github.com/AlexKay28/clickcast/pull/61
+[#62]: https://github.com/AlexKay28/clickcast/issues/62
+[#63]: https://github.com/AlexKay28/clickcast/pull/63
+[#64]: https://github.com/AlexKay28/clickcast/pull/64
+[#65]: https://github.com/AlexKay28/clickcast/pull/65
+[#67]: https://github.com/AlexKay28/clickcast/pull/67
+[#69]: https://github.com/AlexKay28/clickcast/pull/69
