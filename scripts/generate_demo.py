@@ -312,6 +312,16 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--pace",
+        choices=("fast", "natural", "slow", "onboarding"),
+        default=None,
+        help=(
+            "Speed preset — overrides --fps and --dwell defaults when set. "
+            "fast: fps=15 dwell=0.15 | natural: fps=12 dwell=0.4 | "
+            "slow: fps=10 dwell=0.7 | onboarding: fps=8 dwell=1.2."
+        ),
+    )
+    parser.add_argument(
         "--initial-wait",
         type=float,
         default=4.0,
@@ -330,6 +340,23 @@ def main() -> None:
         level=logging.INFO if args.verbose else logging.WARNING,
         format="%(levelname)s %(name)s: %(message)s",
     )
+
+    # Pace preset overrides fps/dwell defaults only when the user didn't set
+    # them explicitly. argparse doesn't have a great "was this the default?"
+    # hook, so we compare against the argparse defaults.
+    _PACE_TABLE = {
+        "fast": (15, 0.15),
+        "natural": (12, 0.4),
+        "slow": (10, 0.7),
+        "onboarding": (8, 1.2),
+    }
+    if args.pace:
+        preset_fps, preset_dwell = _PACE_TABLE[args.pace]
+        if args.fps == 12:  # argparse default
+            args.fps = preset_fps
+        if args.dwell == 0.5:  # argparse default
+            args.dwell = preset_dwell
+        log.info("resolved --pace=%s → fps=%d dwell=%.2fs", args.pace, args.fps, args.dwell)
 
     w, h = args.viewport.lower().split("x")
     asyncio.run(

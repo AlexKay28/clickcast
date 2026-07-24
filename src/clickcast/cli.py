@@ -198,6 +198,7 @@ _CONFIG_KEYS_PER_COMMAND: dict[str, tuple[str, ...]] = {
         "dark",
         "fps",
         "dwell",
+        "pace",
         "format",
         "quality",
         "loop",
@@ -247,8 +248,20 @@ def _root(
 # ==========================================================================
 
 
+# Speed presets — one flag (--pace) sets fps + dwell together so users don't
+# have to think about frame math. Explicit --fps / --dwell still override.
+_PACE_TABLE: dict[str, tuple[int, float]] = {
+    # name: (fps, dwell)
+    "fast": (15, 0.15),
+    "natural": (12, 0.4),
+    "slow": (10, 0.7),
+    "onboarding": (8, 1.2),
+}
+
+
 @app.command(help="Auto-discover interactive elements and record a tour.")
 def auto(
+    ctx: typer.Context,
     url: Annotated[str, typer.Argument(help="Target URL.")],
     out: OutOpt = "reel.gif",
     max_steps: Annotated[
@@ -317,6 +330,17 @@ def auto(
             ),
         ),
     ] = None,
+    pace: Annotated[
+        str,
+        typer.Option(
+            "--pace",
+            help=(
+                "Speed preset: fast | natural | slow | onboarding. Sets --fps + "
+                "--dwell together so users don't have to think about frame math. "
+                "Explicit --fps / --dwell still win when set."
+            ),
+        ),
+    ] = "natural",
     dwell: Annotated[
         float, typer.Option("--dwell", help="Seconds to hold after each action.")
     ] = 1.0,
@@ -343,6 +367,19 @@ def auto(
     _setup_logging(verbose)
     if traversal not in ("dfs", "bfs"):
         _die(f"--traversal must be 'dfs' or 'bfs', got {traversal!r}")
+    if pace not in _PACE_TABLE:
+        _die(f"--pace must be one of {sorted(_PACE_TABLE)}, got {pace!r}")
+
+    # Pace presets set fps + dwell defaults; explicit CLI flags still win.
+    # `_is_explicit` returns True only when the user typed --fps / --dwell —
+    # config-driven or default values are treated as overridable by the preset.
+    preset_fps, preset_dwell = _PACE_TABLE[pace]
+    if not _is_explicit(ctx, "fps"):
+        fps = preset_fps
+    if not _is_explicit(ctx, "dwell"):
+        dwell = preset_dwell
+    log.info("resolved pace=%s → fps=%d dwell=%.2fs", pace, fps, dwell)
+
     asyncio.run(
         _do_auto(
             url=url,

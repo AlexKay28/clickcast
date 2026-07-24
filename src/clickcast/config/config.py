@@ -137,6 +137,7 @@ class Config(BaseSettings):
     proxy: str | None = None
     fps: int = 12
     dwell: float = 1.0
+    pace: str = "natural"  # fast | natural | slow | onboarding — sets fps + dwell in auto
     format: str = "gif"
     quality: int = 8
     loop: int = 0
