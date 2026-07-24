@@ -1,0 +1,54 @@
+# Canonical login regression flow.
+#
+# Usage:
+#   clickcast run demo/regression-visual-diff/login-flow.yml \
+#     --var base_url=https://app.example.com \
+#     --var test_email=qa@example.com \
+#     --var test_password=$QA_PASSWORD \
+#     --out nightly.gif
+#
+# Selectors below are placeholders — adjust to match your app.
+
+meta:
+  name: "Login regression"
+  viewport: 1280x800
+  fps: 12
+  dwell: 0.5
+  format: gif
+  out: reel-login.gif
+
+steps:
+  - action: goto
+    url: "{{ base_url }}/login"
+    wait: networkidle
+    dwell: 1.0
+    label: "open login page"
+
+  - action: type
+    into: 'input[name="email"]'
+    text: "{{ test_email }}"
+    label: "type email"
+
+  - action: type
+    into: 'input[name="password"]'
+    text: "{{ test_password }}"
+    label: "type password"
+
+  - action: click
+    selector: 'role=button[name="Sign in"]'
+    label: "submit login form"
+    dwell: 2.0
+
+  # A successful login lands somewhere authenticated — assert by visiting
+  # a page that only exists post-login.
+  - action: goto
+    url: "{{ base_url }}/dashboard"
+    wait: networkidle
+    dwell: 1.5
+    label: "verify dashboard loads"
+
+  - action: click
+    selector: 'role=link[name="Settings"]'
+    optional: true
+    label: "poke settings link"
+    dwell: 1.0

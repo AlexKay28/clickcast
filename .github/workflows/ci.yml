@@ -8,6 +8,7 @@ on:
       - 'LICENSE'
       - '.gitignore'
       - 'docs/*.md'          # explicit — `docs/scenarios/*.yml` still triggers CI
+      - 'demo/**'            # example scenarios per use case; not run in CI
   pull_request:
     paths-ignore: *docs-ignore
 
