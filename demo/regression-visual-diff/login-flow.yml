@@ -18,37 +18,33 @@ meta:
   out: reel-login.gif
 
 steps:
-  - action: goto
-    url: "{{ base_url }}/login"
+  - goto: "{{ base_url }}/login"
     wait: networkidle
     dwell: 1.0
     label: "open login page"
 
-  - action: type
-    into: 'input[name="email"]'
-    text: "{{ test_email }}"
+  - type:
+      into: 'input[name="email"]'
+      text: "{{ test_email }}"
     label: "type email"
 
-  - action: type
-    into: 'input[name="password"]'
-    text: "{{ test_password }}"
+  - type:
+      into: 'input[name="password"]'
+      text: "{{ test_password }}"
     label: "type password"
 
-  - action: click
-    selector: 'role=button[name="Sign in"]'
-    label: "submit login form"
+  - click: 'role=button[name="Sign in"]'
     dwell: 2.0
+    label: "submit login form"
 
   # A successful login lands somewhere authenticated — assert by visiting
   # a page that only exists post-login.
-  - action: goto
-    url: "{{ base_url }}/dashboard"
+  - goto: "{{ base_url }}/dashboard"
     wait: networkidle
     dwell: 1.5
     label: "verify dashboard loads"
 
-  - action: click
-    selector: 'role=link[name="Settings"]'
+  - click: 'role=link[name="Settings"]'
     optional: true
-    label: "poke settings link"
     dwell: 1.0
+    label: "poke settings link"
