@@ -271,6 +271,26 @@ def auto(
             ),
         ),
     ] = 5,
+    max_duration: Annotated[
+        float,
+        typer.Option(
+            "--max-duration",
+            help=(
+                "Hard wall-time cap on the whole tour, in seconds. When hit, BFS "
+                "stops immediately and whatever frames were captured get encoded."
+            ),
+        ),
+    ] = 120.0,
+    click_timeout: Annotated[
+        float,
+        typer.Option(
+            "--click-timeout",
+            help=(
+                "Per-click timeout in seconds. Overrides Playwright's 30s default so "
+                "one stuck click can't stall the tour. Applies to click/hover/type/etc."
+            ),
+        ),
+    ] = 5.0,
     dwell: Annotated[
         float, typer.Option("--dwell", help="Seconds to hold after each action.")
     ] = 1.0,
@@ -301,6 +321,8 @@ def auto(
             out=out,
             max_steps=max_steps,
             max_pages=max_pages,
+            max_duration=max_duration,
+            click_timeout_ms=int(click_timeout * 1000),
             dwell=dwell,
             initial_wait=initial_wait,
             session_kwargs=_session_kwargs(engine, viewport, device, headful, lang, dark),
@@ -322,6 +344,8 @@ async def _explore_page(
     dwell: float,
     initial_wait: float,
     click_budget: int,
+    click_timeout_ms: int,
+    deadline_monotonic: float | None,
     step_index: int,
     step_annotations: dict[int, StepAnnotation],
     page_label: str,
@@ -372,11 +396,15 @@ async def _explore_page(
     for attempt, element in enumerate(elements, start=1):
         if clicked >= click_budget:
             break
+        if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
+            log.warning("%s · tour deadline reached during clicks → stopping page", page_label)
+            break
         step = ClickStep(
             selector=element.selector,
             dwell=dwell,
             optional=True,
             label=element.text[:60] or element.role,
+            timeout_ms=click_timeout_ms,
         )
         url_before = sess.page.url
         log.info(
@@ -487,6 +515,8 @@ async def _do_auto(
     out: str,
     max_steps: int,
     max_pages: int,
+    max_duration: float,
+    click_timeout_ms: int,
     dwell: float,
     initial_wait: float,
     session_kwargs: dict[str, Any],
@@ -498,13 +528,19 @@ async def _do_auto(
 ) -> None:
     if max_pages < 1:
         _die("--max-pages must be >= 1")
+    if max_duration <= 0:
+        _die("--max-duration must be > 0")
 
     tour_started = time.monotonic()
+    deadline = tour_started + max_duration
     log.info(
-        "starting auto tour: url=%s max_pages=%d max_steps=%d dwell=%.2fs fps=%d",
+        "starting auto tour: url=%s max_pages=%d max_steps=%d max_duration=%.1fs "
+        "click_timeout=%dms dwell=%.2fs fps=%d",
         url,
         max_pages,
         max_steps,
+        max_duration,
+        click_timeout_ms,
         dwell,
         fps,
     )
@@ -528,6 +564,14 @@ async def _do_auto(
             clicks_remaining = max_steps
 
             while queue and pages_visited < max_pages and clicks_remaining > 0:
+                if time.monotonic() >= deadline:
+                    log.warning(
+                        "max-duration %.0fs reached before page %d/%d → stopping BFS",
+                        max_duration,
+                        pages_visited + 1,
+                        max_pages,
+                    )
+                    break
                 current = queue.popleft()
                 key = normalize_url(current)
                 if key in visited:
@@ -545,6 +589,8 @@ async def _do_auto(
                     dwell=dwell,
                     initial_wait=initial_wait,
                     click_budget=clicks_remaining,
+                    click_timeout_ms=click_timeout_ms,
+                    deadline_monotonic=deadline,
                     step_index=step_index,
                     step_annotations=step_annotations,
                     page_label=page_label,

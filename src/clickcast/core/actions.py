@@ -41,6 +41,10 @@ class BaseStep(BaseModel):
     dwell: float = 0.0
     optional: bool = False
     repeat: int = Field(default=1, ge=1)
+    # Override Playwright's per-op timeout (default 30_000ms). Kept small in
+    # `auto` mode via _explore_page so a stuck click can't burn 30s.
+    # `None` = use Playwright default (preserves prior scenario behavior).
+    timeout_ms: int | None = None
 
 
 class GotoStep(BaseStep):
@@ -127,8 +131,9 @@ class ActionResult:
     cursor_xy: tuple[int, int] | None = None
 
 
-async def _center_of(locator: Locator) -> tuple[int, int] | None:
-    box = await locator.bounding_box()
+async def _center_of(locator: Locator, timeout_ms: int | None = None) -> tuple[int, int] | None:
+    kwargs = {"timeout": timeout_ms} if timeout_ms is not None else {}
+    box = await locator.bounding_box(**kwargs)
     if box is None:
         return None
     return (
@@ -144,40 +149,63 @@ async def execute(step: BaseStep, session: Session) -> ActionResult:
     cursor_xy: tuple[int, int] | None = None
     screenshot_path: Path | None = None
 
+    # Playwright typing rejects **kwargs unpacking with timeout, so each
+    # action passes an explicit `timeout=...` when the step overrides it.
+    # Without an override, Playwright's 30s default applies.
+    timeout = step.timeout_ms
+
     try:
         if isinstance(step, GotoStep):
             await session.goto(step.url, wait=step.wait)
         elif isinstance(step, ClickStep):
             selector = step.selector
             loc = session.page.locator(step.selector)
-            cursor_xy = await _center_of(loc)
-            await loc.click()
+            cursor_xy = await _center_of(loc, timeout_ms=timeout)
+            if timeout is not None:
+                await loc.click(timeout=timeout)
+            else:
+                await loc.click()
         elif isinstance(step, DblClickStep):
             selector = step.selector
             loc = session.page.locator(step.selector)
-            cursor_xy = await _center_of(loc)
-            await loc.dblclick()
+            cursor_xy = await _center_of(loc, timeout_ms=timeout)
+            if timeout is not None:
+                await loc.dblclick(timeout=timeout)
+            else:
+                await loc.dblclick()
         elif isinstance(step, HoverStep):
             selector = step.selector
             loc = session.page.locator(step.selector)
-            cursor_xy = await _center_of(loc)
-            await loc.hover()
+            cursor_xy = await _center_of(loc, timeout_ms=timeout)
+            if timeout is not None:
+                await loc.hover(timeout=timeout)
+            else:
+                await loc.hover()
         elif isinstance(step, TypeStep):
             selector = step.into
             loc = session.page.locator(step.into)
-            cursor_xy = await _center_of(loc)
-            await loc.press_sequentially(step.text, delay=step.delay)
+            cursor_xy = await _center_of(loc, timeout_ms=timeout)
+            if timeout is not None:
+                await loc.press_sequentially(step.text, delay=step.delay, timeout=timeout)
+            else:
+                await loc.press_sequentially(step.text, delay=step.delay)
         elif isinstance(step, PressStep):
             selector = step.selector
             if step.selector:
-                await session.page.locator(step.selector).press(step.key)
+                if timeout is not None:
+                    await session.page.locator(step.selector).press(step.key, timeout=timeout)
+                else:
+                    await session.page.locator(step.selector).press(step.key)
             else:
                 await session.page.keyboard.press(step.key)
         elif isinstance(step, SelectStep):
             selector = step.into
             loc = session.page.locator(step.into)
-            cursor_xy = await _center_of(loc)
-            await loc.select_option(step.value)
+            cursor_xy = await _center_of(loc, timeout_ms=timeout)
+            if timeout is not None:
+                await loc.select_option(step.value, timeout=timeout)
+            else:
+                await loc.select_option(step.value)
         elif isinstance(step, ScrollStep):
             if step.to is not None:
                 selector = step.to

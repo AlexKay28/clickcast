@@ -35,6 +35,14 @@ on:
         description: Seconds to hold each screen (keep <= 0.5 so the reel stays snappy)
         default: "0.5"
         required: true
+      max-duration:
+        description: Hard wall-time cap on the whole tour, in seconds
+        default: "120"
+        required: true
+      click-timeout:
+        description: Per-click timeout in seconds (Playwright default is 30)
+        default: "5"
+        required: true
   workflow_run:
     workflows: ["Publish release (TestPyPI → PyPI → GitHub release)"]
     types: [completed]
@@ -62,6 +70,8 @@ jobs:
       MAX_PAGES: ${{ inputs['max-pages'] || '3' }}
       INITIAL_WAIT: ${{ inputs['initial-wait'] || '4' }}
       DWELL: ${{ inputs.dwell || '0.5' }}
+      MAX_DURATION: ${{ inputs['max-duration'] || '120' }}
+      CLICK_TIMEOUT: ${{ inputs['click-timeout'] || '5' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -96,6 +106,8 @@ jobs:
             --max-pages "$MAX_PAGES" \
             --initial-wait "$INITIAL_WAIT" \
             --dwell "$DWELL" \
+            --max-duration "$MAX_DURATION" \
+            --click-timeout "$CLICK_TIMEOUT" \
             --keep-frames debug-frames \
             --out docs/demo.gif \
             --verbose
