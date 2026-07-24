@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Extracted shared auto engine** (closes #78, closes #81). The BFS/DFS
+  orchestration and per-page click loop moved from `clickcast.cli` (as
+  `_do_auto` / `_explore_page`) to a new `clickcast.auto` module (as
+  `run_tour` / `explore_page`) with a typed `AutoConfig` for inputs. Both
+  the CLI and `scripts/generate_demo.py` now call `run_tour(AutoConfig(...))`
+  — future bug fixes and features land once, not twice. `clickcast.cli._do_auto`
+  remains as a thin shim for test-patch backwards-compat. Magic constants
+  (`_GOTO_BACK_TIMEOUT_MS`, `_SCROLL_DISTANCE_PX`, `_INTER_CLICK_WAIT_S`,
+  `_MIN_DISCOVERY_POOL`, `_MAX_CONSECUTIVE_FAILURES`) named at module scope.
+  Net LOC: 1568 → 1501 across the three files, with the auto engine now in
+  one place instead of two.
+
 ### Added
 - **`--pace={fast,natural,slow,onboarding}` on `auto`** (closes #76). One
   flag sets `--fps` and `--dwell` together so users don't have to think

@@ -97,7 +97,7 @@ def _stub_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[s
         async def __aexit__(self, *args: Any) -> None:
             return None
 
-    monkeypatch.setattr("clickcast.cli.Session", _SessCtor)
+    monkeypatch.setattr("clickcast.auto.Session", _SessCtor)
 
     class _FakeRecorder:
         def __init__(self, **_kwargs: Any) -> None:
@@ -119,9 +119,9 @@ def _stub_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[s
         def flush(self) -> list[Path]:
             return []
 
-    monkeypatch.setattr("clickcast.cli.Recorder", _FakeRecorder)
+    monkeypatch.setattr("clickcast.auto.Recorder", _FakeRecorder)
 
-    monkeypatch.setattr("clickcast.cli.annotate_frames_dir", MagicMock(return_value=0))
+    monkeypatch.setattr("clickcast.auto.annotate_frames_dir", MagicMock(return_value=0))
 
     fake_enc = MagicMock(
         path=tmp_path / "reel.gif",
@@ -130,11 +130,11 @@ def _stub_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[s
         duration_s=1.0,
         frame_count=10,
     )
-    monkeypatch.setattr("clickcast.cli.encode", MagicMock(return_value=fake_enc))
-    monkeypatch.setattr("clickcast.cli._write_sidecar", MagicMock(return_value=None))
+    monkeypatch.setattr("clickcast.auto.encode", MagicMock(return_value=fake_enc))
+    monkeypatch.setattr("clickcast.auto._write_sidecar", MagicMock(return_value=None))
 
     # No sidecar builder needed for these tests.
-    monkeypatch.setattr("clickcast.cli.ReportBuilder", MagicMock)
+    monkeypatch.setattr("clickcast.auto.ReportBuilder", MagicMock)
 
     return {"session": fake_sess}
 
@@ -155,9 +155,9 @@ class TestBfsQueue:
             return _make_result()
 
         with (
-            patch("clickcast.cli.execute", side_effect=_fake_execute),
+            patch("clickcast.auto.execute", side_effect=_fake_execute),
             patch(
-                "clickcast.cli.discover",
+                "clickcast.auto.discover",
                 AsyncMock(return_value=[_make_element("Home")]),
             ),
         ):
@@ -205,9 +205,9 @@ class TestBfsQueue:
             return _make_result()
 
         with (
-            patch("clickcast.cli.execute", side_effect=_fake_execute),
+            patch("clickcast.auto.execute", side_effect=_fake_execute),
             patch(
-                "clickcast.cli.discover",
+                "clickcast.auto.discover",
                 AsyncMock(return_value=[_make_element("About"), _make_element("Docs")]),
             ),
         ):
@@ -251,9 +251,9 @@ class TestBfsQueue:
             return _make_result()
 
         with (
-            patch("clickcast.cli.execute", side_effect=_fake_execute),
+            patch("clickcast.auto.execute", side_effect=_fake_execute),
             patch(
-                "clickcast.cli.discover",
+                "clickcast.auto.discover",
                 AsyncMock(return_value=[_make_element("External")]),
             ),
         ):
@@ -303,9 +303,9 @@ class TestBfsQueue:
             return _make_result()
 
         with (
-            patch("clickcast.cli.execute", side_effect=_fake_execute),
+            patch("clickcast.auto.execute", side_effect=_fake_execute),
             patch(
-                "clickcast.cli.discover",
+                "clickcast.auto.discover",
                 AsyncMock(return_value=[_make_element("Nav")]),
             ),
         ):
@@ -360,9 +360,9 @@ class TestBfsQueue:
             return _make_result()
 
         with (
-            patch("clickcast.cli.execute", side_effect=_fake_execute),
+            patch("clickcast.auto.execute", side_effect=_fake_execute),
             patch(
-                "clickcast.cli.discover",
+                "clickcast.auto.discover",
                 AsyncMock(return_value=[_make_element("Logo"), _make_element("About")]),
             ),
         ):
@@ -415,9 +415,9 @@ class TestBfsQueue:
             return _make_result()
 
         with (
-            patch("clickcast.cli.execute", side_effect=_fake_execute),
+            patch("clickcast.auto.execute", side_effect=_fake_execute),
             patch(
-                "clickcast.cli.discover",
+                "clickcast.auto.discover",
                 AsyncMock(return_value=[_make_element("External"), _make_element("Other")]),
             ),
         ):
@@ -464,9 +464,9 @@ class TestBfsQueue:
             return _make_result()
 
         with (
-            patch("clickcast.cli.execute", side_effect=_fake_execute),
+            patch("clickcast.auto.execute", side_effect=_fake_execute),
             patch(
-                "clickcast.cli.discover",
+                "clickcast.auto.discover",
                 AsyncMock(return_value=[_make_element("Nav1"), _make_element("Nav2")]),
             ),
         ):
@@ -519,9 +519,9 @@ class TestBfsQueue:
             return _make_result()
 
         with (
-            patch("clickcast.cli.execute", side_effect=_fake_execute),
+            patch("clickcast.auto.execute", side_effect=_fake_execute),
             patch(
-                "clickcast.cli.discover",
+                "clickcast.auto.discover",
                 AsyncMock(return_value=[_make_element(f"e{i}") for i in range(10)]),
             ),
         ):
@@ -551,8 +551,8 @@ class TestBfsQueue:
         from typer import Exit
 
         with (
-            patch("clickcast.cli.execute", AsyncMock(return_value=_make_result())),
-            patch("clickcast.cli.discover", AsyncMock(return_value=[_make_element("x")])),
+            patch("clickcast.auto.execute", AsyncMock(return_value=_make_result())),
+            patch("clickcast.auto.discover", AsyncMock(return_value=[_make_element("x")])),
             pytest.raises(Exit),
         ):
             await _do_auto(

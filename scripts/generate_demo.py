@@ -1,5 +1,8 @@
 """Generate the README demo GIF by auto-discovering + clicking on a live site.
 
+Thin wrapper around `clickcast.auto.run_tour` — same engine the `clickcast auto`
+CLI uses, so the demo GIF stays in sync with the tool's actual behavior.
+
 Usage
 -----
 
@@ -16,254 +19,19 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
-import time
-from collections import deque
 from pathlib import Path
 
-from clickcast.annotate import StepAnnotation, annotate_frames_dir
-from clickcast.capture import Recorder
-from clickcast.core.actions import ClickStep, GotoStep, ScrollStep, execute
-from clickcast.core.session import Session
-from clickcast.discovery import discover
-from clickcast.discovery.urlutil import is_same_origin, normalize_url
-from clickcast.encode import encode
+from clickcast.auto import AutoConfig, run_tour
 
 log = logging.getLogger("clickcast.demo")
 
 
-async def _tour_one_page(
-    *,
-    sess: Session,
-    rec: Recorder,
-    url: str,
-    dwell: float,
-    initial_wait: float,
-    click_budget: int,
-    click_timeout_ms: int,
-    deadline_monotonic: float | None,
-    step_index: int,
-    step_annotations: dict[int, StepAnnotation],
-    page_label: str,
-) -> tuple[int, int, list[str]]:
-    """Goto, discover, click up to `click_budget`, scroll.
-
-    Returns `(next_step_index, clicks_used, discovered_urls)`.
-    """
-    discovered_urls: list[str] = []
-    page_started = time.monotonic()
-    log.info("%s → open %s", page_label, url)
-
-    goto = GotoStep(url=url, wait="networkidle", dwell=dwell)
-    await rec.pre_action(sess)
-    result = await execute(goto, sess)
-    if not result.ok:
-        log.warning("%s · skipped: %s", page_label, result.error)
-        return step_index, 0, discovered_urls
-    if initial_wait > 0:
-        await sess.wait(initial_wait)
-        log.debug("%s · held %.1fs after networkidle for hydration", page_label, initial_wait)
-    await rec.post_action(sess, result, goto)
-    step_annotations[step_index] = StepAnnotation(label=f"{page_label} · open")
-    step_index += 1
-
-    elements = await discover(sess, limit=max(click_budget * 2, 20))
-    log.info(
-        "%s · discovered %d elements, click budget: %d", page_label, len(elements), click_budget
-    )
-
-    # A page whose discovered elements all fail (post-hydration DOM drift is
-    # the usual culprit) used to burn the full pool trying every one. Bail
-    # after N consecutive failures.
-    _MAX_CONSECUTIVE_FAILURES = 3
-
-    clicked = 0
-    consecutive_failures = 0
-    for attempt, element in enumerate(elements, start=1):
-        if clicked >= click_budget:
-            break
-        if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
-            log.warning("%s · tour deadline reached during clicks → stopping page", page_label)
-            break
-        step = ClickStep(
-            selector=element.selector,
-            dwell=dwell,
-            optional=True,
-            label=element.text[:40] or element.role,
-            timeout_ms=click_timeout_ms,
-        )
-        url_before = sess.page.url
-        log.info(
-            "%s · attempt %d (%d/%d clicked) · %s:%s",
-            page_label,
-            attempt,
-            clicked,
-            click_budget,
-            element.role,
-            (element.text[:40] or "").strip() or element.selector,
-        )
-        await rec.pre_action(sess)
-        r = await execute(step, sess)
-        await rec.post_action(sess, r, step)
-        step_annotations[step_index] = StepAnnotation(
-            label=f"{page_label} · click · {step.label}" if step.label else f"{page_label} · click",
-            click_at=r.cursor_xy if r.status == "ok" else None,
-        )
-        if r.status == "ok":
-            clicked += 1
-            consecutive_failures = 0
-        else:
-            consecutive_failures += 1
-            log.warning(
-                "%s · attempt %d failed (%d/%d in a row): %s",
-                page_label,
-                attempt,
-                consecutive_failures,
-                _MAX_CONSECUTIVE_FAILURES,
-                r.error,
-            )
-            if consecutive_failures >= _MAX_CONSECUTIVE_FAILURES:
-                log.warning(
-                    "%s · %d consecutive click failures → stopping page early",
-                    page_label,
-                    consecutive_failures,
-                )
-                step_index += 1
-                break
-        step_index += 1
-
-        # Post-click nav: `domcontentloaded` + hard 5s timeout — `networkidle`
-        # hung the react.dev demo for 30+ minutes because HMR/WebSockets never
-        # let the network go idle.
-        url_after = sess.page.url
-        if url_after != url_before:
-            discovered_urls.append(url_after)
-            if not is_same_origin(url_after, url_before):
-                log.info("%s · nav to cross-origin %s → bailing", page_label, url_after)
-                break
-            log.info("%s · nav to %s → going back", page_label, url_after)
-            back_started = time.monotonic()
-            try:
-                await sess.page.go_back(wait_until="domcontentloaded", timeout=5000)
-            except Exception as e:
-                log.warning("%s · go_back failed (%s) → stopping page", page_label, e)
-                break
-            if sess.page.url != url_before:
-                log.warning(
-                    "%s · go_back landed at %s (expected %s) → stopping page",
-                    page_label,
-                    sess.page.url,
-                    url_before,
-                )
-                break
-            log.debug("%s · go_back OK in %.2fs", page_label, time.monotonic() - back_started)
-        await sess.wait(0.3)
-
-    scroll = ScrollStep(by=600, dwell=dwell)
-    log.info("%s · scroll +600px", page_label)
-    await rec.pre_action(sess)
-    r = await execute(scroll, sess)
-    await rec.post_action(sess, r, scroll)
-    step_annotations[step_index] = StepAnnotation(label=f"{page_label} · scroll")
-    step_index += 1
-
-    log.info(
-        "%s · done in %.1fs (%d clicks used, %d nav candidates)",
-        page_label,
-        time.monotonic() - page_started,
-        clicked,
-        len(discovered_urls),
-    )
-    return step_index, clicked, discovered_urls
-
-
-async def _run(
-    *,
-    url: str,
-    out: Path,
-    viewport: tuple[int, int],
-    fps: int,
-    dwell: float,
-    max_clicks: int,
-    max_pages: int,
-    max_duration: float,
-    click_timeout_ms: int,
-    traversal: str,
-    initial_wait: float,
-    keep_frames_dir: Path | None,
-) -> None:
-    tour_started = time.monotonic()
-    deadline = tour_started + max_duration
-    async with Session(viewport=viewport) as sess:
-        with Recorder(
-            fps=fps,
-            default_dwell=dwell,
-            keep=keep_frames_dir is not None,
-            out_dir=keep_frames_dir,
-        ) as rec:
-            step_annotations: dict[int, StepAnnotation] = {}
-            step_index = 0
-            visited: set[str] = set()
-            queue: deque[str] = deque([url])
-            pages_visited = 0
-            clicks_remaining = max_clicks
-
-            pop_next = queue.pop if traversal == "dfs" else queue.popleft
-            while queue and pages_visited < max_pages and clicks_remaining > 0:
-                if time.monotonic() >= deadline:
-                    log.warning(
-                        "max-duration %.0fs reached before page %d/%d → stopping tour",
-                        max_duration,
-                        pages_visited + 1,
-                        max_pages,
-                    )
-                    break
-                current = pop_next()
-                key = normalize_url(current)
-                if key in visited:
-                    continue
-                visited.add(key)
-                pages_visited += 1
-                page_label = f"page {pages_visited}/{max_pages}"
-
-                step_index, clicks_used, discovered = await _tour_one_page(
-                    sess=sess,
-                    rec=rec,
-                    url=current,
-                    dwell=dwell,
-                    initial_wait=initial_wait,
-                    click_budget=clicks_remaining,
-                    click_timeout_ms=click_timeout_ms,
-                    deadline_monotonic=deadline,
-                    step_index=step_index,
-                    step_annotations=step_annotations,
-                    page_label=page_label,
-                )
-                clicks_remaining -= clicks_used
-                if pages_visited == 1 and step_index == 1:
-                    raise RuntimeError("auto-discovery returned zero elements on start page")
-
-                for candidate in discovered:
-                    if not is_same_origin(candidate, url):
-                        continue
-                    if normalize_url(candidate) in visited:
-                        continue
-                    queue.append(candidate)
-
-            paths = rec.flush()
-            log.info("captured %d frames across %d page(s)", len(paths), pages_visited)
-
-            annotated = annotate_frames_dir(rec.frames_dir, steps=step_annotations)
-            log.info("annotated %d frames (click ripples + step counter + labels)", annotated)
-
-            out.parent.mkdir(parents=True, exist_ok=True)
-            result_media = encode(rec.frames_dir, out, fps=fps, format="gif", quality=8)
-            log.info(
-                "encoded %s (%d KB, %d frames, %.1fs)",
-                result_media.path,
-                result_media.size_bytes // 1024,
-                result_media.frame_count,
-                result_media.duration_s,
-            )
+_PACE_TABLE = {
+    "fast": (15, 0.15),
+    "natural": (12, 0.4),
+    "slow": (10, 0.7),
+    "onboarding": (8, 1.2),
+}
 
 
 def main() -> None:
@@ -341,38 +109,37 @@ def main() -> None:
         format="%(levelname)s %(name)s: %(message)s",
     )
 
-    # Pace preset overrides fps/dwell defaults only when the user didn't set
-    # them explicitly. argparse doesn't have a great "was this the default?"
-    # hook, so we compare against the argparse defaults.
-    _PACE_TABLE = {
-        "fast": (15, 0.15),
-        "natural": (12, 0.4),
-        "slow": (10, 0.7),
-        "onboarding": (8, 1.2),
-    }
     if args.pace:
         preset_fps, preset_dwell = _PACE_TABLE[args.pace]
-        if args.fps == 12:  # argparse default
+        if args.fps == 12:
             args.fps = preset_fps
-        if args.dwell == 0.5:  # argparse default
+        if args.dwell == 0.5:
             args.dwell = preset_dwell
         log.info("resolved --pace=%s → fps=%d dwell=%.2fs", args.pace, args.fps, args.dwell)
 
     w, h = args.viewport.lower().split("x")
+
+    args.out.parent.mkdir(parents=True, exist_ok=True)
     asyncio.run(
-        _run(
-            url=args.url,
-            out=args.out,
-            viewport=(int(w), int(h)),
-            fps=args.fps,
-            dwell=args.dwell,
-            max_clicks=args.max_clicks,
-            max_pages=args.max_pages,
-            max_duration=args.max_duration,
-            click_timeout_ms=int(args.click_timeout * 1000),
-            traversal=args.traversal,
-            initial_wait=args.initial_wait,
-            keep_frames_dir=args.keep_frames,
+        run_tour(
+            AutoConfig(
+                url=args.url,
+                out=str(args.out),
+                max_steps=args.max_clicks,
+                max_pages=args.max_pages,
+                max_duration=args.max_duration,
+                click_timeout_ms=int(args.click_timeout * 1000),
+                traversal=args.traversal,
+                seed_urls=[],
+                dwell=args.dwell,
+                initial_wait=args.initial_wait,
+                session_kwargs={"viewport": (int(w), int(h))},
+                fps=args.fps,
+                format="gif",
+                quality=8,
+                loop=0,
+                no_sidecar=False,
+            )
         )
     )
 
