@@ -15,6 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reels tell the viewer what's happening. `scripts/generate_demo.py` picks
   this up automatically. New `annotate_frames_dir()` helper +
   `StepAnnotation` dataclass under `clickcast.annotate`.
+- **Multi-page BFS tour in `auto`.** New `--max-pages` flag (default 5).
+  Starting from the URL you pass, `auto` discovers elements, clicks them,
+  and if a click navigates to a **same-origin** destination, that URL is
+  queued for a follow-up tour. BFS-style (breadth first), 1 level deep in
+  practice — depth is bounded by `--max-pages`. Cross-origin destinations
+  are ignored; visited URLs are deduped by scheme/host/port/path (fragment
+  stripped). New `clickcast.discovery.urlutil` module (`normalize_url`,
+  `is_same_origin`) and page-labelled `page N/M · click · …` overlays so
+  the reel is legible even when it jumps between pages.
 
 ### CI
 - **Descriptive workflow names.** `ci` → `CI (lint + test matrix)`,

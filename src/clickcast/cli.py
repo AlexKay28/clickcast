@@ -12,6 +12,7 @@ import json
 import shutil
 import subprocess
 import sys
+from collections import deque
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -35,6 +36,7 @@ from clickcast.config import (
 from clickcast.core.actions import ClickStep, GotoStep, ScrollStep, execute
 from clickcast.core.session import Session
 from clickcast.discovery import Element, discover
+from clickcast.discovery.urlutil import is_same_origin, normalize_url
 from clickcast.encode import encode
 from clickcast.feedback import Media, ReportBuilder
 from clickcast.feedback import write as write_report
@@ -225,8 +227,18 @@ def auto(
     url: Annotated[str, typer.Argument(help="Target URL.")],
     out: OutOpt = "reel.gif",
     max_steps: Annotated[
-        int, typer.Option("--max-steps", "-N", help="Cap on how many elements to click.")
+        int, typer.Option("--max-steps", "-N", help="Cap on how many elements to click per page.")
     ] = 10,
+    max_pages: Annotated[
+        int,
+        typer.Option(
+            "--max-pages",
+            help=(
+                "Cap on how many pages the tour visits, including the start URL. "
+                "Set to 1 to disable multi-page exploration."
+            ),
+        ),
+    ] = 5,
     dwell: Annotated[
         float, typer.Option("--dwell", help="Seconds to hold after each action.")
     ] = 1.0,
@@ -255,6 +267,7 @@ def auto(
             url=url,
             out=out,
             max_steps=max_steps,
+            max_pages=max_pages,
             dwell=dwell,
             initial_wait=initial_wait,
             session_kwargs=_session_kwargs(engine, viewport, device, headful, lang, dark),
@@ -267,11 +280,96 @@ def auto(
     )
 
 
+async def _explore_page(
+    *,
+    sess: Session,
+    rec: Recorder,
+    builder: ReportBuilder | None,
+    url: str,
+    dwell: float,
+    initial_wait: float,
+    max_steps: int,
+    step_index: int,
+    step_annotations: dict[int, StepAnnotation],
+    page_label: str,
+) -> tuple[int, list[str]]:
+    """Goto ``url``, discover, click up to ``max_steps`` elements, scroll.
+
+    Returns ``(next_step_index, discovered_urls)`` — ``discovered_urls`` are
+    same-origin destinations noticed while clicking (dedup happens in the
+    caller, not here).
+    """
+    discovered_urls: list[str] = []
+
+    goto = GotoStep(url=url, wait="networkidle", dwell=dwell)
+    await rec.pre_action(sess)
+    result = await execute(goto, sess)
+    if not result.ok:
+        typer.secho(f"  skipped {url}: {result.error}", fg=typer.colors.YELLOW, err=True)
+        return step_index, discovered_urls
+    if initial_wait > 0:
+        await sess.wait(initial_wait)
+    frames_goto = await rec.post_action(sess, result, goto)
+    step_annotations[step_index] = StepAnnotation(label=f"{page_label} · open")
+    if builder:
+        await builder.record_step(index=step_index, step=goto, result=result, frames=frames_goto)
+    step_index += 1
+
+    elements = await discover(sess, limit=max_steps * 2)
+    if builder and step_index == 1:
+        builder.set_discovered(elements[:max_steps])
+
+    clicked = 0
+    for element in elements:
+        if clicked >= max_steps:
+            break
+        step = ClickStep(
+            selector=element.selector,
+            dwell=dwell,
+            optional=True,
+            label=element.text[:60] or element.role,
+        )
+        url_before = sess.page.url
+        await rec.pre_action(sess)
+        r = await execute(step, sess)
+        frames_step = await rec.post_action(sess, r, step)
+        step_annotations[step_index] = StepAnnotation(
+            label=f"{page_label} · click · {step.label}" if step.label else f"{page_label} · click",
+            click_at=r.cursor_xy if r.status == "ok" else None,
+        )
+        if r.status == "ok":
+            clicked += 1
+        if builder:
+            await builder.record_step(index=step_index, step=step, result=r, frames=frames_step)
+        step_index += 1
+
+        # Post-click: did we navigate? If yes, note the destination and stop
+        # clicking on the current page (we've drifted — remaining discovered
+        # elements no longer exist).
+        url_after = sess.page.url
+        if url_after != url_before:
+            discovered_urls.append(url_after)
+            break
+        await sess.wait(0.3)
+
+    scroll = ScrollStep(by=600, dwell=dwell)
+    await rec.pre_action(sess)
+    r = await execute(scroll, sess)
+    frames_scroll = await rec.post_action(sess, r, scroll)
+    step_annotations[step_index] = StepAnnotation(label=f"{page_label} · scroll")
+    if builder:
+        await builder.record_step(index=step_index, step=scroll, result=r, frames=frames_scroll)
+    step_index += 1
+
+    return step_index, discovered_urls
+
+
 async def _do_auto(
     *,
     url: str,
     out: str,
     max_steps: int,
+    max_pages: int,
     dwell: float,
     initial_wait: float,
     session_kwargs: dict[str, Any],
@@ -281,6 +379,9 @@ async def _do_auto(
     loop: int,
     no_sidecar: bool,
 ) -> None:
+    if max_pages < 1:
+        _die("--max-pages must be >= 1")
+
     async with Session(**session_kwargs) as sess:
         builder: ReportBuilder | None = None
         if not no_sidecar:
@@ -293,61 +394,44 @@ async def _do_auto(
 
         with Recorder(fps=fps, default_dwell=dwell) as rec:
             step_annotations: dict[int, StepAnnotation] = {}
+            step_index = 0
+            visited: set[str] = set()
+            queue: deque[str] = deque([url])
+            pages_visited = 0
 
-            goto = GotoStep(url=url, wait="networkidle", dwell=dwell)
-            await rec.pre_action(sess)
-            result = await execute(goto, sess)
-            if not result.ok:
-                _die(f"goto {url} failed: {result.error}")
-            if initial_wait > 0:
-                await sess.wait(initial_wait)
-            frames_goto = await rec.post_action(sess, result, goto)
-            step_annotations[0] = StepAnnotation(label=f"open {url}")
-            if builder:
-                await builder.record_step(index=0, step=goto, result=result, frames=frames_goto)
+            while queue and pages_visited < max_pages:
+                current = queue.popleft()
+                key = normalize_url(current)
+                if key in visited:
+                    continue
+                visited.add(key)
+                pages_visited += 1
+                page_label = f"page {pages_visited}/{max_pages}"
 
-            elements = await discover(sess, limit=max_steps * 2)
-            if not elements:
-                _die("no interactive elements discovered")
-            if builder:
-                builder.set_discovered(elements[:max_steps])
-
-            clicked = 0
-            step_index = 1
-            for element in elements:
-                if clicked >= max_steps:
-                    break
-                step = ClickStep(
-                    selector=element.selector,
+                step_index, discovered = await _explore_page(
+                    sess=sess,
+                    rec=rec,
+                    builder=builder,
+                    url=current,
                     dwell=dwell,
-                    optional=True,
-                    label=element.text[:60] or element.role,
+                    initial_wait=initial_wait,
+                    max_steps=max_steps,
+                    step_index=step_index,
+                    step_annotations=step_annotations,
+                    page_label=page_label,
                 )
-                await rec.pre_action(sess)
-                r = await execute(step, sess)
-                frames_step = await rec.post_action(sess, r, step)
-                step_annotations[step_index] = StepAnnotation(
-                    label=f"click · {step.label}" if step.label else "click",
-                    click_at=r.cursor_xy if r.status == "ok" else None,
-                )
-                if r.status == "ok":
-                    clicked += 1
-                if builder:
-                    await builder.record_step(
-                        index=step_index, step=step, result=r, frames=frames_step
-                    )
-                step_index += 1
-                await sess.wait(0.3)
 
-            scroll = ScrollStep(by=600, dwell=dwell)
-            await rec.pre_action(sess)
-            r = await execute(scroll, sess)
-            frames_scroll = await rec.post_action(sess, r, scroll)
-            step_annotations[step_index] = StepAnnotation(label="scroll")
-            if builder:
-                await builder.record_step(
-                    index=step_index, step=scroll, result=r, frames=frames_scroll
-                )
+                # First page must have discovered elements; downstream pages
+                # can be scroll-only (a legitimate destination).
+                if pages_visited == 1 and step_index == 1:
+                    _die("no interactive elements discovered on start page")
+
+                for candidate in discovered:
+                    if not is_same_origin(candidate, url):
+                        continue
+                    if normalize_url(candidate) in visited:
+                        continue
+                    queue.append(candidate)
 
             rec.flush()
             annotate_frames_dir(rec.frames_dir, steps=step_annotations)
@@ -364,7 +448,8 @@ async def _do_auto(
             sidecar = _write_sidecar(out_path, no_sidecar, builder, media)
 
     typer.echo(
-        f"✔ {enc.path} ({enc.size_bytes // 1024} KB, {enc.frame_count} frames, {enc.duration_s:.1f}s)"
+        f"✔ {enc.path} ({enc.size_bytes // 1024} KB, {enc.frame_count} frames, "
+        f"{enc.duration_s:.1f}s, {pages_visited} page(s) toured)"
     )
     if sidecar:
         typer.echo(f"  sidecar: {sidecar}")
