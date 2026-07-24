@@ -14,7 +14,7 @@ from clickcast.config import (
     set_user_value,
     user_config_path,
 )
-from clickcast.config.config import _coerce_string, _dump_toml, _read_toml
+from clickcast.config.config import _coerce_string, _read_toml
 
 runner = CliRunner()
 
@@ -104,7 +104,8 @@ class TestTomlShapes:
     def test_malformed_toml_ignored(self, tmp_path: Path) -> None:
         f = tmp_path / "clickcast.toml"
         f.write_text('engine = "webkit\n')  # missing closing quote
-        cfg = load(project_toml=f, user_toml=tmp_path / "u.toml")
+        with pytest.warns(UserWarning, match="could not parse"):
+            cfg = load(project_toml=f, user_toml=tmp_path / "u.toml")
         # Falls back to defaults rather than blowing up.
         assert cfg.engine == "chromium"
 
@@ -137,12 +138,6 @@ class TestCoercion:
         with pytest.raises(ValueError, match="bool"):
             _coerce_string("nope", annotation)
 
-    def test_dump_toml_native_types(self) -> None:
-        out = _dump_toml({"engine": "webkit", "headful": True, "fps": 24})
-        assert 'engine = "webkit"' in out
-        assert "headful = true" in out
-        assert "fps = 24" in out
-
 
 class TestSetUserValue:
     def test_writes_and_round_trips(self, tmp_path: Path) -> None:
@@ -161,6 +156,56 @@ class TestSetUserValue:
     def test_unknown_key_raises(self, tmp_path: Path) -> None:
         with pytest.raises(KeyError, match="unknown"):
             set_user_value("nonsense", "x", user_toml=tmp_path / "u.toml")
+
+    def test_preserves_user_comments_and_order(self, tmp_path: Path) -> None:
+        # Regression: hand-rolled `_dump_toml` rewrote the whole file, losing
+        # comments and reordering keys. tomlkit preserves both.
+        user = tmp_path / "user.toml"
+        user.write_text(
+            "# Comment above engine\n"
+            'engine = "chromium"\n'
+            "\n"
+            "# Group: rendering\n"
+            "fps = 12\n"
+            "dwell = 1.0\n"
+        )
+        set_user_value("engine", "firefox", user_toml=user)
+        text = user.read_text()
+        assert "# Comment above engine" in text
+        assert "# Group: rendering" in text
+        assert 'engine = "firefox"' in text
+        # Order preserved: engine before fps before dwell
+        assert text.index("engine") < text.index("fps") < text.index("dwell")
+
+    def test_preserves_defaults_wrapping(self, tmp_path: Path) -> None:
+        # Regression: files using the `[defaults]` shape were silently
+        # rewritten as flat, losing the wrapper.
+        user = tmp_path / "user.toml"
+        user.write_text('[defaults]\nengine = "chromium"\nfps = 12\n')
+        set_user_value("engine", "webkit", user_toml=user)
+        text = user.read_text()
+        assert "[defaults]" in text, "wrapper table dropped"
+        assert 'engine = "webkit"' in text
+        # And the value is still readable through the layered loader.
+        cfg = load(project_toml=tmp_path / "p.toml", user_toml=user)
+        assert cfg.engine == "webkit"
+
+
+class TestMalformedTomlWarns:
+    def test_read_toml_emits_warning_on_decode_error(self, tmp_path: Path) -> None:
+        bad = tmp_path / "bad.toml"
+        bad.write_text('engine = "unterminated\n')  # missing closing quote
+        with pytest.warns(UserWarning, match="could not parse"):
+            data = _read_toml(bad)
+        # Still falls back to defaults so the CLI keeps working.
+        assert data == {}
+
+    def test_load_still_uses_defaults_when_toml_broken(self, tmp_path: Path) -> None:
+        user = tmp_path / "user.toml"
+        user.write_text('engine = "unterminated\n')
+        with pytest.warns(UserWarning, match="could not parse"):
+            cfg = load(project_toml=tmp_path / "p.toml", user_toml=user)
+        assert cfg.engine == "chromium"  # default
 
 
 # ------------------------------------------------------------------

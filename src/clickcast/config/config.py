@@ -10,8 +10,8 @@ Public API:
 
 from __future__ import annotations
 
-import json
 import sys
+import warnings
 from pathlib import Path
 from types import UnionType
 from typing import Any, Union, get_args, get_origin
@@ -21,6 +21,7 @@ if sys.version_info >= (3, 11):
 else:
     import tomli as tomllib
 
+import tomlkit
 from platformdirs import user_config_dir
 from pydantic.fields import FieldInfo
 from pydantic_settings import (
@@ -63,7 +64,13 @@ def _read_toml(path: Path) -> dict[str, Any]:
     try:
         with path.open("rb") as f:
             data = tomllib.load(f)
-    except tomllib.TOMLDecodeError:
+    except tomllib.TOMLDecodeError as e:
+        # Falling back silently was surprising — a user's typo in
+        # config.toml silently reverted their settings. Surface it.
+        warnings.warn(
+            f"clickcast: could not parse {path}: {e}. Using defaults.",
+            stacklevel=2,
+        )
         return {}
     # Accept both flat and `[defaults]`-wrapped TOML files.
     if isinstance(data.get("defaults"), dict):
@@ -204,16 +211,20 @@ def _coerce_string(value: str, annotation: Any) -> Any:
     return value
 
 
-def _dump_toml(data: dict[str, Any]) -> str:
-    lines: list[str] = []
-    for k, v in data.items():
-        if isinstance(v, bool):
-            lines.append(f"{k} = {str(v).lower()}")
-        elif isinstance(v, (int, float)):
-            lines.append(f"{k} = {v}")
-        else:
-            lines.append(f"{k} = {json.dumps(v)}")
-    return "\n".join(lines) + "\n"
+def _load_tomlkit_document(path: Path) -> tomlkit.TOMLDocument:
+    """Load ``path`` as a structure-preserving TOMLDocument, or an empty one."""
+    if not path.exists():
+        return tomlkit.document()
+    try:
+        return tomlkit.parse(path.read_text())
+    except tomlkit.exceptions.TOMLKitError as e:
+        warnings.warn(
+            f"clickcast: existing {path} could not be parsed ({e}). "
+            "The updated key will be written to a fresh document — "
+            "your prior comments/keys are preserved only if you back the file up first.",
+            stacklevel=2,
+        )
+        return tomlkit.document()
 
 
 def set_user_value(
@@ -222,7 +233,13 @@ def set_user_value(
     *,
     user_toml: Path | None = None,
 ) -> Path:
-    """Coerce ``value`` to the field's type and write it to the user TOML."""
+    """Coerce ``value`` to the field's type and write it to the user TOML.
+
+    Comments, whitespace, and key order in the existing file are preserved
+    (via ``tomlkit``). If the file uses a top-level ``[defaults]`` table,
+    the new key is written INSIDE that table so its shape survives the round
+    trip.
+    """
     field = Config.model_fields.get(key)
     if field is None:
         raise KeyError(f"unknown config key: {key}")
@@ -230,9 +247,16 @@ def set_user_value(
 
     path = user_toml if user_toml is not None else user_config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    data = _read_toml(path)
-    data[key] = coerced
-    path.write_text(_dump_toml(data))
+
+    doc = _load_tomlkit_document(path)
+    defaults = doc.get("defaults")
+    if isinstance(defaults, dict):
+        # Existing [defaults] wrapper — write inside it so shape survives.
+        defaults[key] = coerced
+    else:
+        doc[key] = coerced
+
+    path.write_text(tomlkit.dumps(doc))
     return path
 
 

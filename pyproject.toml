@@ -36,6 +36,7 @@ dependencies = [
     "pydantic-settings>=2.3",
     "platformdirs>=4.2",
     "tomli>=2.0; python_version < '3.11'",
+    "tomlkit>=0.12",
 ]
 
 [project.optional-dependencies]
