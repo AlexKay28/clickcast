@@ -163,9 +163,11 @@ class TestAutoProgressLogging:
                 no_sidecar=True,
             )
 
-        click_lines = [r for r in caplog.records if "· click " in r.message]
+        click_lines = [
+            r for r in caplog.records if "· attempt " in r.message and "clicked" in r.message
+        ]
         assert len(click_lines) == 5, (
-            f"expected 5 per-click INFO lines, got {len(click_lines)}: "
+            f"expected 5 per-attempt INFO lines, got {len(click_lines)}: "
             f"{[r.message for r in click_lines]}"
         )
 
@@ -255,4 +257,133 @@ class TestAutoProgressLogging:
         messages = [r.message for r in caplog.records]
         assert any("done in" in m and "clicks used" in m for m in messages), (
             "missing page-summary line. Got:\n" + "\n".join(messages)
+        )
+
+    @pytest.mark.asyncio
+    async def test_attempt_counter_advances_even_on_failed_clicks(
+        self, _stub_environment: _FakeSession, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Regression: with the old `click N/max` log using `clicked + 1`,
+        the number froze at the last successful click's index whenever
+        clicks failed. Users saw `click 8/15` repeated 20 times. New log
+        uses an `attempt N` counter that always advances."""
+        fake_sess = _stub_environment
+        click_counter = {"n": 0}
+
+        def _failing_result() -> MagicMock:
+            r = MagicMock()
+            r.ok = False
+            r.status = "failed"
+            r.error = "not clickable"
+            r.cursor_xy = None
+            return r
+
+        async def _fake_execute(step: Any, _sess: Any) -> MagicMock:
+            cls = step.__class__.__name__
+            if cls == "GotoStep":
+                fake_sess.page.url = step.url
+                return _make_result()
+            if cls == "ClickStep":
+                click_counter["n"] += 1
+                # Clicks 1 and 3 succeed; click 2 fails.
+                if click_counter["n"] == 2:
+                    return _failing_result()
+                return _make_result()
+            return _make_result()
+
+        with (
+            caplog.at_level(logging.INFO, logger="clickcast.auto"),
+            patch("clickcast.cli.execute", side_effect=_fake_execute),
+            patch(
+                "clickcast.cli.discover",
+                AsyncMock(return_value=[_make_element(f"E{i}") for i in range(3)]),
+            ),
+        ):
+            await _do_auto(
+                url="https://x.com/",
+                out="reel.gif",
+                max_steps=3,
+                max_pages=1,
+                dwell=0.0,
+                initial_wait=0.0,
+                session_kwargs={"engine": "chromium"},
+                fps=12,
+                format_=None,
+                quality=8,
+                loop=0,
+                no_sidecar=True,
+            )
+
+        # 3 attempt lines, one per click try, with distinct attempt numbers.
+        attempt_lines = [
+            r.message
+            for r in caplog.records
+            if "· attempt " in r.message and "clicked" in r.message
+        ]
+        assert len(attempt_lines) == 3, "expected 3 attempt lines, got:\n" + "\n".join(
+            attempt_lines
+        )
+        # Each `attempt N` value should be unique and ascending.
+        numbers = [int(m.split("attempt ")[1].split(" ")[0]) for m in attempt_lines]
+        assert numbers == [1, 2, 3], f"attempt counter should always advance, got {numbers}"
+
+    @pytest.mark.asyncio
+    async def test_breaks_after_consecutive_click_failures(
+        self, _stub_environment: _FakeSession, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A page whose discovered elements all fail used to burn the entire
+        pool (20+ elements x ~30s Playwright default). Now we break after 3
+        consecutive failures."""
+        fake_sess = _stub_environment
+        click_counter = {"n": 0}
+
+        def _failing_result() -> MagicMock:
+            r = MagicMock()
+            r.ok = False
+            r.status = "failed"
+            r.error = "not clickable"
+            r.cursor_xy = None
+            return r
+
+        async def _fake_execute(step: Any, _sess: Any) -> MagicMock:
+            cls = step.__class__.__name__
+            if cls == "GotoStep":
+                fake_sess.page.url = step.url
+                return _make_result()
+            if cls == "ClickStep":
+                click_counter["n"] += 1
+                return _failing_result()  # everything fails
+            return _make_result()
+
+        with (
+            caplog.at_level(logging.INFO, logger="clickcast.auto"),
+            patch("clickcast.cli.execute", side_effect=_fake_execute),
+            patch(
+                "clickcast.cli.discover",
+                AsyncMock(return_value=[_make_element(f"E{i}") for i in range(20)]),
+            ),
+        ):
+            await _do_auto(
+                url="https://x.com/",
+                out="reel.gif",
+                max_steps=15,
+                max_pages=1,
+                dwell=0.0,
+                initial_wait=0.0,
+                session_kwargs={"engine": "chromium"},
+                fps=12,
+                format_=None,
+                quality=8,
+                loop=0,
+                no_sidecar=True,
+            )
+
+        # 20 elements in the pool, but we should stop after 3 failures.
+        assert click_counter["n"] == 3, (
+            f"expected 3 click attempts before bailing, got {click_counter['n']}"
+        )
+        # And the reason should be in the log.
+        messages = [r.message for r in caplog.records]
+        assert any("consecutive click failures" in m for m in messages), (
+            "missing consecutive-failures bail-out log line. Got:\n" + "\n".join(messages)
         )

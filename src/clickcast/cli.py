@@ -362,8 +362,14 @@ async def _explore_page(
     if builder and step_index == 1:
         builder.set_discovered(elements[:click_budget])
 
+    # A page whose discovered elements all fail (post-hydration DOM drift is
+    # the usual culprit) used to burn the full pool trying every one — 20+
+    # timeouts in a row at ~30s each. Bail after N consecutive failures.
+    _MAX_CONSECUTIVE_FAILURES = 3
+
     clicked = 0
-    for element in elements:
+    consecutive_failures = 0
+    for attempt, element in enumerate(elements, start=1):
         if clicked >= click_budget:
             break
         step = ClickStep(
@@ -374,9 +380,10 @@ async def _explore_page(
         )
         url_before = sess.page.url
         log.info(
-            "%s · click %d/%d · %s:%s",
+            "%s · attempt %d (%d/%d clicked) · %s:%s",
             page_label,
-            clicked + 1,
+            attempt,
+            clicked,
             click_budget,
             element.role,
             (element.text[:40] or "").strip() or element.selector,
@@ -390,8 +397,29 @@ async def _explore_page(
         )
         if r.status == "ok":
             clicked += 1
+            consecutive_failures = 0
         else:
-            log.warning("%s · click failed: %s", page_label, r.error)
+            consecutive_failures += 1
+            log.warning(
+                "%s · attempt %d failed (%d/%d in a row): %s",
+                page_label,
+                attempt,
+                consecutive_failures,
+                _MAX_CONSECUTIVE_FAILURES,
+                r.error,
+            )
+            if consecutive_failures >= _MAX_CONSECUTIVE_FAILURES:
+                log.warning(
+                    "%s · %d consecutive click failures → stopping page early",
+                    page_label,
+                    consecutive_failures,
+                )
+                if builder:
+                    await builder.record_step(
+                        index=step_index, step=step, result=r, frames=frames_step
+                    )
+                step_index += 1
+                break
         if builder:
             await builder.record_step(index=step_index, step=step, result=r, frames=frames_step)
         step_index += 1

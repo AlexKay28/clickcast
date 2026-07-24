@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **`auto` click loop bails after 3 consecutive failures.** Post-hydration DOM
+  drift meant a page's discovered selectors could all fail after the first
+  successful click — the loop then walked the whole 20-element pool clicking
+  timeout-inducing dead targets (~30s each, so ~500s wasted per page).
+  Now: 3 failures in a row → stop the page early, hand control back to BFS.
+- **Progress counter now reflects attempts, not successes.** Old `click N/max`
+  log froze at the last successful click number, so `click 8/15` could
+  appear 20 times in a row while nothing was actually working. New format
+  `attempt N (X/max clicked)` — attempt counter always advances so users
+  see progress even during failure streaks.
 - **`auto` go_back no longer hangs on WebSocket / HMR sites.** The go_back
   restore step introduced in the previous entry used `wait_until="networkidle"`,
   which hung indefinitely on sites that keep WebSockets / SSE / dev-server
