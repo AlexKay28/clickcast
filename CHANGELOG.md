@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Discovery disambiguates non-unique selectors** (closes #62). Real doc
+  sites (react.dev, most SPA docs) use the same accessible name in header
+  and footer nav, so `role=link[name="Community"]` matches 2+ elements and
+  Playwright's strict mode blocks the click — every attempt was ~5s of
+  wasted timeout. `_discover_on_page` now checks `page.locator(sel).count()`
+  per element; when >1, appends `>> nth=0` so the locator picks the first
+  match instead of failing. Selectors starting with `#` or `[data-testid=`
+  skip the check (inherently unique). Malformed selectors leave the string
+  alone so downstream click errors surface the real problem.
 - **"Fast as light" time budgets on `auto`.** New `--max-duration` (default
   120s) hard-caps the whole tour wall time; new `--click-timeout` (default
   5s) shortens Playwright's 30s per-op default so one stuck click can't

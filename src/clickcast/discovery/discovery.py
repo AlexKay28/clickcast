@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import Any, cast
 
 from clickcast.core.session import Session
@@ -191,6 +191,41 @@ def _dedup(elements: list[Element]) -> list[Element]:
     return [best[k] for k in order]
 
 
+async def _disambiguate_selectors(session: Session, elements: list[Element]) -> list[Element]:
+    """Append ``>> nth=0`` to any selector that matches multiple DOM elements.
+
+    On real doc sites, our ``role=X[name=Y]`` selectors routinely match 2+
+    elements (header nav + footer nav share the same label). Playwright's
+    strict mode then refuses to click, and every attempt costs a full
+    per-op timeout. Cheap fix: verify count per element; when >1, force the
+    locator to pick the first match. Preserves accuracy on unique selectors
+    (count check is a no-op) while eliminating strict-mode failures.
+
+    Each element costs one extra ``Locator.count()`` — ~10ms on live pages.
+    On a 30-element discovery pool that's ~300ms of overhead, dwarfed by
+    the ~5s+ per-click timeout it prevents when collisions happen.
+    """
+    disambiguated: list[Element] = []
+    for el in elements:
+        # `nth=` already present (unlikely but defensive) or selector uses an
+        # id / testid (inherently unique) → skip the check.
+        if " >> nth=" in el.selector or el.selector.startswith(("#", "[data-testid=")):
+            disambiguated.append(el)
+            continue
+        try:
+            count = await session.page.locator(el.selector).count()
+        except Exception:
+            # Malformed selector or Playwright error — leave as-is; the
+            # downstream click will surface the real error.
+            disambiguated.append(el)
+            continue
+        if count > 1:
+            disambiguated.append(replace(el, selector=f"{el.selector} >> nth=0"))
+        else:
+            disambiguated.append(el)
+    return disambiguated
+
+
 async def _discover_on_page(session: Session, *, interactive: bool, limit: int) -> list[Element]:
     raw = cast(list[dict[str, Any]], await session.page.evaluate(_DISCOVERY_JS))
     elements: list[Element] = []
@@ -209,7 +244,8 @@ async def _discover_on_page(session: Session, *, interactive: bool, limit: int) 
         )
     elements = _dedup(elements)
     elements.sort(key=lambda e: (-e.score, e.bbox[1], e.bbox[0]))
-    return elements[:limit]
+    top = elements[:limit]
+    return await _disambiguate_selectors(session, top)
 
 
 async def discover(

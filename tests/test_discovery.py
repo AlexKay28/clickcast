@@ -131,6 +131,121 @@ class TestDiscoverValidation:
             await discover("about:blank", limit=0)
 
 
+class TestDisambiguateSelectors:
+    """`_disambiguate_selectors` walks discovered elements and appends
+    `>> nth=0` to any selector that matches >1 DOM element.
+
+    Regression: on real doc sites (react.dev), the same accessible name shows
+    up in both header nav and footer, so `role=link[name="Community"]` matches
+    2+ elements and Playwright's strict mode blocks the click.
+    """
+
+    @pytest.mark.asyncio
+    async def test_unique_selector_untouched(self) -> None:
+        from unittest.mock import AsyncMock, MagicMock
+
+        from clickcast.discovery.discovery import _disambiguate_selectors
+
+        el = Element(
+            selector='role=link[name="Only Once"]',
+            role="link",
+            text="Only Once",
+            bbox=(0, 0, 10, 10),
+            score=1,
+            source="dom-heuristic",
+        )
+        sess = MagicMock()
+        sess.page.locator.return_value.count = AsyncMock(return_value=1)
+        out = await _disambiguate_selectors(sess, [el])
+        assert out[0].selector == 'role=link[name="Only Once"]', (
+            "should not touch a unique selector"
+        )
+
+    @pytest.mark.asyncio
+    async def test_ambiguous_selector_gets_nth_appended(self) -> None:
+        from unittest.mock import AsyncMock, MagicMock
+
+        from clickcast.discovery.discovery import _disambiguate_selectors
+
+        el = Element(
+            selector='role=link[name="Community"]',
+            role="link",
+            text="Community",
+            bbox=(0, 0, 10, 10),
+            score=1,
+            source="dom-heuristic",
+        )
+        sess = MagicMock()
+        sess.page.locator.return_value.count = AsyncMock(return_value=2)
+        out = await _disambiguate_selectors(sess, [el])
+        assert out[0].selector == 'role=link[name="Community"] >> nth=0', (
+            f"expected nth=0 appended, got {out[0].selector!r}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_id_selector_skips_count_check(self) -> None:
+        """Selectors starting with `#foo` are inherently unique; skip the
+        (cheap but not free) count() roundtrip."""
+        from unittest.mock import MagicMock
+
+        from clickcast.discovery.discovery import _disambiguate_selectors
+
+        el = Element(
+            selector="#reset-btn",
+            role="button",
+            text="Reset",
+            bbox=(0, 0, 10, 10),
+            score=1,
+            source="dom-heuristic",
+        )
+        sess = MagicMock()
+        sess.page.locator = MagicMock()  # tracked
+        out = await _disambiguate_selectors(sess, [el])
+        assert out[0].selector == "#reset-btn"
+        sess.page.locator.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_testid_selector_skips_count_check(self) -> None:
+        from unittest.mock import MagicMock
+
+        from clickcast.discovery.discovery import _disambiguate_selectors
+
+        el = Element(
+            selector='[data-testid="save"]',
+            role="button",
+            text="Save",
+            bbox=(0, 0, 10, 10),
+            score=1,
+            source="dom-heuristic",
+        )
+        sess = MagicMock()
+        sess.page.locator = MagicMock()
+        out = await _disambiguate_selectors(sess, [el])
+        assert out[0].selector == '[data-testid="save"]'
+        sess.page.locator.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_locator_error_leaves_selector_alone(self) -> None:
+        """A malformed selector shouldn't crash discovery — surface the
+        downstream error at click time instead."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        from clickcast.discovery.discovery import _disambiguate_selectors
+
+        el = Element(
+            selector="role=button[name='junk']",
+            role="button",
+            text="junk",
+            bbox=(0, 0, 10, 10),
+            score=1,
+            source="dom-heuristic",
+        )
+        sess = MagicMock()
+        sess.page.locator.return_value.count = AsyncMock(side_effect=RuntimeError("bad selector"))
+        out = await _disambiguate_selectors(sess, [el])
+        assert out[0].selector == "role=button[name='junk']"
+
+
 FIXTURE_HTML = """<!DOCTYPE html>
 <html><head><title>fixture</title></head>
 <body>
