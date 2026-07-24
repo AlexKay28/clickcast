@@ -54,15 +54,21 @@ comments and TP config on both PyPI sides.
 
 ## Cutting a release
 
-1. **Bump `version` in `pyproject.toml`** — PEP 440 format:
-   - `0.1.0` → final release
-   - `0.1.0rc1` → release candidate (TestPyPI only)
-   - `0.1.0a1` / `0.1.0b1` → alpha / beta (TestPyPI only)
-   - `0.1.0.dev1` → dev release (TestPyPI only)
-2. `git commit -am "chore: v0.1.0"`
-3. `git tag -a v0.1.0 -m "v0.1.0"` — annotated tag; the leading `v` matters.
-4. `git push origin main --tags`
-5. Watch → https://github.com/AlexKay28/clickcast/actions
+1. **Move the `[Unreleased]` entries in [`CHANGELOG.md`](CHANGELOG.md) under a
+   new `[X.Y.Z] — YYYY-MM-DD` section** and add a matching compare link at the
+   bottom. This is the source of truth for release notes — GitHub Releases
+   auto-generates its own summary from commits, but the CHANGELOG is what
+   humans (and downstream packagers) actually read.
+2. **Bump `version` in `pyproject.toml`** — PEP 440 format:
+   - `0.1.1` → final release
+   - `0.1.1rc1` → release candidate (TestPyPI only)
+   - `0.1.1a1` / `0.1.1b1` → alpha / beta (TestPyPI only)
+   - `0.1.1.dev1` → dev release (TestPyPI only)
+3. Open a `chore/vX.Y.Z` PR with the CHANGELOG + version bump, land it on
+   `main` once CI is green.
+4. `git tag -a v0.1.1 -m "v0.1.1"` — annotated tag; the leading `v` matters.
+5. `git push origin main --tags`
+6. Watch → https://github.com/AlexKay28/clickcast/actions
 
 The workflow refuses to run if the tag and `pyproject.toml` version disagree,
 so mismatch errors surface early rather than as a bad PyPI upload.

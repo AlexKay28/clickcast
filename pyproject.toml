@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "clickcast"
-version = "0.1.0"
+version = "0.1.1"
 description = "Drive a browser through a website and hand back a reel + AI-readable feedback sidecar."
 readme = "README.md"
 license = { file = "LICENSE" }
