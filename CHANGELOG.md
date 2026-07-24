@@ -29,6 +29,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   per page. Cross-origin nav still bails without go_back.
 
 ### Added
+- **Live progress logging during `auto` tours** (closes #59). With `-v` /
+  `--verbose` you now get an INFO line for every click, every same-origin
+  nav → go_back, per-page discovery/summary, and a final wall-time in the
+  success line. `-vv` adds DEBUG traces (hydration wait, go_back duration).
+  Motivation: the react.dev demo was silent for 9 minutes between page 1
+  and page 2 discovery — from the terminal it looked hung.
 - **Overlays on `auto` recordings.** `auto` now composites the existing
   `Annotator` overlays (click ripples, per-step label banner, slide-number
   progress bar, cursor trail) onto captured frames before encoding. The

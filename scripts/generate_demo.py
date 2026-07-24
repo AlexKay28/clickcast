@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import time
 from collections import deque
 from pathlib import Path
 
@@ -47,26 +48,25 @@ async def _tour_one_page(
     Returns `(next_step_index, clicks_used, discovered_urls)`.
     """
     discovered_urls: list[str] = []
+    page_started = time.monotonic()
+    log.info("%s → open %s", page_label, url)
 
     goto = GotoStep(url=url, wait="networkidle", dwell=dwell)
     await rec.pre_action(sess)
     result = await execute(goto, sess)
     if not result.ok:
-        log.warning("skipped %s: %s", url, result.error)
+        log.warning("%s · skipped: %s", page_label, result.error)
         return step_index, 0, discovered_urls
     if initial_wait > 0:
         await sess.wait(initial_wait)
-        log.info("held %.1fs after networkidle for hydration", initial_wait)
+        log.debug("%s · held %.1fs after networkidle for hydration", page_label, initial_wait)
     await rec.post_action(sess, result, goto)
     step_annotations[step_index] = StepAnnotation(label=f"{page_label} · open")
     step_index += 1
 
     elements = await discover(sess, limit=max(click_budget * 2, 20))
     log.info(
-        "%s discovered %d elements: %s",
-        page_label,
-        len(elements),
-        [f"{e.role}:{e.text[:24]}" for e in elements[:click_budget]],
+        "%s · discovered %d elements, click budget: %d", page_label, len(elements), click_budget
     )
 
     clicked = 0
@@ -80,6 +80,14 @@ async def _tour_one_page(
             label=element.text[:40] or element.role,
         )
         url_before = sess.page.url
+        log.info(
+            "%s · click %d/%d · %s:%s",
+            page_label,
+            clicked + 1,
+            click_budget,
+            element.role,
+            (element.text[:40] or "").strip() or element.selector,
+        )
         await rec.pre_action(sess)
         r = await execute(step, sess)
         await rec.post_action(sess, r, step)
@@ -89,6 +97,8 @@ async def _tour_one_page(
         )
         if r.status == "ok":
             clicked += 1
+        else:
+            log.warning("%s · click failed: %s", page_label, r.error)
         step_index += 1
 
         # Post-click nav: `domcontentloaded` + hard 5s timeout — `networkidle`
@@ -98,22 +108,41 @@ async def _tour_one_page(
         if url_after != url_before:
             discovered_urls.append(url_after)
             if not is_same_origin(url_after, url_before):
+                log.info("%s · nav to cross-origin %s → bailing", page_label, url_after)
                 break
+            log.info("%s · nav to %s → going back", page_label, url_after)
+            back_started = time.monotonic()
             try:
                 await sess.page.go_back(wait_until="domcontentloaded", timeout=5000)
-            except Exception:
+            except Exception as e:
+                log.warning("%s · go_back failed (%s) → stopping page", page_label, e)
                 break
             if sess.page.url != url_before:
+                log.warning(
+                    "%s · go_back landed at %s (expected %s) → stopping page",
+                    page_label,
+                    sess.page.url,
+                    url_before,
+                )
                 break
+            log.debug("%s · go_back OK in %.2fs", page_label, time.monotonic() - back_started)
         await sess.wait(0.3)
 
     scroll = ScrollStep(by=600, dwell=dwell)
+    log.info("%s · scroll +600px", page_label)
     await rec.pre_action(sess)
     r = await execute(scroll, sess)
     await rec.post_action(sess, r, scroll)
     step_annotations[step_index] = StepAnnotation(label=f"{page_label} · scroll")
     step_index += 1
 
+    log.info(
+        "%s · done in %.1fs (%d clicks used, %d nav candidates)",
+        page_label,
+        time.monotonic() - page_started,
+        clicked,
+        len(discovered_urls),
+    )
     return step_index, clicked, discovered_urls
 
 

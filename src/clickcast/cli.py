@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import shutil
 import subprocess
 import sys
+import time
 from collections import deque
 from pathlib import Path
 from typing import Annotated, Any
@@ -44,6 +46,29 @@ from clickcast.scenario import ScenarioError, load
 from clickcast.scenario import run as run_scenario
 
 _APP_NAME = "clickcast"
+
+log = logging.getLogger("clickcast.auto")
+
+
+def _setup_logging(verbose: int) -> None:
+    """Configure root logging for the current command based on -v count.
+
+    0 → WARNING (default), 1 → INFO (per-click + per-page traces),
+    2+ → DEBUG (per-frame + internal wait details).
+    """
+    if verbose <= 0:
+        level = logging.WARNING
+    elif verbose == 1:
+        level = logging.INFO
+    else:
+        level = logging.DEBUG
+    # `force=True` so a second CLI invocation in the same process (tests) can
+    # re-configure without leftover handlers doubling every line.
+    logging.basicConfig(
+        level=level,
+        format="%(levelname)s %(name)s: %(message)s",
+        force=True,
+    )
 
 
 app = typer.Typer(
@@ -269,6 +294,7 @@ def auto(
     no_sidecar: NoSidecar = False,
     verbose: Verbose = 0,
 ) -> None:
+    _setup_logging(verbose)
     asyncio.run(
         _do_auto(
             url=url,
@@ -308,14 +334,18 @@ async def _explore_page(
     caller).
     """
     discovered_urls: list[str] = []
+    page_started = time.monotonic()
+    log.info("%s → open %s", page_label, url)
 
     goto = GotoStep(url=url, wait="networkidle", dwell=dwell)
     await rec.pre_action(sess)
     result = await execute(goto, sess)
     if not result.ok:
         typer.secho(f"  skipped {url}: {result.error}", fg=typer.colors.YELLOW, err=True)
+        log.warning("%s · skipped: %s", page_label, result.error)
         return step_index, 0, discovered_urls
     if initial_wait > 0:
+        log.debug("%s · held %.1fs after networkidle for hydration", page_label, initial_wait)
         await sess.wait(initial_wait)
     frames_goto = await rec.post_action(sess, result, goto)
     step_annotations[step_index] = StepAnnotation(label=f"{page_label} · open")
@@ -326,6 +356,9 @@ async def _explore_page(
     # Discover a generous pool so we don't starve when max_steps is small;
     # the click budget still caps how many we actually invoke.
     elements = await discover(sess, limit=max(click_budget * 2, 20))
+    log.info(
+        "%s · discovered %d elements, click budget: %d", page_label, len(elements), click_budget
+    )
     if builder and step_index == 1:
         builder.set_discovered(elements[:click_budget])
 
@@ -340,6 +373,14 @@ async def _explore_page(
             label=element.text[:60] or element.role,
         )
         url_before = sess.page.url
+        log.info(
+            "%s · click %d/%d · %s:%s",
+            page_label,
+            clicked + 1,
+            click_budget,
+            element.role,
+            (element.text[:40] or "").strip() or element.selector,
+        )
         await rec.pre_action(sess)
         r = await execute(step, sess)
         frames_step = await rec.post_action(sess, r, step)
@@ -349,6 +390,8 @@ async def _explore_page(
         )
         if r.status == "ok":
             clicked += 1
+        else:
+            log.warning("%s · click failed: %s", page_label, r.error)
         if builder:
             await builder.record_step(index=step_index, step=step, result=r, frames=frames_step)
         step_index += 1
@@ -366,20 +409,32 @@ async def _explore_page(
         if url_after != url_before:
             discovered_urls.append(url_after)
             if not is_same_origin(url_after, url_before):
+                log.info("%s · nav to cross-origin %s → bailing", page_label, url_after)
                 break
+            log.info("%s · nav to %s → going back", page_label, url_after)
+            back_started = time.monotonic()
             try:
                 await sess.page.go_back(wait_until="domcontentloaded", timeout=5000)
-            except Exception:
+            except Exception as e:
                 # Some sites (chained redirects, popstate handlers) refuse
                 # go_back cleanly. Give up on further clicks on this page.
+                log.warning("%s · go_back failed (%s) → stopping page", page_label, e)
                 break
             # Verify we actually returned to the original page — some sites
             # replace history so go_back lands somewhere else.
             if sess.page.url != url_before:
+                log.warning(
+                    "%s · go_back landed at %s (expected %s) → stopping page",
+                    page_label,
+                    sess.page.url,
+                    url_before,
+                )
                 break
+            log.debug("%s · go_back OK in %.2fs", page_label, time.monotonic() - back_started)
         await sess.wait(0.3)
 
     scroll = ScrollStep(by=600, dwell=dwell)
+    log.info("%s · scroll +600px", page_label)
     await rec.pre_action(sess)
     r = await execute(scroll, sess)
     frames_scroll = await rec.post_action(sess, r, scroll)
@@ -388,6 +443,13 @@ async def _explore_page(
         await builder.record_step(index=step_index, step=scroll, result=r, frames=frames_scroll)
     step_index += 1
 
+    log.info(
+        "%s · done in %.1fs (%d clicks used, %d nav candidates)",
+        page_label,
+        time.monotonic() - page_started,
+        clicked,
+        len(discovered_urls),
+    )
     return step_index, clicked, discovered_urls
 
 
@@ -408,6 +470,16 @@ async def _do_auto(
 ) -> None:
     if max_pages < 1:
         _die("--max-pages must be >= 1")
+
+    tour_started = time.monotonic()
+    log.info(
+        "starting auto tour: url=%s max_pages=%d max_steps=%d dwell=%.2fs fps=%d",
+        url,
+        max_pages,
+        max_steps,
+        dwell,
+        fps,
+    )
 
     async with Session(**session_kwargs) as sess:
         builder: ReportBuilder | None = None
@@ -431,6 +503,7 @@ async def _do_auto(
                 current = queue.popleft()
                 key = normalize_url(current)
                 if key in visited:
+                    log.debug("skipping already-visited %s", current)
                     continue
                 visited.add(key)
                 pages_visited += 1
@@ -455,15 +528,27 @@ async def _do_auto(
                 if pages_visited == 1 and step_index == 1:
                     _die("no interactive elements discovered on start page")
 
+                new_enqueued = 0
                 for candidate in discovered:
                     if not is_same_origin(candidate, url):
                         continue
                     if normalize_url(candidate) in visited:
                         continue
                     queue.append(candidate)
+                    new_enqueued += 1
+                log.info(
+                    "%s · budget: %d clicks left, queue: %d urls (+%d new)",
+                    page_label,
+                    clicks_remaining,
+                    len(queue),
+                    new_enqueued,
+                )
 
+            log.info("BFS done. Flushing %d step annotations...", len(step_annotations))
             rec.flush()
+            log.info("annotating frames...")
             annotate_frames_dir(rec.frames_dir, steps=step_annotations)
+            log.info("encoding %s...", out)
             out_path = Path(out)
             enc = encode(
                 rec.frames_dir,
@@ -476,9 +561,11 @@ async def _do_auto(
             media = _make_media(enc, fps)
             sidecar = _write_sidecar(out_path, no_sidecar, builder, media)
 
+    tour_elapsed = time.monotonic() - tour_started
     typer.echo(
         f"✔ {enc.path} ({enc.size_bytes // 1024} KB, {enc.frame_count} frames, "
-        f"{enc.duration_s:.1f}s, {pages_visited} page(s) toured)"
+        f"{enc.duration_s:.1f}s reel, {pages_visited} page(s), "
+        f"{max_steps - clicks_remaining} clicks, wall {tour_elapsed:.1f}s)"
     )
     if sidecar:
         typer.echo(f"  sidecar: {sidecar}")
