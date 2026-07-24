@@ -19,6 +19,7 @@ import typer
 from platformdirs import user_config_dir
 
 from clickcast import __version__
+from clickcast.annotate import StepAnnotation, annotate_frames_dir
 from clickcast.capture import Recorder
 from clickcast.config import (
     Config as ConfigModel,
@@ -291,6 +292,8 @@ async def _do_auto(
             builder.attach(sess)
 
         with Recorder(fps=fps, default_dwell=dwell) as rec:
+            step_annotations: dict[int, StepAnnotation] = {}
+
             goto = GotoStep(url=url, wait="networkidle", dwell=dwell)
             await rec.pre_action(sess)
             result = await execute(goto, sess)
@@ -299,6 +302,7 @@ async def _do_auto(
             if initial_wait > 0:
                 await sess.wait(initial_wait)
             frames_goto = await rec.post_action(sess, result, goto)
+            step_annotations[0] = StepAnnotation(label=f"open {url}")
             if builder:
                 await builder.record_step(index=0, step=goto, result=result, frames=frames_goto)
 
@@ -322,6 +326,10 @@ async def _do_auto(
                 await rec.pre_action(sess)
                 r = await execute(step, sess)
                 frames_step = await rec.post_action(sess, r, step)
+                step_annotations[step_index] = StepAnnotation(
+                    label=f"click · {step.label}" if step.label else "click",
+                    click_at=r.cursor_xy if r.status == "ok" else None,
+                )
                 if r.status == "ok":
                     clicked += 1
                 if builder:
@@ -335,12 +343,14 @@ async def _do_auto(
             await rec.pre_action(sess)
             r = await execute(scroll, sess)
             frames_scroll = await rec.post_action(sess, r, scroll)
+            step_annotations[step_index] = StepAnnotation(label="scroll")
             if builder:
                 await builder.record_step(
                     index=step_index, step=scroll, result=r, frames=frames_scroll
                 )
 
             rec.flush()
+            annotate_frames_dir(rec.frames_dir, steps=step_annotations)
             out_path = Path(out)
             enc = encode(
                 rec.frames_dir,

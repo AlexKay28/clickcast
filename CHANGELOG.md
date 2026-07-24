@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Overlays on `auto` recordings.** `auto` now composites the existing
+  `Annotator` overlays (click ripples, per-step label banner, slide-number
+  progress bar, cursor trail) onto captured frames before encoding. The
+  `Annotator` class existed but was never wired to any command — now the
+  reels tell the viewer what's happening. `scripts/generate_demo.py` picks
+  this up automatically. New `annotate_frames_dir()` helper +
+  `StepAnnotation` dataclass under `clickcast.annotate`.
+
+### CI
+- **Descriptive workflow names.** `ci` → `CI (lint + test matrix)`,
+  `release` → `Publish release (TestPyPI → PyPI → GitHub release)`,
+  `demo` → `Regenerate README demo GIF`. Makes the Actions tab readable.
+- **Demo GIF auto-regenerates after each release.** `demo.yml` gains a
+  `workflow_run` trigger fired on successful completion of the release
+  workflow, so `docs/demo.gif` stays in sync with the published version
+  without a manual dispatch.
+
 ## [0.1.1] — 2026-07-24
 
 ### Fixed

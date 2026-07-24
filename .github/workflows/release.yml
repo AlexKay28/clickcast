@@ -1,4 +1,4 @@
-name: release
+name: Publish release (TestPyPI → PyPI → GitHub release)
 
 on:
   push:

@@ -18,6 +18,7 @@ import asyncio
 import logging
 from pathlib import Path
 
+from clickcast.annotate import StepAnnotation, annotate_frames_dir
 from clickcast.capture import Recorder
 from clickcast.core.actions import ClickStep, GotoStep, ScrollStep, execute
 from clickcast.core.session import Session
@@ -45,6 +46,8 @@ async def _run(
             keep=keep_frames_dir is not None,
             out_dir=keep_frames_dir,
         ) as rec:
+            step_annotations: dict[int, StepAnnotation] = {}
+
             goto = GotoStep(url=url, wait="networkidle", dwell=dwell)
             await rec.pre_action(sess)
             result = await execute(goto, sess)
@@ -56,6 +59,7 @@ async def _run(
                 await sess.wait(initial_wait)
                 log.info("held %.1fs after networkidle for hydration", initial_wait)
             await rec.post_action(sess, result, goto)
+            step_annotations[0] = StepAnnotation(label=f"open {url}")
 
             elements = await discover(sess, limit=max_clicks * 2)
             log.info(
@@ -67,6 +71,7 @@ async def _run(
                 raise RuntimeError("auto-discovery returned zero elements")
 
             clicked = 0
+            step_index = 1
             for element in elements:
                 if clicked >= max_clicks:
                     break
@@ -79,17 +84,26 @@ async def _run(
                 await rec.pre_action(sess)
                 r = await execute(step, sess)
                 await rec.post_action(sess, r, step)
+                step_annotations[step_index] = StepAnnotation(
+                    label=f"click · {step.label}" if step.label else "click",
+                    click_at=r.cursor_xy if r.status == "ok" else None,
+                )
                 if r.status == "ok":
                     clicked += 1
+                step_index += 1
                 await sess.wait(0.3)
 
             scroll = ScrollStep(by=600, dwell=dwell)
             await rec.pre_action(sess)
             r = await execute(scroll, sess)
             await rec.post_action(sess, r, scroll)
+            step_annotations[step_index] = StepAnnotation(label="scroll")
 
             paths = rec.flush()
             log.info("captured %d frames", len(paths))
+
+            annotated = annotate_frames_dir(rec.frames_dir, steps=step_annotations)
+            log.info("annotated %d frames (click ripples + step counter + labels)", annotated)
 
             out.parent.mkdir(parents=True, exist_ok=True)
             result_media = encode(rec.frames_dir, out, fps=fps, format="gif", quality=8)
