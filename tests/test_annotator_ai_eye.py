@@ -13,7 +13,7 @@ from pathlib import Path
 
 from PIL import Image, ImageChops
 
-from clickcast.annotate import AnnotateConfig, Annotator, LabelStyle
+from clickcast.annotate import AnnotateConfig, Annotator, CursorStyle, LabelStyle
 
 
 def _make_frame(path: Path, size: tuple[int, int] = (600, 400)) -> Path:
@@ -171,3 +171,66 @@ class TestActionsPanel:
                 b.crop(top_right).convert("RGB"),
             ).getbbox()
         assert diff is not None, "changing step_index should shift the highlighted row"
+
+
+class TestCursorArrows:
+    """`CursorStyle.arrows=True` (default) draws red arrows between
+    consecutive tracked cursor positions instead of the fading trail of dots.
+    Ships #73.
+    """
+
+    def _run_two(
+        self,
+        tmp_path: Path,
+        first: tuple[int, int],
+        second: tuple[int, int],
+        cursor_style: CursorStyle | None = None,
+    ) -> Path:
+        src = _make_frame(tmp_path / "frame.png")
+        cfg = AnnotateConfig(cursor_style=cursor_style or CursorStyle())
+        ann = Annotator(cfg)
+        ann.annotate(src, out_path=tmp_path / "f0.png", cursor_xy=first)
+        return ann.annotate(src, out_path=tmp_path / "f1.png", cursor_xy=second)
+
+    def _has_red(self, path: Path, box: tuple[int, int, int, int]) -> bool:
+        """True if any pixel in `box` is dominant-red (default arrow color)."""
+        with Image.open(path) as img:
+            crop = img.crop(box).convert("RGB")
+        return any(r > 150 and g < 100 and b < 100 for r, g, b in crop.getdata())
+
+    def test_arrow_drawn_between_positions(self, tmp_path: Path) -> None:
+        out = self._run_two(tmp_path, (100, 100), (400, 100))
+        # Look for red pixels along the horizontal path between (100,100) and (400,100).
+        assert self._has_red(out, (150, 95, 380, 110)), (
+            "expected red arrow pixels between (100,100) and (400,100)"
+        )
+
+    def test_arrows_disabled_produces_no_red_pixels(self, tmp_path: Path) -> None:
+        out = self._run_two(tmp_path, (100, 100), (400, 100), CursorStyle(arrows=False))
+        # Trail-dot mode: cursor color is yellow (255,220,100), no red.
+        assert not self._has_red(out, (150, 95, 380, 110)), (
+            "no red pixels should appear when arrows are off"
+        )
+
+    def test_min_distance_skips_short_arrow(self, tmp_path: Path) -> None:
+        """5 px apart is below the default arrow_min_distance (10)."""
+        out = self._run_two(tmp_path, (200, 200), (205, 200))
+        assert not self._has_red(out, (190, 190, 230, 220)), (
+            "arrow < min_distance should not render"
+        )
+
+    def test_max_distance_skips_teleport(self, tmp_path: Path) -> None:
+        """800 px apart is above the default arrow_max_distance (600) —
+        the recorder does not reset cursor history across page navigations,
+        so a click on page A followed by a click on page B after a goto
+        would otherwise draw an arrow spanning the whole viewport."""
+        # Frame is 600 wide, but we use the raw pixel distance regardless of
+        # whether the endpoint is inside the frame; assertion only cares that
+        # no red pixels landed inside a reasonable path region.
+        out = self._run_two(tmp_path, (50, 200), (900, 200))
+        # Sample the path between them; anywhere along the horizontal.
+        # The endpoint at 900 is off-canvas so pillow will clip — key check
+        # is that the start region is clean.
+        assert not self._has_red(out, (100, 190, 500, 220)), (
+            "teleport-distance arrow should not render"
+        )

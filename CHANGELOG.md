@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Directional cursor arrows** (closes [#73]). `CursorStyle.arrows`
+  (default `True`) replaces the fading trail of dots with red arrows
+  drawn between consecutive tracked cursor positions. Reads as motion
+  vectors ("cursor went here → then here") — stronger signal for both
+  human viewers and LLMs consuming the reel. `arrow_min_distance=10` skips
+  jitter; `arrow_max_distance=600` skips misleading teleports (the
+  recorder doesn't reset cursor history across page navigations). Set
+  `arrows=False` to fall back to the original dots trail.
+
 ### Changed
 - **`AnnotateConfig` regrouped into sub-dataclasses** (closes [#80]). The
   46 flat fields are now grouped by responsibility: `LabelStyle`,
@@ -254,3 +264,4 @@ Initial public release.
 [#81]: https://github.com/AlexKay28/clickcast/issues/81
 [#83]: https://github.com/AlexKay28/clickcast/issues/83
 [#84]: https://github.com/AlexKay28/clickcast/issues/84
+[#73]: https://github.com/AlexKay28/clickcast/issues/73
