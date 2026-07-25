@@ -68,7 +68,7 @@ def annotate_frames_dir(
         cursor_xy = tuple(cursor_xy_raw) if cursor_xy_raw else None
         step_ann = steps.get(step_index, StepAnnotation())
         # Ripple only fires on the first N sub-frames after a click.
-        if step_ann.click_at is not None and sub_index < ann.config.ripple_stages:
+        if step_ann.click_at is not None and sub_index < ann.config.ripple.stages:
             ripple_stage = sub_index + 1
         else:
             ripple_stage = 0
