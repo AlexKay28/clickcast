@@ -9,6 +9,7 @@ from clickcast.annotate.annotator import (
     ProgressStyle,
     RippleStyle,
 )
+from clickcast.annotate.interpolate import interpolate_cursor_motion
 from clickcast.annotate.pipeline import StepAnnotation, annotate_frames_dir
 from clickcast.annotate.zoom import apply_zoom_on_click
 
@@ -23,4 +24,5 @@ __all__ = [
     "StepAnnotation",
     "annotate_frames_dir",
     "apply_zoom_on_click",
+    "interpolate_cursor_motion",
 ]

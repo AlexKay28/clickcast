@@ -32,7 +32,13 @@ from typing import Any
 
 import typer
 
-from clickcast.annotate import StepAnnotation, annotate_frames_dir, apply_zoom_on_click
+from clickcast.annotate import (
+    AnnotateConfig,
+    StepAnnotation,
+    annotate_frames_dir,
+    apply_zoom_on_click,
+    interpolate_cursor_motion,
+)
 from clickcast.capture import Recorder
 from clickcast.core.actions import ClickStep, GotoStep, ScrollStep, execute
 from clickcast.core.session import Session
@@ -118,6 +124,9 @@ class AutoConfig:
     # point. `None` disables. See #74 (Shape A).
     zoom_on_click_factor: float | None = None
     zoom_frames_after_click: int = 3  # default matches AnnotateConfig.ripple.stages
+    # Annotate config threaded into both interpolation (reads cursor_style)
+    # and annotate_frames_dir. `None` uses defaults. See #75.
+    annotate: AnnotateConfig = field(default_factory=AnnotateConfig)
 
 
 # ---------------------------------------------------------------------------
@@ -414,8 +423,17 @@ async def run_tour(cfg: AutoConfig) -> None:
                     cfg.zoom_on_click_factor,
                     cfg.zoom_frames_after_click,
                 )
+            inserted = interpolate_cursor_motion(rec.frames_dir, cfg.annotate.cursor_style)
+            if inserted:
+                log.info(
+                    "interpolated %d frames (n=%d per gap, easing=%s, min_distance=%d)",
+                    inserted,
+                    cfg.annotate.cursor_style.interpolate_frames,
+                    cfg.annotate.cursor_style.interpolate_easing,
+                    cfg.annotate.cursor_style.interpolate_min_distance,
+                )
             log.info("annotating frames...")
-            annotate_frames_dir(rec.frames_dir, steps=step_annotations)
+            annotate_frames_dir(rec.frames_dir, steps=step_annotations, config=cfg.annotate)
             log.info("encoding %s...", cfg.out)
             out_path = Path(cfg.out)
             enc = encode(

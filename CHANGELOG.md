@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Smooth cursor interpolation** (closes [#75]). Between any two consecutive
+  frames whose `cursor_xy` differs by at least `interpolate_min_distance` (50
+  px default), insert `interpolate_frames` (4 default) intermediate PNG frames
+  with the cursor at eased positions (`ease-in-out` smoothstep default;
+  `linear` opt-in). Inserted frames physically copy the earlier frame (page
+  pixels are identical between two cursor moves) and inherit the earlier
+  frame's `step_index` so the actions-panel highlight stays stable during the
+  glide. Removes the "teleport" feel of prior reels — the cursor now visibly
+  travels between clicks. New `clickcast.annotate.interpolate` module with
+  `interpolate_cursor_motion(frames_dir, config)`. Runs after zoom and before
+  annotate in the `auto` pipeline. Default on; disable via
+  `CursorStyle(interpolate=False)`.
 - **`--zoom-on-click <factor>` on `auto`** (closes [#74], Shape A). For the
   first `zoom_frames_after_click` sub-frames after each click, crop the
   frame around the click point and scale back to viewport size. The reel
@@ -274,3 +286,4 @@ Initial public release.
 [#84]: https://github.com/AlexKay28/clickcast/issues/84
 [#73]: https://github.com/AlexKay28/clickcast/issues/73
 [#74]: https://github.com/AlexKay28/clickcast/issues/74
+[#75]: https://github.com/AlexKay28/clickcast/issues/75
