@@ -8,6 +8,7 @@ logic lives in those subsystems, not here.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
 import shutil
@@ -182,45 +183,39 @@ def _write_sidecar(
 # ==========================================================================
 
 
-# Which Config fields are consumed by which subcommand. Keeping the mapping
-# explicit rather than reflecting on option lists — Click's `default_map`
-# errors on unknown keys, so a typo here would fail loudly.
-_CONFIG_KEYS_PER_COMMAND: dict[str, tuple[str, ...]] = {
-    "auto": (
-        "viewport",
-        "device",
-        "engine",
-        "headful",
-        "lang",
-        "dark",
-        "fps",
-        "dwell",
-        "pace",
-        "format",
-        "quality",
-        "loop",
-    ),
-    "run": ("format", "headful", "slowmo"),
-    "shot": ("viewport", "device", "engine", "dark"),
-    "elements": ("viewport", "engine"),
-}
-
-
 def _config_default_map() -> dict[str, dict[str, Any]]:
     """Build Click's per-command `default_map` from the layered Config.
 
     Load-once per invocation: env vars + project TOML + user TOML resolved
     now, then Click uses these as fallbacks unless an explicit CLI flag wins.
+
+    Rather than maintain a hand-written map of {command: (config_key, ...)}
+    (which silently drifted every time a new Config field landed — see #84),
+    introspect each registered command's callback signature and intersect its
+    parameter names with the Config field set. ``ctx: typer.Context`` and
+    other non-Config params are naturally excluded because they don't appear
+    as keys in ``cfg.model_dump()``.
     """
     try:
         cfg = load_config()
     except Exception:
         return {}
     fields = cfg.model_dump()
-    return {
-        cmd: {k: fields[k] for k in keys if k in fields}
-        for cmd, keys in _CONFIG_KEYS_PER_COMMAND.items()
-    }
+    out: dict[str, dict[str, Any]] = {}
+    for cmd_info in app.registered_commands:
+        callback = cmd_info.callback
+        if callback is None:
+            # `@app.command` without a body — nothing to introspect. Typer
+            # itself would never register such a command, but the type says
+            # Optional so guard it.
+            continue
+        # Typer defers name derivation until CLI-registration time, so
+        # ``cmd_info.name`` is often ``None``; fall back to the callback name
+        # (which is what Typer itself does under the hood).
+        cmd_name = cmd_info.name or callback.__name__
+        param_names = {p.name for p in inspect.signature(callback).parameters.values()}
+        out[cmd_name] = {k: fields[k] for k in param_names if k in fields}
+    return out
 
 
 @app.callback()
