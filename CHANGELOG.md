@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **`AnnotateConfig` regrouped into sub-dataclasses** (closes [#80]). The
+  46 flat fields are now grouped by responsibility: `LabelStyle`,
+  `RippleStyle`, `CursorStyle`, `ProgressStyle`, `ActionsPanelStyle` — all
+  composed onto `AnnotateConfig` via `field(default_factory=...)`. Access
+  moves from `config.label_bg_color` → `config.label.bg_color`. The 5
+  layer toggles (`clicks`/`labels`/`cursor`/`progress`/`actions_panel`)
+  and `font_path`/`font_size` stay on the top-level dataclass. Breaking
+  change; the annotator's internal `_draw_*` methods and both annotator
+  test files updated. Field-name collision resolved by naming the sub-
+  dataclass fields `cursor_style` / `progress_style` (the shorter names
+  are already the layer toggles).
+- **CLI's per-command Config map is auto-derived from Typer signatures**
+  (closes [#84]). Deleted the manual `_CONFIG_KEYS_PER_COMMAND` dict;
+  `_config_default_map` now introspects `app.registered_commands` and
+  intersects each command's parameter names with `Config` field names.
+  Every new Config field automatically reaches its same-named CLI option
+  — no more "add field, forget to update the map, config silently
+  swallowed" class of bug (which bit us on `pace` in PR #77's first
+  draft). Zero behavior change for the four commands the old map
+  covered.
+
 ## [0.1.3] — 2026-07-24
 
 A polish release. New `--pace` flag, scenario reels finally get overlays,
@@ -228,5 +250,7 @@ Initial public release.
 [#76]: https://github.com/AlexKay28/clickcast/issues/76
 [#78]: https://github.com/AlexKay28/clickcast/issues/78
 [#79]: https://github.com/AlexKay28/clickcast/issues/79
+[#80]: https://github.com/AlexKay28/clickcast/issues/80
 [#81]: https://github.com/AlexKay28/clickcast/issues/81
 [#83]: https://github.com/AlexKay28/clickcast/issues/83
+[#84]: https://github.com/AlexKay28/clickcast/issues/84
