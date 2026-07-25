@@ -95,6 +95,14 @@ class CursorStyle:
     arrow_head_size: int = 10
     arrow_min_distance: int = 10
     arrow_max_distance: int = 600
+    # Smooth cursor interpolation between recorded positions. See #75.
+    # Consumed by :func:`clickcast.annotate.interpolate.interpolate_cursor_motion`
+    # which runs before the annotator pass; the annotator itself only reads
+    # these when the pipeline threads them through.
+    interpolate: bool = True
+    interpolate_frames: int = 4
+    interpolate_easing: Literal["linear", "ease-in-out"] = "ease-in-out"
+    interpolate_min_distance: int = 50
 
 
 @dataclass(slots=True)
