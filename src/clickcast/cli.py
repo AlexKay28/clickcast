@@ -333,6 +333,18 @@ def auto(
             ),
         ),
     ] = "natural",
+    zoom_on_click: Annotated[
+        float,
+        typer.Option(
+            "--zoom-on-click",
+            help=(
+                "Crop-and-scale post-click frames around the click point by this "
+                "factor (e.g. 2.5 = 2.5x zoom). 0 or omitted = disabled. "
+                "Zoomed frames re-render at viewport size; overlays land at the "
+                "correct coords for the zoomed image."
+            ),
+        ),
+    ] = 0.0,
     dwell: Annotated[
         float, typer.Option("--dwell", help="Seconds to hold after each action.")
     ] = 1.0,
@@ -390,6 +402,7 @@ def auto(
             quality=quality,
             loop=loop,
             no_sidecar=no_sidecar,
+            zoom_on_click_factor=(zoom_on_click if zoom_on_click > 1.0 else None),
         )
     )
 
@@ -415,6 +428,7 @@ async def _do_auto(
     quality: int,
     loop: int,
     no_sidecar: bool,
+    zoom_on_click_factor: float | None = None,
 ) -> None:
     await run_tour(
         AutoConfig(
@@ -434,6 +448,7 @@ async def _do_auto(
             quality=quality,
             loop=loop,
             no_sidecar=no_sidecar,
+            zoom_on_click_factor=zoom_on_click_factor,
         )
     )
 

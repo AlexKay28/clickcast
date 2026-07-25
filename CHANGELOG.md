@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`--zoom-on-click <factor>` on `auto`** (closes [#74], Shape A). For the
+  first `zoom_frames_after_click` sub-frames after each click, crop the
+  frame around the click point and scale back to viewport size. The reel
+  jumps to a close-up for a beat, then returns to full-page. Applies
+  pre-annotate so the ripple / cursor / label bar / actions panel land at
+  the correct coords for the zoomed image. New `clickcast.annotate.zoom`
+  module with `apply_zoom_on_click(frames_dir, *, factor, frames_after_click)`.
+  Default off (`0.0` = disabled); typical usage is `--zoom-on-click 2.5`.
 - **Directional cursor arrows** (closes [#73]). `CursorStyle.arrows`
   (default `True`) replaces the fading trail of dots with red arrows
   drawn between consecutive tracked cursor positions. Reads as motion
@@ -265,3 +273,4 @@ Initial public release.
 [#83]: https://github.com/AlexKay28/clickcast/issues/83
 [#84]: https://github.com/AlexKay28/clickcast/issues/84
 [#73]: https://github.com/AlexKay28/clickcast/issues/73
+[#74]: https://github.com/AlexKay28/clickcast/issues/74

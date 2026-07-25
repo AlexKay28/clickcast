@@ -32,7 +32,7 @@ from typing import Any
 
 import typer
 
-from clickcast.annotate import StepAnnotation, annotate_frames_dir
+from clickcast.annotate import StepAnnotation, annotate_frames_dir, apply_zoom_on_click
 from clickcast.capture import Recorder
 from clickcast.core.actions import ClickStep, GotoStep, ScrollStep, execute
 from clickcast.core.session import Session
@@ -114,6 +114,10 @@ class AutoConfig:
     traversal: str = "dfs"
     seed_urls: list[str] = field(default_factory=list)
     format: str | None = None
+    # Zoom-on-click: crop-and-scale post-click sub-frames around the click
+    # point. `None` disables. See #74 (Shape A).
+    zoom_on_click_factor: float | None = None
+    zoom_frames_after_click: int = 3  # default matches AnnotateConfig.ripple.stages
 
 
 # ---------------------------------------------------------------------------
@@ -398,6 +402,18 @@ async def run_tour(cfg: AutoConfig) -> None:
 
             log.info("BFS done. Flushing %d step annotations...", len(step_annotations))
             rec.flush()
+            if cfg.zoom_on_click_factor is not None:
+                zoomed = apply_zoom_on_click(
+                    rec.frames_dir,
+                    factor=cfg.zoom_on_click_factor,
+                    frames_after_click=cfg.zoom_frames_after_click,
+                )
+                log.info(
+                    "zoomed %d frames (factor=%.1fx, %d frames after each click)",
+                    zoomed,
+                    cfg.zoom_on_click_factor,
+                    cfg.zoom_frames_after_click,
+                )
             log.info("annotating frames...")
             annotate_frames_dir(rec.frames_dir, steps=step_annotations)
             log.info("encoding %s...", cfg.out)
