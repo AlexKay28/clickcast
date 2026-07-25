@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import math
 from dataclasses import dataclass, field
 from importlib.resources import files
 from pathlib import Path
@@ -70,12 +71,30 @@ class RippleStyle:
 
 @dataclass(slots=True)
 class CursorStyle:
-    """Cursor + trail appearance."""
+    """Cursor + trail appearance.
+
+    ``arrows`` (default on) draws a red line + arrowhead between each pair of
+    consecutive tracked cursor positions instead of the fading trail of dots.
+    Arrows read as motion vectors ("cursor went here → then here"), which is
+    a stronger signal for both human viewers and LLMs consuming the reel.
+    Set to ``False`` to fall back to the original dots trail.
+
+    ``arrow_min_distance`` / ``arrow_max_distance`` guard against clutter
+    (tiny jitter) and misleading teleports (cursor "jumps" between clicks on
+    different pages after a goto — the recorder does not reset history at
+    page boundaries).
+    """
 
     color: tuple[int, int, int, int] = (255, 220, 100, 240)
     size: int = 14
     trail_length: int = 6
     trail_alpha_max: int = 160
+    arrows: bool = True
+    arrow_color: tuple[int, int, int, int] = (220, 60, 60, 220)
+    arrow_thickness: int = 3
+    arrow_head_size: int = 10
+    arrow_min_distance: int = 10
+    arrow_max_distance: int = 600
 
 
 @dataclass(slots=True)
@@ -278,8 +297,23 @@ class Annotator:
         overlay = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
         od = ImageDraw.Draw(overlay)
 
-        trail = self._cursor_history[:-1]
-        if trail:
+        if style.arrows:
+            # Motion vectors between consecutive tracked positions. See #73.
+            pairs = list(zip(self._cursor_history, self._cursor_history[1:], strict=False))
+            for i, (older, newer) in enumerate(pairs):
+                dx = newer[0] - older[0]
+                dy = newer[1] - older[1]
+                dist_sq = dx * dx + dy * dy
+                if dist_sq < style.arrow_min_distance * style.arrow_min_distance:
+                    continue  # jitter — skip
+                if dist_sq > style.arrow_max_distance * style.arrow_max_distance:
+                    continue  # teleport (cross-page) — skip
+                fade = (i + 1) / len(pairs)
+                r, g, b, a = style.arrow_color
+                faded = (r, g, b, int(a * fade))
+                self._draw_arrow(od, older, newer, faded, style)
+        else:
+            trail = self._cursor_history[:-1]
             for i, pos in enumerate(trail):
                 # Older = fainter
                 fade = (i + 1) / len(trail)
@@ -303,6 +337,32 @@ class Annotator:
             outline=(0, 0, 0, 220),
         )
         canvas.alpha_composite(overlay)
+
+    @staticmethod
+    def _draw_arrow(
+        od: ImageDraw.ImageDraw,
+        older: tuple[int, int],
+        newer: tuple[int, int],
+        color: tuple[int, int, int, int],
+        style: CursorStyle,
+    ) -> None:
+        """Line from older→newer + filled triangular arrowhead at newer."""
+        od.line([older, newer], fill=color, width=style.arrow_thickness)
+        # Arrowhead: rotate a triangle to align with (older→newer).
+        dx = newer[0] - older[0]
+        dy = newer[1] - older[1]
+        length = math.hypot(dx, dy)
+        if length == 0:
+            return
+        ux, uy = dx / length, dy / length  # unit vector along the arrow
+        px, py = -uy, ux  # perpendicular (rotate 90°)
+        head = style.arrow_head_size
+        tip = (int(newer[0]), int(newer[1]))
+        base_cx = newer[0] - ux * head
+        base_cy = newer[1] - uy * head
+        left = (int(base_cx + px * head * 0.5), int(base_cy + py * head * 0.5))
+        right = (int(base_cx - px * head * 0.5), int(base_cy - py * head * 0.5))
+        od.polygon([tip, left, right], fill=color)
 
     def _draw_label(self, canvas: Image.Image, text: str) -> None:
         style = self.config.label
