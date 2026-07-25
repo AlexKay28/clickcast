@@ -5,7 +5,14 @@ from pathlib import Path
 import pytest
 from PIL import Image, ImageChops
 
-from clickcast.annotate import AnnotateConfig, Annotator
+from clickcast.annotate import (
+    AnnotateConfig,
+    Annotator,
+    CursorStyle,
+    LabelStyle,
+    ProgressStyle,
+    RippleStyle,
+)
 from clickcast.annotate.annotator import _wrap
 
 
@@ -86,7 +93,11 @@ class TestLayerToggles:
     def test_progress_bar_only_touches_bottom_rows(self, tmp_path: Path) -> None:
         src = _make_frame(tmp_path / "frame.png", size=(400, 300))
         cfg = AnnotateConfig(
-            clicks=False, labels=False, cursor=False, progress=True, progress_height=6
+            clicks=False,
+            labels=False,
+            cursor=False,
+            progress=True,
+            progress_style=ProgressStyle(height=6),
         )
         out = Annotator(cfg).annotate(src, step_index=0, total_steps=2)
         with Image.open(src) as a, Image.open(out) as b:
@@ -140,9 +151,7 @@ class TestClickRipple:
             labels=False,
             cursor=False,
             progress=False,
-            ripple_radius_min=10,
-            ripple_radius_max=60,
-            ripple_stages=3,
+            ripple=RippleStyle(radius_min=10, radius_max=60, stages=3),
         )
         ann = Annotator(cfg)
 
@@ -182,7 +191,7 @@ class TestCursor:
             labels=False,
             cursor=True,
             progress=False,
-            cursor_size=20,
+            cursor_style=CursorStyle(size=20),
         )
         out = Annotator(cfg).annotate(src, step_index=0, total_steps=1, cursor_xy=(120, 100))
         with Image.open(src) as a, Image.open(out) as b:
@@ -195,12 +204,12 @@ class TestCursor:
         assert bbox[1] <= 100 <= bbox[3]
 
     def test_trail_length_bounded_by_config(self, tmp_path: Path) -> None:
-        cfg = AnnotateConfig(cursor_trail_length=3)
+        cfg = AnnotateConfig(cursor_style=CursorStyle(trail_length=3))
         ann = Annotator(cfg)
         for i in range(10):
             ann._cursor_history.append((i * 10, 100))
             # Simulate annotate() eviction:
-            history_cap = max(cfg.cursor_trail_length + 1, 1)
+            history_cap = max(cfg.cursor_style.trail_length + 1, 1)
             while len(ann._cursor_history) > history_cap:
                 ann._cursor_history.pop(0)
         # Cap = trail_length + 1 (current position slot)
@@ -219,10 +228,18 @@ class TestLabel:
     def test_label_changes_pixels_near_configured_edge(self, tmp_path: Path) -> None:
         src = _make_frame(tmp_path / "frame.png", size=(400, 300))
         cfg_bottom = AnnotateConfig(
-            clicks=False, labels=True, cursor=False, progress=False, label_position="bottom"
+            clicks=False,
+            labels=True,
+            cursor=False,
+            progress=False,
+            label=LabelStyle(position="bottom"),
         )
         cfg_top = AnnotateConfig(
-            clicks=False, labels=True, cursor=False, progress=False, label_position="top"
+            clicks=False,
+            labels=True,
+            cursor=False,
+            progress=False,
+            label=LabelStyle(position="top"),
         )
         text = "Switch to 3D globe"
         bottom = Annotator(cfg_bottom).annotate(

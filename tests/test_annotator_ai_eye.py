@@ -1,7 +1,7 @@
 """Coverage for the AI-eye overlays added in #57.
 
 Two things landed:
-- `AnnotateConfig.label_style` — 'dark' (old) vs 'light' (default; readable on
+- `AnnotateConfig.label.style` — 'dark' (old) vs 'light' (default; readable on
   dark-mode sites like react.dev).
 - `AnnotateConfig.actions_panel` — top-right side panel listing recent step
   labels with the current one highlighted.
@@ -13,7 +13,7 @@ from pathlib import Path
 
 from PIL import Image, ImageChops
 
-from clickcast.annotate import AnnotateConfig, Annotator
+from clickcast.annotate import AnnotateConfig, Annotator, LabelStyle
 
 
 def _make_frame(path: Path, size: tuple[int, int] = (600, 400)) -> Path:
@@ -53,7 +53,7 @@ class TestLabelStyle:
 
     def test_dark_style_produces_dark_label(self, tmp_path: Path) -> None:
         src = _make_frame(tmp_path / "frame.png")
-        cfg = AnnotateConfig(label_style="dark")
+        cfg = AnnotateConfig(label=LabelStyle(style="dark"))
         out = Annotator(cfg).annotate(
             src,
             out_path=tmp_path / "annotated.png",
@@ -69,9 +69,11 @@ class TestLabelStyle:
     def test_explicit_colors_override_style(self, tmp_path: Path) -> None:
         src = _make_frame(tmp_path / "frame.png")
         cfg = AnnotateConfig(
-            label_style="light",
-            label_bg_color=(200, 0, 0, 255),
-            label_fg_color=(255, 255, 255, 255),
+            label=LabelStyle(
+                style="light",
+                bg_color=(200, 0, 0, 255),
+                fg_color=(255, 255, 255, 255),
+            ),
         )
         out = Annotator(cfg).annotate(
             src,
