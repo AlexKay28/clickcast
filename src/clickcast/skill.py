@@ -110,10 +110,14 @@ COMMAND_BRIEFS: tuple[CommandBrief, ...] = (
         ),
         key_flags=(
             FlagBrief("--out PATH", "override the scenario's `meta.out`"),
+            FlagBrief(
+                "--url URL",
+                "override the first `goto` step's URL — retarget staging/PR previews",
+            ),
             FlagBrief("--var key=value", "inject a scenario variable"),
             FlagBrief("--with-feedback", "attach the AI-agent feedback pointer block"),
         ),
-        example="clickcast run tour.yml --with-feedback",
+        example="clickcast run tour.yml --url https://staging.example.com",
     ),
     CommandBrief(
         name="shot",
