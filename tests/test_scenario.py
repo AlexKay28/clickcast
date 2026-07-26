@@ -8,7 +8,7 @@ import pytest
 import pytest_asyncio
 
 from clickcast.capture import Recorder
-from clickcast.core.actions import ClickStep, GotoStep
+from clickcast.core.actions import ClickStep, GotoStep, WaitForStep
 from clickcast.core.session import Session
 from clickcast.scenario import Meta, Scenario, ScenarioError, load, loads, run
 from clickcast.scenario.scenario import _normalize_step, _substitute_vars
@@ -95,6 +95,30 @@ class TestNormalizeStep:
         n = _normalize_step({"screenshot": {"full_page": True}}, 0)
         assert n == {"action": "screenshot", "full_page": True}
 
+    def test_wait_for_selector_string(self) -> None:
+        n = _normalize_step({"wait_for": ".chip.active"}, 0)
+        assert n == {"action": "wait_for", "selector": ".chip.active"}
+
+    def test_wait_for_mapping(self) -> None:
+        n = _normalize_step(
+            {"wait_for": {"selector": ".chip", "state": "stable", "quiet_ms": 300}}, 0
+        )
+        assert n == {
+            "action": "wait_for",
+            "selector": ".chip",
+            "state": "stable",
+            "quiet_ms": 300,
+        }
+
+    def test_goto_retries_carry_through(self) -> None:
+        n = _normalize_step({"goto": {"url": "https://x", "retries": 2}, "wait": "load"}, 0)
+        assert n == {
+            "action": "goto",
+            "url": "https://x",
+            "retries": 2,
+            "wait": "load",
+        }
+
     def test_common_fields_carry_through(self) -> None:
         n = _normalize_step(
             {"click": "#x", "dwell": 2.0, "optional": True, "repeat": 3, "label": "l"}, 0
@@ -148,6 +172,38 @@ class TestLoadSteps:
         assert s.steps[1].dwell == 2.0
         assert isinstance(s.steps[1], ClickStep)
         assert s.steps[1].selector == "text=3D"
+
+    def test_wait_for_step_loads_from_yaml(self) -> None:
+        yaml_text = """
+        steps:
+          - wait_for:
+              selector: ".chip"
+              state: stable
+              quiet_ms: 200
+              timeout: 5.0
+        """
+        s = loads(yaml_text)
+        step = s.steps[0]
+        assert isinstance(step, WaitForStep)
+        assert step.selector == ".chip"
+        assert step.state == "stable"
+        assert step.quiet_ms == 200
+        assert step.timeout == 5.0
+
+    def test_goto_with_retries_loads_from_yaml(self) -> None:
+        yaml_text = """
+        steps:
+          - goto:
+              url: https://cold.example
+              retries: 2
+            wait: networkidle
+        """
+        s = loads(yaml_text)
+        step = s.steps[0]
+        assert isinstance(step, GotoStep)
+        assert step.url == "https://cold.example"
+        assert step.retries == 2
+        assert step.wait == "networkidle"
 
     def test_missing_required_field_error_is_readable(self) -> None:
         # click without selector value is impossible in canonical YAML, but a

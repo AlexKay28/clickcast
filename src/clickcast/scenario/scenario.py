@@ -78,7 +78,7 @@ class RunResult:
 
 _ACTION_KEYS = {
     "goto", "click", "dblclick", "hover", "type", "press",
-    "select", "scroll", "wait", "screenshot",
+    "select", "scroll", "wait", "wait_for", "screenshot",
 }  # fmt: skip
 
 _COMMON_KEYS = {"label", "dwell", "optional", "repeat"}
@@ -174,6 +174,16 @@ def _normalize_step(raw: Any, index: int) -> dict[str, Any]:
 
     elif action == "wait":
         canonical["wait"] = value
+
+    elif action == "wait_for":
+        if isinstance(value, str):
+            canonical["selector"] = value
+        elif isinstance(value, dict):
+            canonical.update(value)
+        else:
+            raise ScenarioError(
+                f"step {index}: wait_for value must be a selector string or mapping"
+            )
 
     elif action == "screenshot":
         if isinstance(value, dict):

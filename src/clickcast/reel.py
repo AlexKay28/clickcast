@@ -36,6 +36,8 @@ from clickcast.core.actions import (
     ScrollStep,
     SelectStep,
     TypeStep,
+    WaitForState,
+    WaitForStep,
     WaitStep,
 )
 from clickcast.core.session import Engine, Session, WaitArg
@@ -109,6 +111,7 @@ class _BaseReel:
         label: str | None = None,
         dwell: float = 0.0,
         optional: bool = False,
+        retries: int = 0,
     ) -> Any:
         self._steps.append(
             GotoStep(
@@ -117,6 +120,7 @@ class _BaseReel:
                 label=label,
                 dwell=dwell,
                 optional=optional,
+                retries=retries,
             )
         )
         return self
@@ -230,6 +234,33 @@ class _BaseReel:
         label: str | None = None,
     ) -> Any:
         self._steps.append(WaitStep(wait=target, label=label))
+        return self
+
+    def wait_for(
+        self,
+        selector: str,
+        *,
+        state: WaitForState = "stable",
+        quiet_ms: int = 200,
+        timeout: float = 10.0,
+        label: str | None = None,
+    ) -> Any:
+        """Wait until `selector` reaches `state`.
+
+        For `state='stable'` this polls the element's bounding box and returns
+        as soon as it has been unchanged for `quiet_ms` — a robust primitive
+        for "wait until the UI stops moving." Other states delegate to
+        Playwright's `locator.wait_for(state=...)`.
+        """
+        self._steps.append(
+            WaitForStep(
+                selector=selector,
+                state=state,
+                quiet_ms=quiet_ms,
+                timeout=timeout,
+                label=label,
+            )
+        )
         return self
 
     def screenshot(

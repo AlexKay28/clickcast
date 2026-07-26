@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 from playwright.async_api import Locator
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, ConfigDict, Field
 
 from clickcast.core.session import Session, WaitArg
@@ -26,9 +27,15 @@ __all__ = [
     "SelectStep",
     "Step",
     "TypeStep",
+    "WaitForState",
+    "WaitForStep",
     "WaitStep",
     "execute",
 ]
+
+# States accepted by `WaitForStep`. `stable` is our custom bbox-quiescence poll;
+# the rest map 1:1 onto Playwright's `locator.wait_for(state=...)` values.
+WaitForState = Literal["stable", "visible", "hidden", "attached", "detached"]
 
 
 class BaseStep(BaseModel):
@@ -51,6 +58,9 @@ class GotoStep(BaseStep):
     action: Literal["goto"] = "goto"
     url: str
     wait: WaitArg | None = None
+    # Number of extra attempts on `playwright.TimeoutError` (0 = no retry).
+    # Backoff between attempts is exponential: 500ms, 1s, 2s, ...
+    retries: int = Field(default=0, ge=0)
 
 
 class ClickStep(BaseStep):
@@ -98,6 +108,22 @@ class WaitStep(BaseStep):
     wait: WaitArg
 
 
+class WaitForStep(BaseStep):
+    """Wait until an element reaches a target state.
+
+    `state='stable'` polls the element's bounding box every 50ms and returns
+    as soon as it has been unchanged for `quiet_ms` — useful for animations
+    where Playwright's built-in visibility check settles before the element
+    stops moving. The other states delegate to `locator.wait_for(state=...)`.
+    """
+
+    action: Literal["wait_for"] = "wait_for"
+    selector: str
+    state: WaitForState = "stable"
+    quiet_ms: int = Field(default=200, ge=0)
+    timeout: float = Field(default=10.0, gt=0)
+
+
 class ScreenshotStep(BaseStep):
     action: Literal["screenshot"] = "screenshot"
     full_page: bool = False
@@ -114,6 +140,7 @@ Step = Annotated[
     | SelectStep
     | ScrollStep
     | WaitStep
+    | WaitForStep
     | ScreenshotStep,
     Field(discriminator="action"),
 ]
@@ -142,6 +169,92 @@ async def _center_of(locator: Locator, timeout_ms: int | None = None) -> tuple[i
     )
 
 
+async def _goto_with_retries(session: Session, step: GotoStep) -> None:
+    """Attempt `session.goto` up to `retries + 1` times, backing off on TimeoutError.
+
+    Only `playwright.async_api.TimeoutError` is retried — other exceptions
+    propagate immediately so genuine bugs surface fast.
+    """
+    attempts = step.retries + 1
+    last_exc: BaseException | None = None
+    for attempt in range(attempts):
+        try:
+            await session.goto(step.url, wait=step.wait)
+            return
+        except PlaywrightTimeoutError as e:
+            last_exc = e
+            if attempt == attempts - 1:
+                break
+            # 500ms, 1s, 2s, 4s, ...
+            backoff = 0.5 * (2**attempt)
+            await asyncio.sleep(backoff)
+    assert last_exc is not None
+    raise last_exc
+
+
+async def _wait_for_stable(
+    session: Session,
+    selector: str,
+    *,
+    quiet_ms: int,
+    timeout: float,
+    poll_ms: int = 50,
+) -> None:
+    """Poll `bounding_box` until it hasn't changed for `quiet_ms`, or raise TimeoutError.
+
+    Error message includes selector + the most recent bbox history so callers
+    can debug jittery elements.
+    """
+    loc = session.page.locator(selector)
+    deadline = time.monotonic() + timeout
+    history: list[tuple[float, tuple[float, float, float, float] | None]] = []
+    last_box: tuple[float, float, float, float] | None = None
+    quiet_since: float | None = None
+    quiet_seconds = quiet_ms / 1000.0
+    poll_seconds = poll_ms / 1000.0
+
+    # Cap the per-probe wait so a missing element still yields multiple
+    # samples in history — otherwise a single 10s probe eats the whole budget.
+    per_probe_ms = max(poll_ms, 200)
+    while True:
+        now = time.monotonic()
+        remaining_ms = max(1, int((deadline - now) * 1000))
+        try:
+            box_dict = await loc.bounding_box(timeout=min(per_probe_ms, remaining_ms))
+        except PlaywrightTimeoutError:
+            box_dict = None
+        box = (
+            (box_dict["x"], box_dict["y"], box_dict["width"], box_dict["height"])
+            if box_dict is not None
+            else None
+        )
+        history.append((now, box))
+        # Cap history so the exception message stays readable.
+        if len(history) > 20:
+            history = history[-20:]
+
+        if box is not None and box == last_box:
+            if quiet_since is None:
+                quiet_since = now
+            elif now - quiet_since >= quiet_seconds:
+                return
+        else:
+            quiet_since = now if box is not None else None
+            last_box = box
+
+        if time.monotonic() >= deadline:
+            recent = ", ".join(f"@{t - history[0][0]:.2f}s={b}" for t, b in history[-5:])
+            raise PlaywrightTimeoutError(
+                f"wait_for(selector={selector!r}, state='stable', quiet_ms={quiet_ms}) "
+                f"timed out after {timeout:.2f}s. recent bboxes: [{recent}]"
+            )
+        # Sleep, but never past the deadline.
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            continue
+        await asyncio.sleep(min(poll_seconds, remaining))
+
+
 async def execute(step: BaseStep, session: Session) -> ActionResult:
     """Run one step. Honors `dwell` and `optional`; caller loops for `repeat`."""
     start = time.monotonic()
@@ -156,7 +269,7 @@ async def execute(step: BaseStep, session: Session) -> ActionResult:
 
     try:
         if isinstance(step, GotoStep):
-            await session.goto(step.url, wait=step.wait)
+            await _goto_with_retries(session, step)
         elif isinstance(step, ClickStep):
             selector = step.selector
             loc = session.page.locator(step.selector)
@@ -216,6 +329,21 @@ async def execute(step: BaseStep, session: Session) -> ActionResult:
                 raise ValueError("ScrollStep requires either `to` (selector) or `by` (pixels)")
         elif isinstance(step, WaitStep):
             await session.wait(step.wait)
+        elif isinstance(step, WaitForStep):
+            selector = step.selector
+            if step.state == "stable":
+                await _wait_for_stable(
+                    session,
+                    step.selector,
+                    quiet_ms=step.quiet_ms,
+                    timeout=step.timeout,
+                )
+            else:
+                # visible|hidden|attached|detached — delegate to Playwright.
+                await session.page.locator(step.selector).wait_for(
+                    state=step.state,
+                    timeout=int(step.timeout * 1000),
+                )
         elif isinstance(step, ScreenshotStep):
             await session.screenshot(path=step.path, full_page=step.full_page)
             if step.path is not None:
