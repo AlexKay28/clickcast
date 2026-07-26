@@ -1073,5 +1073,32 @@ def report_bug(
         _open_url(url)
 
 
+# ==========================================================================
+# clickcast skill  (#103)
+# ==========================================================================
+
+
+@app.command(
+    "skill",
+    help="Print an AI-friendly self-introduction covering every clickcast command.",
+    epilog=_FEEDBACK_EPILOG,
+)
+def skill(
+    as_json: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Emit as JSON matching docs/skill-schema/v1.json.",
+        ),
+    ] = False,
+) -> None:
+    from clickcast.skill import build_payload, render_markdown
+
+    if as_json:
+        typer.echo(json.dumps(build_payload(), indent=2))
+    else:
+        typer.echo(render_markdown())
+
+
 if __name__ == "__main__":
     app()

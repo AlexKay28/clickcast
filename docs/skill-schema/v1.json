@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/AlexKay28/clickcast/main/docs/skill-schema/v1.json",
+  "title": "clickcast skill brief",
+  "description": "Machine-readable self-introduction emitted by `clickcast skill --json`. One-shot capability surface for AI agents: what clickcast is, every command it exposes, key flags per command, and pointers back to the machine contracts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "clickcast_version",
+    "summary",
+    "commands",
+    "contracts",
+    "feedback"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Bumps on breaking changes to this schema."
+    },
+    "clickcast_version": {
+      "type": "string",
+      "description": "The clickcast package version that produced this brief."
+    },
+    "summary": {
+      "type": "string",
+      "description": "One-paragraph statement of what clickcast is and when to reach for it."
+    },
+    "commands": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/CommandBrief"}
+    },
+    "contracts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sidecar_schema_url", "agent_report_schema_url", "agent_docs_url"],
+      "properties": {
+        "sidecar_schema_url": {"type": "string", "format": "uri"},
+        "agent_report_schema_url": {"type": "string", "format": "uri"},
+        "agent_docs_url": {"type": "string", "format": "uri"}
+      }
+    },
+    "feedback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["report_url", "schema_url", "docs_url", "diagnostics_command"],
+      "properties": {
+        "report_url": {"type": "string", "format": "uri"},
+        "schema_url": {"type": "string", "format": "uri"},
+        "docs_url": {"type": "string", "format": "uri"},
+        "diagnostics_command": {"type": "string"}
+      },
+      "description": "Same four pointers carried by the sidecar `feedback` block (see #40)."
+    }
+  },
+  "$defs": {
+    "CommandBrief": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "summary", "when_to_use", "key_flags", "example"],
+      "properties": {
+        "name": {"type": "string"},
+        "summary": {"type": "string"},
+        "when_to_use": {"type": "string"},
+        "key_flags": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/FlagBrief"}
+        },
+        "example": {"type": "string"}
+      }
+    },
+    "FlagBrief": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["flag", "why"],
+      "properties": {
+        "flag": {"type": "string"},
+        "why": {"type": "string"}
+      }
+    }
+  }
+}

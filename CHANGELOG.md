@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`clickcast skill`** (closes [#103]). New subcommand that prints a single
+  self-contained AI-friendly brief covering every command, when to use each,
+  its key flags with examples, the machine-contract URLs (reel sidecar +
+  agent-report schemas + docs), and the four #40 feedback pointers. Default
+  Markdown output; `--json` emits a structured payload matching
+  `docs/skill-schema/v1.json`. A drift-guard test fails if a newly added
+  subcommand doesn't get a brief entry.
 - **AI-agent feedback loop — all three tracks** (closes [#40]). Extends the
   `--with-feedback` sidecar block with the four #40-spec pointers
   (`report_url`, `schema_url`, `docs_url`, `diagnostics_command`), adds the
@@ -312,3 +319,4 @@ Initial public release.
 [#74]: https://github.com/AlexKay28/clickcast/issues/74
 [#75]: https://github.com/AlexKay28/clickcast/issues/75
 [#40]: https://github.com/AlexKay28/clickcast/issues/40
+[#103]: https://github.com/AlexKay28/clickcast/issues/103
