@@ -127,6 +127,9 @@ class AutoConfig:
     # Annotate config threaded into both interpolation (reads cursor_style)
     # and annotate_frames_dir. `None` uses defaults. See #75.
     annotate: AnnotateConfig = field(default_factory=AnnotateConfig)
+    # Attach the machine-discoverable feedback pointer block to the sidecar.
+    # Opt-in — nothing goes on the sidecar unless the caller asks for it. See #40.
+    with_feedback: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -445,7 +448,9 @@ async def run_tour(cfg: AutoConfig) -> None:
                 format=cfg.format,  # type: ignore[arg-type]
             )
             media = _make_media(enc, cfg.fps)
-            sidecar = _write_sidecar(out_path, cfg.no_sidecar, builder, media)
+            sidecar = _write_sidecar(
+                out_path, cfg.no_sidecar, builder, media, with_feedback=cfg.with_feedback
+            )
 
     tour_elapsed = time.monotonic() - tour_started
     typer.echo(
@@ -483,10 +488,12 @@ def _write_sidecar(
     no_sidecar: bool,
     builder: ReportBuilder | None,
     media: Media,
+    *,
+    with_feedback: bool = False,
 ) -> Path | None:
     if no_sidecar or builder is None:
         return None
     sidecar = out.with_suffix(out.suffix + ".json")
     report = builder.build(media)
-    write_report(report, sidecar)
+    write_report(report, sidecar, with_feedback=with_feedback)
     return sidecar

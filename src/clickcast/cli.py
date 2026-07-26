@@ -102,6 +102,19 @@ NoSidecar = Annotated[
     bool,
     typer.Option("--no-sidecar", help="Skip the AI-feedback JSON sidecar."),
 ]
+WithFeedback = Annotated[
+    bool,
+    typer.Option(
+        "--with-feedback",
+        help=(
+            "Attach a `feedback` block to the sidecar with the repo URL, a "
+            "prefilled new-issue URL (title + body with environment context), "
+            "and a short prompt template. Off by default — opt in when you "
+            "want AI-agent consumers of the sidecar to know how to file bug "
+            "reports and ideas."
+        ),
+    ),
+]
 Fps = Annotated[int, typer.Option("--fps", help="Frames per second.")]
 Verbose = Annotated[
     int,
@@ -169,12 +182,14 @@ def _write_sidecar(
     no_sidecar: bool,
     builder: ReportBuilder | None,
     media: Media,
+    *,
+    with_feedback: bool = False,
 ) -> Path | None:
     if no_sidecar or builder is None:
         return None
     sidecar = out.with_suffix(out.suffix + ".json")
     report = builder.build(media)
-    write_report(report, sidecar)
+    write_report(report, sidecar, with_feedback=with_feedback)
     return sidecar
 
 
@@ -366,6 +381,7 @@ def auto(
     quality: Quality = 8,
     loop: Loop = 0,
     no_sidecar: NoSidecar = False,
+    with_feedback: WithFeedback = False,
     verbose: Verbose = 0,
 ) -> None:
     _setup_logging(verbose)
@@ -402,6 +418,7 @@ def auto(
             quality=quality,
             loop=loop,
             no_sidecar=no_sidecar,
+            with_feedback=with_feedback,
             zoom_on_click_factor=(zoom_on_click if zoom_on_click > 1.0 else None),
         )
     )
@@ -428,6 +445,7 @@ async def _do_auto(
     quality: int,
     loop: int,
     no_sidecar: bool,
+    with_feedback: bool = False,
     zoom_on_click_factor: float | None = None,
 ) -> None:
     await run_tour(
@@ -448,6 +466,7 @@ async def _do_auto(
             quality=quality,
             loop=loop,
             no_sidecar=no_sidecar,
+            with_feedback=with_feedback,
             zoom_on_click_factor=zoom_on_click_factor,
         )
     )
@@ -473,6 +492,7 @@ def run(
         typer.Option("--var", help="Inject a scenario variable as key=value."),
     ] = None,
     no_sidecar: NoSidecar = False,
+    with_feedback: WithFeedback = False,
     verbose: Verbose = 0,
 ) -> None:
     variables: dict[str, str] = {}
@@ -509,6 +529,7 @@ def run(
             out=final_out,
             format_=effective_format,
             no_sidecar=no_sidecar,
+            with_feedback=with_feedback,
         )
     )
 
@@ -571,6 +592,7 @@ async def _do_run(
     out: str,
     format_: str | None,
     no_sidecar: bool,
+    with_feedback: bool = False,
 ) -> None:
     builder: ReportBuilder | None = None
     if not no_sidecar:
@@ -601,7 +623,7 @@ async def _do_run(
     if builder is not None and not result.ok:
         builder.add_warning(f"scenario failed at step {result.failed_at}")
     media = _make_media(enc, scenario.meta.fps)
-    sidecar = _write_sidecar(out_path, no_sidecar, builder, media)
+    sidecar = _write_sidecar(out_path, no_sidecar, builder, media, with_feedback=with_feedback)
     typer.echo(f"✔ {enc.path} ({enc.size_bytes // 1024} KB, {enc.frame_count} frames)")
     if not result.ok:
         typer.secho(
