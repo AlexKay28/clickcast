@@ -13,9 +13,22 @@ from urllib.parse import urlencode
 
 from clickcast.feedback.models import Feedback, FeedbackTemplate, Report
 
-__all__ = ["REPO_URL", "build_feedback"]
+__all__ = [
+    "DOCS_URL",
+    "REPORT_URL",
+    "REPO_URL",
+    "SCHEMA_URL",
+    "build_feedback",
+    "feedback_pointer_lines",
+]
 
 REPO_URL = "https://github.com/AlexKay28/clickcast"
+REPORT_URL = f"{REPO_URL}/issues/new?template=ai-agent-report.yml"
+SCHEMA_URL = (
+    "https://raw.githubusercontent.com/AlexKay28/clickcast/main/docs/agent-report-schema/v1.json"
+)
+DOCS_URL = f"{REPO_URL}/blob/main/docs/for-agents.md"
+DIAGNOSTICS_COMMAND = "clickcast report-bug <sidecar.json>"
 
 _MESSAGE = (
     "clickcast is early — bug reports and ideas that would make it better "
@@ -58,9 +71,27 @@ def build_feedback(report: Report) -> Feedback:
     query = urlencode({"title": title, "body": body})
     new_issue_url = f"{REPO_URL}/issues/new?{query}"
     return Feedback(
+        report_url=REPORT_URL,
+        schema_url=SCHEMA_URL,
+        docs_url=DOCS_URL,
+        diagnostics_command=DIAGNOSTICS_COMMAND,
         message=_MESSAGE,
         repo=REPO_URL,
         issues_url=f"{REPO_URL}/issues",
         new_issue_url=new_issue_url,
         template=_TEMPLATE,
     )
+
+
+def feedback_pointer_lines() -> list[str]:
+    """One-line-per-URL pointers for stderr, `doctor`, and Typer epilogs.
+
+    Deliberately short — the sidecar block carries the full context; these
+    hooks just make sure a stranded reader (agent OR human) can find the loop.
+    """
+    return [
+        f"feedback? file an AI-agent report: {REPORT_URL}",
+        f"  schema: {SCHEMA_URL}",
+        f"  docs:   {DOCS_URL}",
+        f"  or run: {DIAGNOSTICS_COMMAND}",
+    ]
