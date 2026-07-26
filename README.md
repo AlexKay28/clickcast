@@ -276,6 +276,31 @@ Skip the sidecar with `save(..., no_sidecar=True)`.
 
 ---
 
+## Pre-push iteration on a local static build
+
+Building a static site and reeling it locally before pushing? Use `Reel.serve_dir` (or the standalone `serve_directory` helper) as a context manager — it starts a threaded HTTP server on a free port, yields the base URL, and tears the server down on exit. No more `python3 -m http.server 8091 &` invocations that leak past your shell session and collide with the next iteration.
+
+```python
+from clickcast import Reel
+
+with Reel.serve_dir("./public") as url:
+    Reel(url).goto().click(".chip").save("out.gif")
+# Server is gone; the port is free.
+```
+
+Defaults are safe for dev iteration: loopback-only bind (`127.0.0.1`), OS-picked free port, `ThreadingHTTPServer` so parallel browser requests don't queue. Override any of them explicitly:
+
+```python
+from clickcast.serving import serve_directory  # importable without going through Reel
+
+with serve_directory("./dist", port=8091, bind="0.0.0.0", threading=False) as url:
+    ...
+```
+
+`bind="0.0.0.0"` exposes the server to your LAN — opt-in, not the default.
+
+---
+
 ## Reading the sidecar
 
 Every recording run writes `<out>.json` alongside the media file.

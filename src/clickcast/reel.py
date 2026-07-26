@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import asyncio
 import re
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, cast
 
@@ -54,6 +56,7 @@ from clickcast.feedback import write as write_report
 from clickcast.feedback.assertions import build_assertions, diff_assertions, load_assertions
 from clickcast.scenario import Meta, Scenario
 from clickcast.scenario import run as run_scenario
+from clickcast.serving import serve_directory
 
 __all__ = ["AsyncReel", "Reel", "discover"]
 
@@ -813,6 +816,35 @@ class Reel(_BaseReel):
                 step_index, selector, out, padding=padding, format=format
             )
         )
+
+    # ------------------------------------------------------------------
+    # Local static file serving — QoL for the pre-push iteration loop
+    # ------------------------------------------------------------------
+
+    @classmethod
+    @contextmanager
+    def serve_dir(
+        cls,
+        path: str | Path,
+        *,
+        port: int | None = None,
+        bind: str = "127.0.0.1",
+        threading: bool = True,
+    ) -> Iterator[str]:
+        """Serve ``path`` over HTTP for the duration of the ``with`` block.
+
+        Thin wrapper around :func:`clickcast.serving.serve_directory` — see
+        that function for the full contract. Yields a base URL like
+        ``"http://127.0.0.1:54321"``; the server is torn down on context exit.
+
+        Example::
+
+            with Reel.serve_dir("./public") as url:
+                Reel(url).goto().click(".chip").save("out.gif")
+            # server gone, port freed.
+        """
+        with serve_directory(path, port=port, bind=bind, threading=threading) as url:
+            yield url
 
 
 # --------------------------------------------------------------------------

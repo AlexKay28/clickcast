@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`Reel.serve_dir(path)` + `clickcast.serving.serve_directory`** (closes
+  [#113]). Context manager that serves a local directory over HTTP for the
+  duration of a `with` block — QoL for the pre-push iteration loop so
+  ad-hoc `python3 -m http.server` invocations don't leak past your shell
+  and collide on the next run. Uses `http.server.ThreadingHTTPServer`
+  (parallel browser requests don't queue), auto-picks a free port when
+  `port=None`, binds `127.0.0.1` only by default (opt-in `0.0.0.0` for
+  LAN exposure), tears the socket down on context exit. Standalone helper
+  is importable directly (`from clickcast.serving import serve_directory`);
+  `Reel.serve_dir` is the classmethod wrapper for callers already reaching
+  for `Reel`.
 - **`Reel.save_region(selector, out, ...)` + `save_region_at_step`** (closes
   [#109]). Element-anchored crops from any captured frame — no more
   hand-picked pixel coords that rot with every layout tweak. Runs the
@@ -333,3 +344,4 @@ Initial public release.
 [#40]: https://github.com/AlexKay28/clickcast/issues/40
 [#103]: https://github.com/AlexKay28/clickcast/issues/103
 [#109]: https://github.com/AlexKay28/clickcast/issues/109
+[#113]: https://github.com/AlexKay28/clickcast/issues/113
