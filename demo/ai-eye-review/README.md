@@ -6,22 +6,32 @@ visual context, the sidecar gives structured facts.
 
 ## Command
 
+The reel below was generated against react.dev with:
+
 ```bash
-clickcast auto https://your-site.example.com/ \
-  --max-pages 5 \
-  --max-steps 25 \
-  --dwell 0.4 \
+clickcast auto https://react.dev/ \
+  --pace slow \
+  --max-pages 2 \
+  --max-steps 8 \
   --initial-wait 3 \
+  --click-timeout 15 \
+  --zoom-on-click 2.5 \
   --traversal dfs \
-  --out review.gif \
-  --verbose
+  --out review.gif
 ```
 
-Produces:
-- `review.gif` — annotated reel showing the tour (click ripples, actions
-  panel, progress bar).
+Point it at your own site the same way (drop `--zoom-on-click` if you
+prefer a flat view). Produces:
+
+- `review.gif` — annotated reel with cursor arrows, actions panel, click
+  ripples, zoom-on-click closeups, and progress bar (all overlays are
+  default-on since v0.2.0 except zoom, which is opt-in).
 - `review.gif.json` — the sidecar (schema at
   [`docs/feedback-schema.md`](../../docs/feedback-schema.md)).
+
+## Reel
+
+![ai-eye-review reel](reel.gif)
 
 ## Feed to an LLM
 
@@ -54,7 +64,7 @@ The parts that matter for AI-eye review, from `review.gif.json`:
     "frame_count": 264,
     "duration_s": 22.0
   },
-  "discovered": [
+  "discovered_elements": [
     {"selector": "role=link[name=\"Docs\"]", "text": "Docs", "role": "link"},
     {"selector": "role=button[name=\"Sign in\"]", "text": "Sign in", "role": "button"}
   ],
@@ -77,8 +87,22 @@ The parts that matter for AI-eye review, from `review.gif.json`:
 ```
 
 `page_state.console_errors` and `network_failed` are the highest-signal
-fields for finding real bugs. `discovered[*].text == ""` flags accessibility
-issues.
+fields for finding real bugs. `discovered_elements[*].text == ""` flags
+accessibility issues.
+
+## Related workflows
+
+Once the LLM finds something worth filing:
+
+- **`clickcast report-bug review.gif.json`** — turns the sidecar into a
+  prefilled GitHub issue with the environment, failed step, and sidecar
+  excerpt already populated. See [`../bug-report/`](../bug-report/).
+- **`clickcast skill`** — prints a single self-contained brief covering
+  every clickcast command; hand it to the LLM at the start of a session
+  so it knows what the tool can do.
+- **`clickcast assertions review.gif.json --baseline golden.json`** —
+  turns a review into a CI regression gate. See
+  [`../regression-visual-diff/`](../regression-visual-diff/).
 
 ## Why DFS
 
