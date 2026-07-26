@@ -52,6 +52,60 @@
       "title": "DiscoveredElement",
       "type": "object"
     },
+    "Feedback": {
+      "additionalProperties": false,
+      "description": "Machine-discoverable pointer for downstream AI agents (and humans) to\nfile a GitHub issue about a tour that went wrong or a rough edge worth\nimproving. Populated only when the writer is asked for it; absent from\nthe sidecar otherwise.",
+      "properties": {
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "repo": {
+          "title": "Repo",
+          "type": "string"
+        },
+        "issues_url": {
+          "title": "Issues Url",
+          "type": "string"
+        },
+        "new_issue_url": {
+          "title": "New Issue Url",
+          "type": "string"
+        },
+        "template": {
+          "$ref": "#/$defs/FeedbackTemplate"
+        }
+      },
+      "required": [
+        "message",
+        "repo",
+        "issues_url",
+        "new_issue_url",
+        "template"
+      ],
+      "title": "Feedback",
+      "type": "object"
+    },
+    "FeedbackTemplate": {
+      "additionalProperties": false,
+      "description": "Prompts that go into the prefilled issue body.",
+      "properties": {
+        "problem": {
+          "title": "Problem",
+          "type": "string"
+        },
+        "resolution_plan": {
+          "title": "Resolution Plan",
+          "type": "string"
+        }
+      },
+      "required": [
+        "problem",
+        "resolution_plan"
+      ],
+      "title": "FeedbackTemplate",
+      "type": "object"
+    },
     "Media": {
       "additionalProperties": false,
       "description": "Encoded reel metadata.",
@@ -307,6 +361,17 @@
       },
       "title": "Errors",
       "type": "array"
+    },
+    "feedback": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Feedback"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     }
   },
   "required": [

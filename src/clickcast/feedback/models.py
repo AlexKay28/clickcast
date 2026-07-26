@@ -62,6 +62,31 @@ class StepReport(BaseModel):
     error: str | None = None
 
 
+class FeedbackTemplate(BaseModel):
+    """Prompts that go into the prefilled issue body."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    problem: str
+    resolution_plan: str
+
+
+class Feedback(BaseModel):
+    """Machine-discoverable pointer for downstream AI agents (and humans) to
+    file a GitHub issue about a tour that went wrong or a rough edge worth
+    improving. Populated only when the writer is asked for it; absent from
+    the sidecar otherwise.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    message: str
+    repo: str
+    issues_url: str
+    new_issue_url: str
+    template: FeedbackTemplate
+
+
 class Report(BaseModel):
     """AI-feedback sidecar — the primary contract for downstream agents.
 
@@ -84,3 +109,4 @@ class Report(BaseModel):
     steps: list[StepReport] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
+    feedback: Feedback | None = None

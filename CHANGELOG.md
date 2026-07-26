@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`--with-feedback` on `auto` and `run`** (part of [#40]). Attaches a
+  machine-discoverable `feedback` block to the sidecar JSON with the repo
+  URL, a prefilled new-issue URL (title + body carrying clickcast version,
+  engine, viewport, target URL as context), a short prose message, and a
+  prompt template with `problem` / `resolution_plan` fields. Downstream
+  AI-agent consumers of the sidecar can now file bug reports without hunting
+  for the repo. Opt-in — sidecars stay lean by default.
 - **Smooth cursor interpolation** (closes [#75]). Between any two consecutive
   frames whose `cursor_xy` differs by at least `interpolate_min_distance` (50
   px default), insert `interpolate_frames` (4 default) intermediate PNG frames
@@ -287,3 +294,4 @@ Initial public release.
 [#73]: https://github.com/AlexKay28/clickcast/issues/73
 [#74]: https://github.com/AlexKay28/clickcast/issues/74
 [#75]: https://github.com/AlexKay28/clickcast/issues/75
+[#40]: https://github.com/AlexKay28/clickcast/issues/40
