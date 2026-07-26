@@ -14,6 +14,7 @@ from clickcast.core.actions import (
     HoverStep,
     ScrollStep,
     TypeStep,
+    WaitForStep,
 )
 
 # ------------------------------------------------------------------
@@ -100,6 +101,29 @@ class TestBuilders:
         assert s.meta.fps == 6
         assert s.meta.dwell == 0.5
         assert len(s.steps) == 1
+
+    def test_wait_for_produces_wait_for_step_with_defaults(self) -> None:
+        reel = Reel("https://x").click(".chip").wait_for(".chip.active")
+        step = reel.steps[1]
+        assert isinstance(step, WaitForStep)
+        assert step.selector == ".chip.active"
+        assert step.state == "stable"
+        assert step.quiet_ms == 200
+        assert step.timeout == 10.0
+
+    def test_wait_for_accepts_overrides_and_chains(self) -> None:
+        reel = Reel("https://x").wait_for(".x", state="visible", quiet_ms=50, timeout=2.5)
+        assert reel.steps[0].state == "visible"  # type: ignore[attr-defined]
+        assert reel.steps[0].quiet_ms == 50  # type: ignore[attr-defined]
+        assert reel.steps[0].timeout == 2.5  # type: ignore[attr-defined]
+        # Must remain chainable.
+        assert reel.wait_for(".y") is reel
+
+    def test_goto_retries_kwarg_flows_into_step(self) -> None:
+        reel = Reel("https://x").goto(retries=3, wait="load")
+        step = reel.steps[0]
+        assert isinstance(step, GotoStep)
+        assert step.retries == 3
 
     def test_viewport_tuple_or_string_both_accepted(self) -> None:
         assert Reel("u", viewport=(800, 600)).build_scenario().meta.viewport == "800x600"
