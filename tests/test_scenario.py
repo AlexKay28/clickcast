@@ -8,7 +8,14 @@ import pytest
 import pytest_asyncio
 
 from clickcast.capture import Recorder
-from clickcast.core.actions import ClickStep, GotoStep, WaitForStep
+from clickcast.core.actions import (
+    ClickStep,
+    EvaluateStep,
+    GotoStep,
+    ScrollStep,
+    WaitForStep,
+    WheelStep,
+)
 from clickcast.core.session import Session
 from clickcast.scenario import Meta, Scenario, ScenarioError, load, loads, run
 from clickcast.scenario.scenario import _normalize_step, _substitute_vars
@@ -82,6 +89,26 @@ class TestNormalizeStep:
     def test_scroll_by_pixels(self) -> None:
         n = _normalize_step({"scroll": {"by": 400}}, 0)
         assert n == {"action": "scroll", "by": 400}
+
+    def test_scroll_container_scoped(self) -> None:
+        n = _normalize_step({"scroll": {"by": 400, "selector": ".x"}}, 0)
+        assert n == {"action": "scroll", "by": 400, "selector": ".x"}
+
+    def test_evaluate_string_value(self) -> None:
+        n = _normalize_step({"evaluate": "window.foo = 1"}, 0)
+        assert n == {"action": "evaluate", "expression": "window.foo = 1"}
+
+    def test_evaluate_dict_value_with_args(self) -> None:
+        n = _normalize_step({"evaluate": {"expression": "([x]) => x", "args": [42]}}, 0)
+        assert n == {"action": "evaluate", "expression": "([x]) => x", "args": [42]}
+
+    def test_wheel_int_value(self) -> None:
+        n = _normalize_step({"wheel": 120}, 0)
+        assert n == {"action": "wheel", "dy": 120}
+
+    def test_wheel_dict_value(self) -> None:
+        n = _normalize_step({"wheel": {"dy": 100, "dx": 10, "selector": ".x"}}, 0)
+        assert n == {"action": "wheel", "dy": 100, "dx": 10, "selector": ".x"}
 
     def test_wait_polymorphic(self) -> None:
         assert _normalize_step({"wait": 1.5}, 0) == {"action": "wait", "wait": 1.5}
@@ -218,6 +245,36 @@ class TestLoadSteps:
     def test_top_level_must_be_mapping(self) -> None:
         with pytest.raises(ScenarioError, match="mapping"):
             loads("- 1\n- 2\n")
+
+    def test_loads_evaluate_wheel_and_scoped_scroll(self) -> None:
+        yaml_text = """
+        steps:
+          - evaluate: "window.marker = 1"
+          - wheel: 120
+          - wheel:
+              dy: 60
+              selector: ".zoom"
+          - scroll:
+              by: 400
+              selector: ".chart"
+        """
+        s = loads(yaml_text)
+        assert [step.action for step in s.steps] == ["evaluate", "wheel", "wheel", "scroll"]
+        e = s.steps[0]
+        assert isinstance(e, EvaluateStep)
+        assert e.expression == "window.marker = 1"
+        w1 = s.steps[1]
+        assert isinstance(w1, WheelStep)
+        assert w1.dy == 120
+        assert w1.selector is None
+        w2 = s.steps[2]
+        assert isinstance(w2, WheelStep)
+        assert w2.dy == 60
+        assert w2.selector == ".zoom"
+        sc = s.steps[3]
+        assert isinstance(sc, ScrollStep)
+        assert sc.by == 400
+        assert sc.selector == ".chart"
 
     def test_load_from_file(self, tmp_path: Path) -> None:
         p = tmp_path / "tour.yml"
