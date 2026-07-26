@@ -5,20 +5,30 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from clickcast.feedback.assertions import (
+    ASSERTIONS_SCHEMA_VERSION,
+    build_assertions,
+    diff_assertions,
+    load_assertions,
+)
 from clickcast.feedback.builder import ReportBuilder
 from clickcast.feedback.collector import PageStateCollector
 from clickcast.feedback.models import (
+    Assertions,
     DiscoveredElement,
     Feedback,
     FeedbackTemplate,
     Media,
     PageState,
     Report,
+    StepAssertion,
     StepReport,
 )
 from clickcast.feedback.pointers import build_feedback, feedback_pointer_lines
 
 __all__ = [
+    "ASSERTIONS_SCHEMA_VERSION",
+    "Assertions",
     "DiscoveredElement",
     "Feedback",
     "FeedbackTemplate",
@@ -27,10 +37,14 @@ __all__ = [
     "PageStateCollector",
     "Report",
     "ReportBuilder",
+    "StepAssertion",
     "StepReport",
+    "build_assertions",
     "build_feedback",
+    "diff_assertions",
     "feedback_pointer_lines",
     "load",
+    "load_assertions",
     "write",
 ]
 

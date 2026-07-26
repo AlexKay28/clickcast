@@ -121,3 +121,38 @@ class Report(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
     feedback: Feedback | None = None
+
+
+class StepAssertion(BaseModel):
+    """One row of the CI-stable distillation — per-step regression signal.
+
+    Deliberately narrow: only fields that survive re-recording of the same
+    scenario against the same URL. Timing, frame paths, cursor coordinates,
+    and resolved URLs are excluded on purpose (they change every run).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    action: str
+    label: str | None = None
+    status: str  # ok | failed | skipped — mirrors StepReport.status
+    console_error_count: int = Field(ge=0)
+    page_error_count: int = Field(ge=0)
+    network_failed_count: int = Field(ge=0)
+
+
+class Assertions(BaseModel):
+    """CI-stable distillation of a :class:`Report` — the assertion contract.
+
+    Produced by :func:`clickcast.feedback.assertions.build_assertions` and
+    consumed by :func:`~clickcast.feedback.assertions.diff_assertions`. The
+    shape IS the contract, so ``extra="forbid"`` — a bug that quietly adds a
+    new key fails at the model boundary rather than silently shifting every
+    downstream baseline.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: int = 1
+    step_count: int = Field(ge=0)
+    steps: list[StepAssertion] = Field(default_factory=list)

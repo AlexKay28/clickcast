@@ -299,6 +299,57 @@ See [`docs/ai-integration.md`](docs/ai-integration.md) for the two-line agent-in
 
 ---
 
+## CI: 2-line regression gate
+
+Every reel writes a JSON sidecar, but raw sidecars carry timestamps, frame
+filenames, and query-string tokens — none of which are stable across runs.
+For a proper CI regression gate, use `clickcast assertions` (or
+`Reel.assertions()`) to distill the sidecar down to the shape that
+actually matters: step count, per-step action / label / status, and the
+per-step error counters.
+
+The distilled shape is byte-identical across runs of the same scenario
+against the same URL (schema: [`docs/assertions-schema/v1.json`](docs/assertions-schema/v1.json)).
+Diff it against a committed baseline; non-zero exit on drift.
+
+**Bootstrap the baseline once:**
+
+```bash
+clickcast run tour.yml --out reel.gif
+clickcast assertions reel.gif.json > tests/golden-tour.json  # commit this
+```
+
+**Then in CI (2 lines):**
+
+```bash
+clickcast run tour.yml --out reel.gif
+clickcast assertions reel.gif.json --baseline tests/golden-tour.json
+```
+
+Exit 0 means the target UI produced the same step ordering, statuses, and
+error-signal counts as when the baseline was captured; anything else is
+real drift and the command prints per-line descriptions like
+`step 2: status changed 'ok' -> 'failed'`.
+
+Same signal from Python:
+
+```python
+from clickcast import Reel
+
+reel = Reel(url).goto().click(".cta").save("reel.gif")
+drift, is_clean = reel.assertions_diff("tests/golden-tour.json")
+if not is_clean:
+    raise SystemExit("\n".join(drift))
+```
+
+Excluded from the distilled shape on purpose: wall-clock timestamps,
+per-step `duration_ms`, `frames` filenames, resolved URLs (including
+query-string tokens), `cursor_xy`. If you need those in your gate too,
+diff the raw sidecar with your own tooling — the assertion set is the
+narrow "did the UI still behave" contract, not the wire-level snapshot.
+
+---
+
 ## Configuration
 
 Precedence (highest → lowest):
