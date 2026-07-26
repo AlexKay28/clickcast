@@ -1074,6 +1074,95 @@ def report_bug(
 
 
 # ==========================================================================
+# clickcast assertions  (#112)
+# ==========================================================================
+
+
+@app.command(
+    "assertions",
+    help="Distill a sidecar to its CI-stable assertion set (optionally diff a baseline).",
+    epilog=_FEEDBACK_EPILOG,
+)
+def assertions(
+    sidecar_path: Annotated[
+        Path,
+        typer.Argument(help="Path to a `reel.gif.json` sidecar to distill."),
+    ],
+    baseline: Annotated[
+        Path | None,
+        typer.Option(
+            "--baseline",
+            help=(
+                "Committed baseline JSON produced by a previous `--json` run. "
+                "When set, diff current vs baseline and exit non-zero on drift."
+            ),
+        ),
+    ] = None,
+    as_json: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Emit the distilled assertion set as JSON on stdout (see docs/assertions-schema/v1.json).",
+        ),
+    ] = False,
+) -> None:
+    from clickcast.feedback import load as load_report
+    from clickcast.feedback.assertions import (
+        build_assertions,
+        diff_assertions,
+        load_assertions,
+    )
+
+    if not sidecar_path.exists():
+        _die(f"sidecar not found: {sidecar_path}")
+
+    try:
+        report = load_report(sidecar_path)
+    except Exception as e:
+        _die(f"could not load sidecar {sidecar_path}: {e}")
+
+    current = build_assertions(report)
+
+    if baseline is None:
+        # No baseline supplied — just emit the distillation. Human-readable
+        # form falls back to compact JSON so the output is always machine-
+        # tailable (there is no interesting prose form for an assertion set).
+        typer.echo(json.dumps(current, indent=2))
+        return
+
+    if not baseline.exists():
+        _die(f"baseline not found: {baseline}")
+
+    try:
+        baseline_data = load_assertions(baseline)
+    except Exception as e:
+        _die(f"could not load baseline {baseline}: {e}")
+
+    drift, is_clean = diff_assertions(current, baseline_data)
+
+    if as_json:
+        typer.echo(
+            json.dumps(
+                {"is_clean": is_clean, "drift": drift, "current": current},
+                indent=2,
+            )
+        )
+    else:
+        if is_clean:
+            typer.secho("✔ assertions match baseline (no drift)", fg=typer.colors.GREEN)
+        else:
+            typer.secho(
+                f"✗ {len(drift)} drift entr{'y' if len(drift) == 1 else 'ies'}:",
+                fg=typer.colors.RED,
+            )
+            for line in drift:
+                typer.secho(f"  - {line}", fg=typer.colors.RED)
+
+    if not is_clean:
+        raise typer.Exit(code=1)
+
+
+# ==========================================================================
 # clickcast skill  (#103)
 # ==========================================================================
 

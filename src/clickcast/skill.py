@@ -146,6 +146,23 @@ COMMAND_BRIEFS: tuple[CommandBrief, ...] = (
         example="clickcast elements https://example.com --limit 20",
     ),
     CommandBrief(
+        name="assertions",
+        summary="Distill a sidecar to its CI-stable assertion set (optionally diff a baseline).",
+        when_to_use=(
+            "You want a two-line CI regression gate: distill a fresh sidecar "
+            "and compare it to a committed baseline. Byte-identical across "
+            "runs — timestamps, frame paths, and URL query strings are "
+            "excluded. See docs/assertions-schema/v1.json."
+        ),
+        key_flags=(
+            FlagBrief(
+                "--baseline PATH", "diff current vs a committed baseline (nonzero exit on drift)"
+            ),
+            FlagBrief("--json", "emit the distilled JSON (or drift payload) on stdout"),
+        ),
+        example="clickcast assertions reel.gif.json --baseline golden.json",
+    ),
+    CommandBrief(
         name="report-bug",
         summary="Turn a sidecar into an actionable AI-agent bug report.",
         when_to_use=(

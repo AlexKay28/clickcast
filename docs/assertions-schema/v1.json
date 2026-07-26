@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/AlexKay28/clickcast/main/docs/assertions-schema/v1.json",
+  "title": "clickcast CI-stable assertion set",
+  "description": "Deterministic distillation of a clickcast sidecar (`reel.gif.json`) into the subset that stays byte-identical across runs of the same scenario against the same URL. Emitted by `clickcast assertions --json` and by `Reel.assertions()`. Intended as the committed baseline for a 2-line CI regression gate — diff current-vs-baseline, non-zero exit on drift. Explicitly excludes timestamps, wall-clock durations, frame filenames, resolved URLs, and cursor coordinates because they change every run even when the UI under test is unchanged.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "step_count",
+    "steps"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Bumps on breaking changes to the distilled shape."
+    },
+    "step_count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of executed steps (mirrors the length of `steps`)."
+    },
+    "steps": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/StepAssertion"},
+      "description": "One entry per executed step, in scenario order."
+    }
+  },
+  "$defs": {
+    "StepAssertion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "label",
+        "status",
+        "console_error_count",
+        "page_error_count",
+        "network_failed_count"
+      ],
+      "properties": {
+        "action": {
+          "type": "string",
+          "description": "Action verb (`goto`, `click`, `type`, etc.) — mirrors StepReport.action."
+        },
+        "label": {
+          "type": ["string", "null"],
+          "description": "Human label passed to the builder (or null when unset)."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["ok", "failed", "skipped"],
+          "description": "Same tri-state as StepReport.status."
+        },
+        "console_error_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of `console.error` messages captured during this step. The raw messages are excluded on purpose — text changes across runs (timestamps, stack traces), counts do not."
+        },
+        "page_error_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of uncaught page errors captured during this step."
+        },
+        "network_failed_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of failed network requests captured during this step."
+        }
+      }
+    }
+  }
+}

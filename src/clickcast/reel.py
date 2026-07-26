@@ -46,8 +46,9 @@ from clickcast.core.session import Engine, Session, WaitArg
 from clickcast.discovery import Element
 from clickcast.discovery import discover as _async_discover
 from clickcast.encode import EncodeResult, Format, encode
-from clickcast.feedback import Media, ReportBuilder
+from clickcast.feedback import Media, Report, ReportBuilder
 from clickcast.feedback import write as write_report
+from clickcast.feedback.assertions import build_assertions, diff_assertions, load_assertions
 from clickcast.scenario import Meta, Scenario
 from clickcast.scenario import run as run_scenario
 
@@ -92,6 +93,9 @@ class _BaseReel:
             meta_kwargs["viewport"] = vp
         self._meta = Meta(**meta_kwargs)
         self._steps: list[BaseStep] = []
+        # Populated by save() so post-run consumers (assertions(), test
+        # harnesses) can inspect the finalized Report without re-executing.
+        self._last_report: Report | None = None
 
     @staticmethod
     def _viewport_str(v: str | tuple[int, int] | None) -> str | None:
@@ -290,6 +294,46 @@ class _BaseReel:
         # union; cast is the same technique the YAML parser uses.
         return Scenario(meta=self._meta, steps=cast("Any", list(self._steps)))
 
+    # ------------------------------------------------------------------
+    # Post-run inspection — assertion distillation for CI diffs
+    # ------------------------------------------------------------------
+
+    def assertions(self) -> dict[str, Any]:
+        """Return the CI-stable assertion distillation of the last ``save()``.
+
+        Call after :meth:`save` — the finalized :class:`~clickcast.feedback.Report`
+        is cached on the instance and re-distilled cheaply here. Raises
+        :class:`RuntimeError` if invoked before a successful save.
+
+        The returned dict is byte-identical across runs modulo real
+        behavioral drift in the target UI. Its shape is frozen by
+        :class:`~clickcast.feedback.models.Assertions` (``extra="forbid"``).
+        See :mod:`clickcast.feedback.assertions` for the full contract.
+        """
+        if self._last_report is None:
+            raise RuntimeError(
+                "Reel.assertions() requires a completed save() — call `.save(path)` first."
+            )
+        return build_assertions(self._last_report)
+
+    def assertions_diff(self, baseline_path: str | Path) -> tuple[list[str], bool]:
+        """Diff this reel's assertions against a committed baseline on disk.
+
+        Returns ``(drift_descriptions, is_clean)`` — same shape as
+        :func:`clickcast.feedback.assertions.diff_assertions`. Typical CI
+        recipe:
+
+        .. code-block:: python
+
+            reel = Reel(url).goto().click(".cta").save("reel.gif")
+            drift, clean = reel.assertions_diff("baseline.json")
+            if not clean:
+                sys.exit("\\n".join(drift))
+        """
+        current = self.assertions()
+        baseline = load_assertions(baseline_path)
+        return diff_assertions(current, baseline)
+
 
 # --------------------------------------------------------------------------
 # Async execution shared by both variants
@@ -450,16 +494,20 @@ def _crop_and_save(
     return out
 
 
-def _write_sidecar_from_builder(
-    out: Path,
-    no_sidecar: bool,
+def _build_report_if_needed(
     builder: ReportBuilder | None,
     enc: EncodeResult,
     fps: int,
-) -> Path | None:
-    if no_sidecar or builder is None:
+) -> Report | None:
+    """Build the finalized Report from a builder + encoder result.
+
+    Split out from :func:`_write_sidecar_from_builder` so callers that
+    want to inspect the report post-run (``Reel.assertions()``) can share
+    the same finalization path — ``ReportBuilder.build`` detaches
+    listeners and must run at most once per builder.
+    """
+    if builder is None:
         return None
-    sidecar = out.with_suffix(out.suffix + ".json")
     media = Media(
         path=str(enc.path),
         format=enc.format,
@@ -468,7 +516,17 @@ def _write_sidecar_from_builder(
         duration_s=enc.duration_s,
         fps=fps,
     )
-    report = builder.build(media)
+    return builder.build(media)
+
+
+def _write_sidecar_from_report(
+    out: Path,
+    no_sidecar: bool,
+    report: Report | None,
+) -> Path | None:
+    if no_sidecar or report is None:
+        return None
+    sidecar = out.with_suffix(out.suffix + ".json")
     write_report(report, sidecar)
     return sidecar
 
@@ -559,13 +617,14 @@ class AsyncReel(_BaseReel):
         out = Path(path)
         out.parent.mkdir(parents=True, exist_ok=True)
         scenario = self.build_scenario()
-        builder: ReportBuilder | None = None
-        if not no_sidecar:
-            builder = ReportBuilder(
-                url=self._url,
-                engine=scenario.meta.engine,
-                viewport=_viewport_list_from_meta(scenario),
-            )
+        # Always run a builder — even with ``no_sidecar=True`` we still want
+        # ``self._last_report`` populated so post-run inspection APIs
+        # (:meth:`assertions`) work regardless of whether the JSON hit disk.
+        builder = ReportBuilder(
+            url=self._url,
+            engine=scenario.meta.engine,
+            viewport=_viewport_list_from_meta(scenario),
+        )
         result, enc = await _run_and_encode(
             scenario,
             out,
@@ -574,9 +633,11 @@ class AsyncReel(_BaseReel):
             loop=loop,
             builder=builder,
         )
-        if builder is not None and not result.ok:
+        if not result.ok:
             builder.add_warning(f"scenario failed at step {result.failed_at}")
-        _write_sidecar_from_builder(out, no_sidecar, builder, enc, scenario.meta.fps)
+        report = _build_report_if_needed(builder, enc, scenario.meta.fps)
+        self._last_report = report
+        _write_sidecar_from_report(out, no_sidecar, report)
         return enc.path
 
 
@@ -606,9 +667,12 @@ class Reel(_BaseReel):
         no_sidecar: bool = False,
     ) -> Path:
         _fail_if_running_loop("Reel.save()")
-        # Reuse AsyncReel's implementation to avoid drift.
-        return asyncio.run(
-            self._as_async().save(
+        # Reuse AsyncReel's implementation to avoid drift. Use `_as_async` to
+        # share the field-copying logic with the other sync-facade methods.
+        async_reel = self._as_async()
+        async_reel._last_report = None
+        out_path = asyncio.run(
+            async_reel.save(
                 path,
                 format=format,
                 quality=quality,
@@ -616,6 +680,10 @@ class Reel(_BaseReel):
                 no_sidecar=no_sidecar,
             )
         )
+        # Propagate the finalized report so post-run inspection APIs on the
+        # sync facade see the same state the async run produced.
+        self._last_report = async_reel._last_report
+        return out_path
 
     def save_region(
         self,

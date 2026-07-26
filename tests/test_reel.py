@@ -136,6 +136,100 @@ class TestBuilders:
 # ------------------------------------------------------------------
 
 
+class TestAssertionsIntegration:
+    """`Reel.assertions()` + `Reel.assertions_diff()` — no browser needed.
+
+    Uses the same fixture-report trick as the assertions-module tests:
+    seed the Reel's cached report directly, then exercise the public
+    surface. Avoids launching Playwright while still covering the
+    Reel-level wiring (RuntimeError before save, distillation shape,
+    on-disk baseline diff).
+    """
+
+    def _seed(self, reel: Reel) -> None:
+        from clickcast.feedback import Media, PageState, Report, StepReport
+
+        reel._last_report = Report(
+            clickcast_version="0.1.3",
+            started_at="2026-07-23T15:00:00+00:00",
+            duration_s=1.0,
+            media=Media(
+                path="tour.gif",
+                format="gif",
+                size_bytes=1024,
+                frame_count=4,
+                duration_s=0.5,
+                fps=8,
+            ),
+            steps=[
+                StepReport(
+                    index=0,
+                    action="goto",
+                    args={"url": "https://x"},
+                    status="ok",
+                    duration_ms=100.0,
+                    frames=["frame-0000-000.png"],
+                    label="Open site",
+                    page_state=PageState(),
+                ),
+                StepReport(
+                    index=1,
+                    action="click",
+                    args={"selector": "#cta"},
+                    status="ok",
+                    duration_ms=50.0,
+                    frames=["frame-0001-000.png"],
+                    label="Click CTA",
+                    page_state=PageState(),
+                ),
+            ],
+        )
+
+    def test_assertions_before_save_raises(self) -> None:
+        reel = Reel("https://x").goto(wait="load")
+        with pytest.raises(RuntimeError, match=r"requires a completed save"):
+            reel.assertions()
+
+    def test_assertions_returns_distilled_shape(self) -> None:
+        reel = Reel("https://x").goto(wait="load")
+        self._seed(reel)
+        out = reel.assertions()
+        assert out["schema_version"] == 1
+        assert out["step_count"] == 2
+        assert [s["action"] for s in out["steps"]] == ["goto", "click"]
+
+    def test_assertions_diff_against_matching_baseline_is_clean(self, tmp_path: Path) -> None:
+        reel = Reel("https://x").goto(wait="load")
+        self._seed(reel)
+        baseline = tmp_path / "golden.json"
+        baseline.write_text(json.dumps(reel.assertions(), indent=2))
+        drift, clean = reel.assertions_diff(baseline)
+        assert clean is True
+        assert drift == []
+
+    def test_assertions_diff_reports_drift_from_baseline(self, tmp_path: Path) -> None:
+        reel = Reel("https://x").goto(wait="load")
+        self._seed(reel)
+        baseline = tmp_path / "golden.json"
+        # Baseline claims 3 steps; current has 2 — expect a step_count drift.
+        payload = reel.assertions()
+        payload["step_count"] = 3
+        payload["steps"].append(
+            {
+                "action": "scroll",
+                "label": None,
+                "status": "ok",
+                "console_error_count": 0,
+                "page_error_count": 0,
+                "network_failed_count": 0,
+            }
+        )
+        baseline.write_text(json.dumps(payload, indent=2))
+        drift, clean = reel.assertions_diff(baseline)
+        assert clean is False
+        assert any("step_count" in d for d in drift)
+
+
 class TestSyncSafety:
     async def test_reel_save_from_loop_raises_helpful_error(self) -> None:
         reel = Reel("https://x").goto(wait="load")
