@@ -40,17 +40,18 @@ Three reasons:
    actually renders the JS.
 2. **Interactive elements matter.** Toggle expandable sections, hover
    for tooltips, click "Show more" — HTML alone misses these.
-3. **Semantic structure via `discovered`.** clickcast's discovery
+3. **Semantic structure via `discovered_elements`.** clickcast's discovery
    collects role + accessible name for every interactive element. That
    gives the LLM a cleaner map of the page's affordances than raw DOM.
 
 ## Feed to the LLM
 
-The sidecar's `discovered` array is the highest-signal input. Snippet:
+The sidecar's top-level `discovered_elements` array is the highest-signal
+input. Snippet:
 
 ```json
 {
-  "discovered": [
+  "discovered_elements": [
     {"role": "heading", "text": "API Reference"},
     {"role": "link", "text": "Authentication", "selector": "role=link[name=\"Authentication\"]"},
     {"role": "link", "text": "Rate limits", "selector": "role=link[name=\"Rate limits\"]"},
@@ -67,14 +68,25 @@ discovery). Answer the user's question by citing the specific
 `selector` and `text` values you'd use to navigate to the answer.
 ```
 
-## Bonus: extract per-page discovered content
+## Bonus: extract the tour's per-step targets as prose
+
+`discovered_elements` is captured on the START page only. To surface what
+was clicked and where the tour landed on subsequent pages, walk `steps`:
 
 ```bash
-jq -r '.steps[] | select(.action == "goto") |
-       "## \(.page_state.url_after)\n" +
-       (.page_state.discovered // [] | map("- \(.role): \(.text)") | join("\n"))' \
+jq -r '.steps[] | select(.status == "ok") |
+       "- **\(.action | ascii_upcase)** \(.label // .selector // .args.url // "") → \(.page_state.url_after // "-")"' \
    api-docs.gif.json
 ```
 
-Produces markdown per page — a text-only tree of every interactive element
-in the section, easy to feed to a small model or paste into a spec.
+Produces one markdown line per successful step — easy to feed to a small
+model or paste into a spec.
+
+## Bonus 2: focused crop of a single doc section
+
+`Reel.save_region('.api-parameters', 'api-parameters.png', frame=-1)`
+grabs the exact bounding rect of a named selector from the last captured
+frame — useful when you want to feed the LLM just one section of a long
+docs page rather than the whole reel. See
+[`../../src/clickcast/reel.py`](../../src/clickcast/reel.py) for the
+signature (added in v0.2.0).

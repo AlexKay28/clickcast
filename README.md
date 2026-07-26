@@ -9,7 +9,7 @@
 
 > **What's new** — see [`CHANGELOG.md`](CHANGELOG.md) for the latest release notes.
 
-![clickcast touring worldsight-weld.vercel.app](docs/demo.gif)
+![clickcast touring react.dev — cursor arrows, actions panel, zoom-on-click closeups](docs/demo.gif)
 
 > **Not to be confused with [vercel-labs/webreel](https://github.com/vercel-labs/webreel)** — that's a TypeScript tool for authoring polished demo videos. `clickcast` is a Python tool aimed primarily at *AI agents* that need a visual modality onto a live web UI, and secondarily at humans who want reproducible demo reels.
 

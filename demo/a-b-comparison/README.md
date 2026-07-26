@@ -34,22 +34,52 @@ Side-by-side (control | treatment):
 
 ![control variant](reel-control.gif) ![treatment variant](reel-treatment.gif)
 
-## What to compare
+## The 1-line gate: `clickcast assertions`
 
-The sidecars carry the signal. Timing delta is the most common:
+Since v0.2.0, `clickcast assertions` is the built-in A/B differ. Point
+it at both sidecars — control as the baseline, treatment as the candidate
+— and it prints a stable diff (no timestamps, no wall-clock durations, no
+frame filenames) so any output line is a real behavioral delta:
 
 ```bash
-# Compare page-load / step timings between variants:
+clickcast assertions treatment.gif.json --baseline control.gif.json
+# exit 0 → variants match on every stable field
+# exit 1 → prints e.g. "step 3: status changed ok → failed",
+#          "step 4: console_error_count 0 → 2"
+```
+
+Wire that into CI as the pass/fail gate for the treatment variant.
+
+## Reducing noise between runs
+
+A/B comparisons are only as good as the runs' determinism. Two v0.2.0
+additions cut noise:
+
+- `wait_for(selector, state='stable')` scenario step — replaces the
+  `--dwell N` guessing. Waits until the target element's bounding box
+  hasn't moved for `quiet_ms`. When both variants use it, animation
+  timing differences stop showing up as spurious `duration_ms` deltas.
+- `goto(retries=N)` — a transient cold-serverless timeout on one variant
+  no longer looks like a regression.
+
+## What else to compare
+
+Beyond the assertions diff, the raw sidecar carries fields that don't
+survive the "stable" filter but are worth eyeballing manually:
+
+```bash
+# Compare page-load / step timings between variants (noisy but useful trend):
 diff \
   <(jq '.steps[] | {step: .step_index, action, ms: .duration_ms}' control.gif.json) \
   <(jq '.steps[] | {step: .step_index, action, ms: .duration_ms}' treatment.gif.json)
 ```
 
-Other useful comparisons:
-- `discovered` list — did the treatment surface add new interactive
+- `discovered_elements` — did the treatment surface add new interactive
   elements? Remove old ones?
 - `page_state.console_errors` — did one variant introduce new JS errors?
+  (Counted by `assertions` diff; contents visible here.)
 - `page_state.network_failed` — did one variant break an API call?
+  (Same.)
 
 ## Compositing the two reels
 
