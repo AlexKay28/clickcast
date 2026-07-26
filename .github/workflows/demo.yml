@@ -9,7 +9,7 @@ on:
     inputs:
       url:
         description: URL to record
-        default: https://worldsight-weld.vercel.app/
+        default: https://react.dev/
         required: true
       viewport:
         description: Viewport (WxH)
@@ -41,7 +41,7 @@ on:
         required: true
       click-timeout:
         description: Per-click timeout in seconds (Playwright default is 30)
-        default: "5"
+        default: "15"
         required: true
       traversal:
         description: URL queue policy — 'dfs' (coherent narrative) or 'bfs' (site-map coverage)
@@ -67,7 +67,7 @@ jobs:
     # `inputs.*` is empty on `workflow_run` — fall back to the same defaults
     # exposed to `workflow_dispatch` so both trigger paths behave identically.
     env:
-      URL: ${{ inputs.url || 'https://worldsight-weld.vercel.app/' }}
+      URL: ${{ inputs.url || 'https://react.dev/' }}
       VIEWPORT: ${{ inputs.viewport || '1280x800' }}
       FPS: ${{ inputs.fps || '12' }}
       MAX_CLICKS: ${{ inputs['max-clicks'] || '15' }}
@@ -75,7 +75,7 @@ jobs:
       INITIAL_WAIT: ${{ inputs['initial-wait'] || '4' }}
       DWELL: ${{ inputs.dwell || '0.5' }}
       MAX_DURATION: ${{ inputs['max-duration'] || '120' }}
-      CLICK_TIMEOUT: ${{ inputs['click-timeout'] || '5' }}
+      CLICK_TIMEOUT: ${{ inputs['click-timeout'] || '15' }}
       TRAVERSAL: ${{ inputs.traversal || 'dfs' }}
     steps:
       - uses: actions/checkout@v4
