@@ -35,6 +35,7 @@ from clickcast.config import (
 from clickcast.config import (
     load as load_config,
 )
+from clickcast.core.actions import set_dump_elements
 from clickcast.core.session import Session
 from clickcast.discovery import Element, discover
 from clickcast.encode import encode
@@ -139,6 +140,16 @@ Fps = Annotated[int, typer.Option("--fps", help="Frames per second.")]
 Verbose = Annotated[
     int,
     typer.Option("--verbose", "-v", count=True, help="Increase output verbosity."),
+]
+DumpElements = Annotated[
+    bool,
+    typer.Option(
+        "--dump-elements",
+        help=(
+            "On step failure, dump the full discover() list to stderr in "
+            "addition to the top-5 candidate hints. Off by default."
+        ),
+    ),
 ]
 
 
@@ -403,8 +414,10 @@ def auto(
     no_sidecar: NoSidecar = False,
     with_feedback: WithFeedback = False,
     verbose: Verbose = 0,
+    dump_elements: DumpElements = False,
 ) -> None:
     _setup_logging(verbose)
+    set_dump_elements(dump_elements)
     if traversal not in ("dfs", "bfs"):
         _die(f"--traversal must be 'dfs' or 'bfs', got {traversal!r}")
     if pace not in _PACE_TABLE:
@@ -514,7 +527,9 @@ def run(
     no_sidecar: NoSidecar = False,
     with_feedback: WithFeedback = False,
     verbose: Verbose = 0,
+    dump_elements: DumpElements = False,
 ) -> None:
+    set_dump_elements(dump_elements)
     variables: dict[str, str] = {}
     for pair in var or []:
         if "=" not in pair:
@@ -646,11 +661,19 @@ async def _do_run(
     sidecar = _write_sidecar(out_path, no_sidecar, builder, media, with_feedback=with_feedback)
     typer.echo(f"✔ {enc.path} ({enc.size_bytes // 1024} KB, {enc.frame_count} frames)")
     if not result.ok:
+        failed_at = result.failed_at
         typer.secho(
-            f"! scenario failed at step {result.failed_at}",
+            f"! scenario failed at step {failed_at}",
             fg=typer.colors.YELLOW,
             err=True,
         )
+        # #114: emit the augmented error (top-5 candidates + optional full
+        # dump) to stderr so both humans and agents see the hint block,
+        # not just the sidecar-consuming tooling.
+        if failed_at is not None and 0 <= failed_at < len(result.results):
+            err_text = result.results[failed_at].error
+            if err_text:
+                typer.secho(err_text, fg=typer.colors.RED, err=True)
     if sidecar:
         typer.echo(f"  sidecar: {sidecar}")
     if not result.ok:

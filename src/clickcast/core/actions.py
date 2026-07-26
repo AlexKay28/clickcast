@@ -14,6 +14,41 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from clickcast.core.session import Session, WaitArg
 
+# Selector shapes whose failures benefit from suggest_candidates hints
+# (see #114). We only augment click-shaped step errors — a scroll/wait/goto
+# failure is orthogonal and would just add noise.
+_HINTABLE_ACTIONS: frozenset[str] = frozenset({"click", "dblclick", "hover", "type"})
+
+# Substrings in Playwright error messages that indicate the selector didn't
+# resolve to anything. TimeoutError classes and this text are the two
+# canonical "we couldn't find the element" signals.
+_LOCATOR_MISSING_MARKERS: tuple[str, ...] = (
+    "locator resolved to 0 elements",
+    "waiting for locator",
+)
+
+# Process-wide flag toggled by the CLI's `--dump-elements` option. When set,
+# the failure hook appends the full discover() list to the error string
+# (default is just the top-5 candidates). Kept module-scope because the
+# CLI layer can't reach into the action executor otherwise — actions.py
+# is called deep inside auto/run and doesn't take a CLI-flags param.
+_dump_elements_on_failure: bool = False
+
+
+def set_dump_elements(enabled: bool) -> None:
+    """Enable/disable full-element dump on failure (see ``--dump-elements``).
+
+    Called from the CLI; safe to flip on/off between runs. Independent of
+    the top-5 hint block, which is always attached.
+    """
+    global _dump_elements_on_failure
+    _dump_elements_on_failure = enabled
+
+
+def _dump_enabled() -> bool:
+    return _dump_elements_on_failure
+
+
 __all__ = [
     "ActionResult",
     "BaseStep",
@@ -31,6 +66,7 @@ __all__ = [
     "WaitForStep",
     "WaitStep",
     "execute",
+    "set_dump_elements",
 ]
 
 # States accepted by `WaitForStep`. `stable` is our custom bbox-quiescence poll;
@@ -367,6 +403,7 @@ async def execute(step: BaseStep, session: Session) -> ActionResult:
     except Exception as e:
         duration_ms = (time.monotonic() - start) * 1000.0
         message = f"{type(e).__name__}: {e}"
+        message = await _augment_with_hints(message, step, session, selector, e)
         if step.optional:
             return ActionResult(
                 ok=True,
@@ -384,3 +421,56 @@ async def execute(step: BaseStep, session: Session) -> ActionResult:
             error=message,
             duration_ms=duration_ms,
         )
+
+
+async def _augment_with_hints(
+    base_message: str,
+    step: BaseStep,
+    session: Session,
+    selector: str | None,
+    exc: BaseException,
+) -> str:
+    """Append a `suggest_candidates` block when a click-shaped step fails
+    because the selector didn't resolve. Silent on every other failure
+    path — a scroll/goto timeout and a "selector not found" click have
+    different remedies and mixing them would just add noise.
+
+    Import-locally so a broken hints module can never take down the
+    ordinary error-return path — the base message is always safe to
+    return unchanged.
+    """
+    if step.action not in _HINTABLE_ACTIONS or not selector:
+        return base_message
+    err_text = str(exc)
+    # Only fire on TimeoutError or the explicit "0 elements" message —
+    # otherwise a genuine action failure (button clicked but handler
+    # raised) would drop misleading hints into the error.
+    is_timeout = "Timeout" in type(exc).__name__
+    if not is_timeout and not any(m in err_text for m in _LOCATOR_MISSING_MARKERS):
+        return base_message
+
+    try:
+        from clickcast.discovery import discover
+        from clickcast.discovery.hints import format_candidates, suggest_candidates
+
+        candidates = await suggest_candidates(session, selector)
+        # Recount without the discover(limit=20) cap for the tail line —
+        # in practice the pool is small enough that this second call is
+        # cheap and gives an accurate "N interactive elements" number.
+        all_elements = await discover(session, limit=200)
+        dump = _dump_enabled()
+        hint_block = format_candidates(
+            selector,
+            candidates,
+            total_discovered=len(all_elements),
+            dump_hint=not dump,
+        )
+        if dump and all_elements:
+            hint_block += "\n\n  Full discover() list:"
+            for el in all_elements:
+                bbox = f"[{el.bbox[0]}, {el.bbox[1]}, {el.bbox[2]}, {el.bbox[3]}]"
+                hint_block += f"\n    {el.selector:<45} bbox={bbox:<28} role={el.role}"
+    except Exception:
+        # Never let the hint pipeline mask the original failure.
+        return base_message
+    return f"{base_message}\n{hint_block}"
