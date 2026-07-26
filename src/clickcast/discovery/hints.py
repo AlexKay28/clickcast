@@ -43,6 +43,9 @@ __all__ = [
 # Scoring weights — keep in sync with the module docstring / issue #114.
 _ROLE_WEIGHT = 0.4
 _NAME_WEIGHT = 0.6
+# An EXACT name match is almost always what the user wanted — bonus so it
+# beats any role-matches-but-name-slightly-off candidate.
+_EXACT_NAME_BONUS = 0.5
 
 # `role=<role>[name="<name>"]` — the Playwright locator shape emitted by
 # `discover()` and the shape most user-authored scenarios use. We only try
@@ -82,10 +85,13 @@ def parse_selector(selector: str) -> tuple[str | None, str | None]:
 def _score_candidate(element: Element, target_role: str | None, target_name: str | None) -> float:
     """Score one candidate against the parsed target components.
 
-    Score is in ``[0, 1]``: role exact match contributes up to
-    :data:`_ROLE_WEIGHT`, name Levenshtein-based similarity (via
-    :class:`difflib.SequenceMatcher`) contributes up to
-    :data:`_NAME_WEIGHT`. Missing target components contribute 0.
+    Role exact match contributes up to :data:`_ROLE_WEIGHT`, name similarity
+    (via :class:`difflib.SequenceMatcher`) contributes up to
+    :data:`_NAME_WEIGHT`. An EXACT name match adds :data:`_EXACT_NAME_BONUS`
+    so that a role-mismatched-but-name-perfect candidate outranks a
+    role-matched-but-name-slightly-off one — this matches how users
+    actually mistype selectors: they know the visible text, they guess the
+    role. Missing target components contribute 0.
     """
     score = 0.0
     if target_role is not None and element.role and element.role == target_role:
@@ -94,8 +100,12 @@ def _score_candidate(element: Element, target_role: str | None, target_name: str
         # SequenceMatcher.ratio() is 0..1 and uses a Ratcliff/Obershelp
         # variant — close enough to a normalized Levenshtein for our
         # ranking purposes and it's in the stdlib (no new dep).
-        ratio = SequenceMatcher(None, target_name.lower(), element.text.lower()).ratio()
+        target_lower = target_name.lower()
+        element_lower = element.text.lower()
+        ratio = SequenceMatcher(None, target_lower, element_lower).ratio()
         score += _NAME_WEIGHT * ratio
+        if target_lower == element_lower:
+            score += _EXACT_NAME_BONUS
     return score
 
 
