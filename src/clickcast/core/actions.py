@@ -399,7 +399,14 @@ async def execute(step: BaseStep, session: Session) -> ActionResult:
                         **({"timeout": timeout} if timeout is not None else {}),
                     )
                 else:
-                    await session.page.mouse.wheel(step.dx, step.by)
+                    # No selector → window scroll. Use `window.scrollBy` (not
+                    # `mouse.wheel`) so the whole page moves regardless of
+                    # which element the mouse happens to be over. Wheel dispatch
+                    # would scroll the element under the cursor, which is the
+                    # WheelStep semantics — not ScrollStep's.
+                    await session.page.evaluate(
+                        "([dx, dy]) => window.scrollBy(dx, dy)", [step.dx, step.by]
+                    )
             else:
                 raise ValueError("ScrollStep requires either `to` (selector) or `by` (pixels)")
         elif isinstance(step, WaitStep):

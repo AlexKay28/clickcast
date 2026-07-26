@@ -73,9 +73,11 @@ class TestWheelStepModel:
 @pytest.mark.integration
 class TestWheelIntegration:
     async def test_wheel_without_selector_dispatches_event(self, loaded_session: Session) -> None:
-        # Hover the tall div so the mouse has a valid target for the wheel
-        # event; Playwright's mouse.wheel dispatches at the current position.
-        await loaded_session.page.locator("#tall").hover()
+        # Move the mouse to a known point over #tall so the wheel event has a
+        # valid target — hover() alone can be flaky in headless chromium, and
+        # `mouse.move` at the JS level primes the wheel-dispatch coordinates
+        # deterministically across browsers.
+        await loaded_session.page.mouse.move(100, 100)
         r = await execute(WheelStep(dy=500), loaded_session)
         assert r.ok
         assert r.action == "wheel"
