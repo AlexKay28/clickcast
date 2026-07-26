@@ -8,13 +8,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **`--with-feedback` on `auto` and `run`** (part of [#40]). Attaches a
-  machine-discoverable `feedback` block to the sidecar JSON with the repo
-  URL, a prefilled new-issue URL (title + body carrying clickcast version,
-  engine, viewport, target URL as context), a short prose message, and a
-  prompt template with `problem` / `resolution_plan` fields. Downstream
-  AI-agent consumers of the sidecar can now file bug reports without hunting
-  for the repo. Opt-in — sidecars stay lean by default.
+- **AI-agent feedback loop — all three tracks** (closes [#40]). Extends the
+  `--with-feedback` sidecar block with the four #40-spec pointers
+  (`report_url`, `schema_url`, `docs_url`, `diagnostics_command`), adds the
+  same pointers to `clickcast doctor` (human + `--json`) and to every
+  subcommand's `--help` epilog, and ships:
+  - **`clickcast report-bug <sidecar.json>`** — new subcommand that turns
+    a sidecar into an actionable bug report. Prints diagnostics + a
+    prefilled GitHub issue URL (title + body ready to submit). Flags:
+    `--json` (emit the Track-C payload), `--open` (launch in browser),
+    `--redact/--no-redact` (default on — sanitize URLs, selectors, visible
+    text while preserving structure and counts), `--note` (freeform
+    environment context).
+  - **`docs/agent-report-schema/v1.json`** — JSON Schema for the Track-C
+    payload; downstream agents can populate it deterministically.
+  - **`.github/ISSUE_TEMPLATE/ai-agent-report.yml`** — GitHub Issues form
+    matching 1:1 to the schema.
+  - **`docs/for-agents.md`** — <200-word walkthrough for AI agents on how
+    to use clickcast and how to file feedback.
+  - **`agent-report` GitHub label** — filed reports are auto-labelled by
+    the template.
+- **`--with-feedback` on `auto` and `run`** (initial slice of [#40]). The
+  sidecar block now carries both the four spec pointers AND the additive
+  human-friendly context (repo, issues URL, prefilled new-issue URL,
+  message, template). Opt-in.
 - **Smooth cursor interpolation** (closes [#75]). Between any two consecutive
   frames whose `cursor_xy` differs by at least `interpolate_min_distance` (50
   px default), insert `interpolate_frames` (4 default) intermediate PNG frames

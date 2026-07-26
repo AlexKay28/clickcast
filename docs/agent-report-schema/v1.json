@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/AlexKay28/clickcast/main/docs/agent-report-schema/v1.json",
+  "title": "clickcast AI-agent bug report",
+  "description": "Machine-fillable bug-report payload for downstream AI agents. Emitted by `clickcast report-bug --json` and maps 1:1 to `.github/ISSUE_TEMPLATE/ai-agent-report.yml` so a filled report renders as a well-formed GitHub issue with no back-and-forth.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "clickcast_version",
+    "python",
+    "os",
+    "command_or_api_call",
+    "expected",
+    "actual"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Bumps on breaking changes to this file."
+    },
+    "clickcast_version": {
+      "type": "string",
+      "description": "PEP 440 version of the clickcast package that produced the sidecar."
+    },
+    "playwright_version": {
+      "type": "string",
+      "description": "Playwright version at capture time. Optional — populated when known."
+    },
+    "python": {
+      "type": "string",
+      "description": "Python interpreter version (e.g. `3.12.3`)."
+    },
+    "os": {
+      "type": "string",
+      "description": "OS platform string (e.g. `Linux`, `Darwin`, `Windows`)."
+    },
+    "command_or_api_call": {
+      "type": "string",
+      "description": "The exact command or Python entry point that triggered the failure."
+    },
+    "expected": {
+      "type": "string",
+      "description": "One sentence describing the expected outcome."
+    },
+    "actual": {
+      "type": "string",
+      "description": "One sentence describing the observed outcome."
+    },
+    "reproduction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "content"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["cli", "scenario", "python"],
+          "description": "How to reproduce: a CLI invocation, a scenario YAML, or a Python snippet."
+        },
+        "content": {
+          "type": "string",
+          "description": "Minimal reproduction content matching `kind`."
+        }
+      }
+    },
+    "sidecar_excerpt": {
+      "type": "object",
+      "description": "Redaction-friendly subset of the original sidecar (failed step, page_state, warnings, errors). Free-form on purpose — this is what the maintainer inspects first.",
+      "additionalProperties": true
+    },
+    "environment_note": {
+      "type": "string",
+      "description": "Anything unusual about the environment: proxy, TLS interception, custom DNS, air-gapped, etc."
+    },
+    "redacted": {
+      "type": "boolean",
+      "description": "True when URLs / selectors / visible text were sanitized by `clickcast report-bug --redact` (the default)."
+    }
+  }
+}

@@ -76,10 +76,21 @@ class Feedback(BaseModel):
     file a GitHub issue about a tour that went wrong or a rough edge worth
     improving. Populated only when the writer is asked for it; absent from
     the sidecar otherwise.
+
+    ``report_url`` / ``schema_url`` / ``docs_url`` / ``diagnostics_command``
+    are the four fields specified by #40 for the AI-agent feedback loop.
+    ``message`` / ``repo`` / ``issues_url`` / ``new_issue_url`` / ``template``
+    are additive human-friendly context.
     """
 
     model_config = ConfigDict(extra="forbid")
 
+    # #40 spec fields — the primary channel for stranded agents.
+    report_url: str
+    schema_url: str
+    docs_url: str
+    diagnostics_command: str
+    # Additive human-friendly context (also usable by agents).
     message: str
     repo: str
     issues_url: str

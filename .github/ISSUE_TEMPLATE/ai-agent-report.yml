@@ -1,0 +1,112 @@
+name: AI-agent bug report
+description: Machine-fillable bug report — maps 1:1 to `docs/agent-report-schema/v1.json`. Filed by humans OR by AI agents that hit friction using clickcast. The `clickcast report-bug <sidecar.json>` command produces exactly these fields.
+title: "[agent-report] "
+labels: ["agent-report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing. If you (or the agent you're driving) ran `clickcast report-bug <sidecar.json>`, paste each of its fields into the corresponding box below. If not, fill in what you can — a partial report is much better than none.
+
+        The report shape is documented at [`docs/agent-report-schema/v1.json`](https://github.com/AlexKay28/clickcast/blob/main/docs/agent-report-schema/v1.json).
+
+  - type: input
+    id: clickcast_version
+    attributes:
+      label: clickcast version
+      description: e.g. `0.1.0`
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: playwright_version
+    attributes:
+      label: playwright version
+      description: e.g. `1.44.0` — leave blank if unknown
+      placeholder: "1.44.0"
+
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      description: e.g. `3.12.3`
+      placeholder: "3.12.3"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      description: e.g. `Linux`, `Darwin`, `Windows`
+      placeholder: "Linux"
+    validations:
+      required: true
+
+  - type: textarea
+    id: command_or_api_call
+    attributes:
+      label: Command or API call
+      description: The exact command or Python snippet that triggered the failure.
+      placeholder: "clickcast auto https://example.com --out tour.gif"
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+      description: One sentence.
+      placeholder: "A GIF and a sidecar; discovery finds ≥ 1 button."
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual
+      description: One sentence.
+      placeholder: "Discovery returned zero elements. Sidecar had page_errors."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: reproduction_kind
+    attributes:
+      label: Reproduction kind
+      options:
+        - cli
+        - scenario
+        - python
+    validations:
+      required: false
+
+  - type: textarea
+    id: reproduction_content
+    attributes:
+      label: Reproduction content
+      description: Minimal reproduction matching the kind above.
+      render: shell
+
+  - type: textarea
+    id: sidecar_excerpt
+    attributes:
+      label: Sidecar excerpt
+      description: Paste the relevant subset of the sidecar JSON (failed step, page_state, errors, warnings). Redact URLs / selectors / visible text if the target is private.
+      render: json
+
+  - type: textarea
+    id: environment_note
+    attributes:
+      label: Environment note
+      description: Anything unusual — proxy, TLS interception, custom DNS, air-gapped, etc.
+
+  - type: checkboxes
+    id: redacted
+    attributes:
+      label: Redaction
+      options:
+        - label: The sidecar excerpt above was produced by `clickcast report-bug --redact` (URLs / selectors / visible text sanitized).
+          required: false

@@ -9,7 +9,14 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 
 from clickcast.feedback import Media, Report, build_feedback, load, write
-from clickcast.feedback.pointers import REPO_URL
+from clickcast.feedback.pointers import (
+    DIAGNOSTICS_COMMAND,
+    DOCS_URL,
+    REPO_URL,
+    REPORT_URL,
+    SCHEMA_URL,
+    feedback_pointer_lines,
+)
 
 
 def _report(**overrides: object) -> Report:
@@ -42,6 +49,20 @@ class TestBuildFeedback:
         assert fb.new_issue_url.startswith(f"{REPO_URL}/issues/new?")
         assert fb.template.problem
         assert fb.template.resolution_plan
+
+    def test_block_carries_issue40_pointers(self) -> None:
+        fb = build_feedback(_report())
+        assert fb.report_url == REPORT_URL
+        assert fb.schema_url == SCHEMA_URL
+        assert fb.docs_url == DOCS_URL
+        assert fb.diagnostics_command == DIAGNOSTICS_COMMAND
+
+    def test_pointer_lines_reference_all_four_urls(self) -> None:
+        joined = "\n".join(feedback_pointer_lines())
+        assert REPORT_URL in joined
+        assert SCHEMA_URL in joined
+        assert DOCS_URL in joined
+        assert DIAGNOSTICS_COMMAND in joined
 
     def test_new_issue_url_prefills_environment(self) -> None:
         fb = build_feedback(_report())

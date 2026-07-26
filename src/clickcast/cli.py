@@ -38,8 +38,14 @@ from clickcast.config import (
 from clickcast.core.session import Session
 from clickcast.discovery import Element, discover
 from clickcast.encode import encode
-from clickcast.feedback import Media, ReportBuilder
+from clickcast.feedback import Media, ReportBuilder, feedback_pointer_lines
 from clickcast.feedback import write as write_report
+from clickcast.feedback.pointers import (
+    DIAGNOSTICS_COMMAND,
+    DOCS_URL,
+    REPORT_URL,
+    SCHEMA_URL,
+)
 from clickcast.scenario import ScenarioError, load
 from clickcast.scenario import run as run_scenario
 
@@ -74,6 +80,20 @@ app = typer.Typer(
     help="Drive a browser through a website and return a reel + AI-readable feedback sidecar.",
     no_args_is_help=True,
     add_completion=False,
+)
+
+
+# #40 Track A: every subcommand ends its --help with these pointer lines so
+# a stranded AI-agent user always sees where to file feedback.
+_FEEDBACK_EPILOG = "\n".join(
+    [
+        "",
+        "Feedback loop (for AI agents and humans):",
+        f"  file a bug report: {REPORT_URL}",
+        f"  report schema:     {SCHEMA_URL}",
+        f"  agent docs:        {DOCS_URL}",
+        f"  or run: {DIAGNOSTICS_COMMAND}",
+    ]
 )
 
 
@@ -266,7 +286,7 @@ _PACE_TABLE: dict[str, tuple[int, float]] = {
 }
 
 
-@app.command(help="Auto-discover interactive elements and record a tour.")
+@app.command(help="Auto-discover interactive elements and record a tour.", epilog=_FEEDBACK_EPILOG)
 def auto(
     ctx: typer.Context,
     url: Annotated[str, typer.Argument(help="Target URL.")],
@@ -477,7 +497,7 @@ async def _do_auto(
 # ==========================================================================
 
 
-@app.command(help="Run a YAML scenario end-to-end.")
+@app.command(help="Run a YAML scenario end-to-end.", epilog=_FEEDBACK_EPILOG)
 def run(
     ctx: typer.Context,
     scenario_path: Annotated[Path, typer.Argument(help="Path to a scenario file.")],
@@ -642,7 +662,7 @@ async def _do_run(
 # ==========================================================================
 
 
-@app.command(help="Capture a single screenshot.")
+@app.command(help="Capture a single screenshot.", epilog=_FEEDBACK_EPILOG)
 def shot(
     url: Annotated[str, typer.Argument(help="Target URL.")],
     out: OutOpt = "shot.png",
@@ -715,7 +735,7 @@ steps:
 """
 
 
-@app.command(help="Scaffold a starter scenario file.")
+@app.command(help="Scaffold a starter scenario file.", epilog=_FEEDBACK_EPILOG)
 def init(
     path: Annotated[Path, typer.Argument(help="Output scenario path.")] = Path("tour.yml"),
     url: Annotated[
@@ -779,7 +799,7 @@ async def _scenario_from_discovery(url: str, name: str, out: str) -> str:
 # ==========================================================================
 
 
-@app.command(help="Dump interactive elements clickcast can see on a page.")
+@app.command(help="Dump interactive elements clickcast can see on a page.", epilog=_FEEDBACK_EPILOG)
 def elements(
     url: Annotated[str, typer.Argument(help="Target URL.")],
     limit: Annotated[int, typer.Option("--limit", help="Cap on returned elements.")] = 20,
@@ -817,11 +837,19 @@ async def _do_elements(*, url: str, limit: int, session_kwargs: dict[str, Any]) 
 # ==========================================================================
 
 
-@app.command(help="Diagnose the local environment.")
+@app.command(help="Diagnose the local environment.", epilog=_FEEDBACK_EPILOG)
 def doctor(
     as_json: Annotated[bool, typer.Option("--json", help="Machine-readable output.")] = False,
 ) -> None:
     report = _run_doctor_checks()
+    # #40 Track A: surface the feedback pointers in doctor output so a
+    # stranded agent that only ran `clickcast doctor` still finds the loop.
+    report["feedback"] = {
+        "report_url": REPORT_URL,
+        "schema_url": SCHEMA_URL,
+        "docs_url": DOCS_URL,
+        "diagnostics_command": DIAGNOSTICS_COMMAND,
+    }
     if as_json:
         typer.echo(json.dumps(report, indent=2))
     else:
@@ -829,6 +857,9 @@ def doctor(
             marker = "✔" if check["ok"] else "✗"
             colour = typer.colors.GREEN if check["ok"] else typer.colors.RED
             typer.secho(f"  {marker} {check['name']}: {check['detail']}", fg=colour)
+        typer.echo("")
+        for line in feedback_pointer_lines():
+            typer.secho(line, fg=typer.colors.BLUE)
     if not report["ok"]:
         raise typer.Exit(code=1)
 
@@ -903,7 +934,7 @@ def _find_playwright_engine(engine: str) -> Path | None:
 # ==========================================================================
 
 
-@app.command(help="Read / write persistent defaults.")
+@app.command(help="Read / write persistent defaults.", epilog=_FEEDBACK_EPILOG)
 def config(
     action: Annotated[str, typer.Argument(help="path | get | set | list")],
     key: Annotated[str | None, typer.Argument(help="Config key (for get / set).")] = None,
@@ -941,7 +972,7 @@ def config(
 # ==========================================================================
 
 
-@app.command(help="Install browser engines (wraps `playwright install`).")
+@app.command(help="Install browser engines (wraps `playwright install`).", epilog=_FEEDBACK_EPILOG)
 def install(
     engines: Annotated[
         list[str] | None,
@@ -961,6 +992,85 @@ def install(
     typer.echo(f"→ {' '.join(cmd)}")
     result = subprocess.run(cmd, check=False)
     raise typer.Exit(code=result.returncode)
+
+
+# ==========================================================================
+# clickcast report-bug  (#40 Track B)
+# ==========================================================================
+
+
+@app.command(
+    "report-bug",
+    help="Turn a sidecar into an actionable AI-agent bug report.",
+    epilog=_FEEDBACK_EPILOG,
+)
+def report_bug(
+    sidecar_path: Annotated[
+        Path,
+        typer.Argument(help="Path to a `reel.gif.json` sidecar to inspect."),
+    ],
+    as_json: Annotated[
+        bool,
+        typer.Option(
+            "--json",
+            help="Emit the Track-C payload (see docs/agent-report-schema/v1.json) instead of prose.",
+        ),
+    ] = False,
+    open_url: Annotated[
+        bool,
+        typer.Option(
+            "--open",
+            help="Also launch the prefilled GitHub issue URL via the OS opener.",
+        ),
+    ] = False,
+    redact: Annotated[
+        bool,
+        typer.Option(
+            "--redact/--no-redact",
+            help=(
+                "Sanitize URLs, selectors, and visible text in the sidecar excerpt. "
+                "Default on — safe to share. Turn off only for open-source public targets."
+            ),
+        ),
+    ] = True,
+    note: Annotated[
+        str | None,
+        typer.Option(
+            "--note",
+            help="Free-text environment note (e.g. `behind corporate proxy; TLS interception on`).",
+        ),
+    ] = None,
+) -> None:
+    from clickcast.feedback import load as load_report
+    from clickcast.feedback.report_bug import (
+        _open_url,
+        build_agent_report,
+        prefilled_issue_url,
+        render_diagnostics,
+    )
+
+    if not sidecar_path.exists():
+        _die(f"sidecar not found: {sidecar_path}")
+
+    try:
+        report = load_report(sidecar_path)
+    except Exception as e:
+        _die(f"could not load sidecar {sidecar_path}: {e}")
+
+    payload = build_agent_report(report, redact=redact, environment_note=note)
+    url = prefilled_issue_url(payload)
+
+    if as_json:
+        payload["issue_url"] = url
+        typer.echo(json.dumps(payload, indent=2))
+    else:
+        typer.echo(render_diagnostics(payload))
+        typer.echo("")
+        typer.secho("Open this URL to file (title + body prefilled):", fg=typer.colors.BLUE)
+        typer.echo(url)
+
+    if open_url:
+        _open_url(url)
 
 
 if __name__ == "__main__":

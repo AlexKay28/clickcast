@@ -16,7 +16,7 @@ from clickcast.feedback.models import (
     Report,
     StepReport,
 )
-from clickcast.feedback.pointers import build_feedback
+from clickcast.feedback.pointers import build_feedback, feedback_pointer_lines
 
 __all__ = [
     "DiscoveredElement",
@@ -29,6 +29,7 @@ __all__ = [
     "ReportBuilder",
     "StepReport",
     "build_feedback",
+    "feedback_pointer_lines",
     "load",
     "write",
 ]
