@@ -520,6 +520,20 @@ def run(
     format: FormatOpt = None,
     headful: Headful = False,
     slowmo: Slowmo = 0,
+    url: Annotated[
+        str | None,
+        typer.Option(
+            "--url",
+            help=(
+                "Override the URL of the first `goto` step in the scenario. "
+                "Handy for pointing an existing scenario at a different "
+                "environment (staging, PR preview, localhost) without editing "
+                "the YAML. Wins over `--var URL=...` and any URL baked into "
+                "the scenario. Only rewrites the FIRST goto — later goto "
+                "steps stay put (they may be intra-app navigation)."
+            ),
+        ),
+    ] = None,
     var: Annotated[
         list[str] | None,
         typer.Option("--var", help="Inject a scenario variable as key=value."),
@@ -558,9 +572,29 @@ def run(
     else:
         effective_format = meta.format
 
+    # `--url` rewrites the first `goto` step's URL. Wins over any `--var URL=...`
+    # substitution because it lands after `load()` has already substituted vars.
+    # Only the first goto is touched — subsequent gotos are usually intra-app
+    # navigation from the entry point, which the user still owns.
+    steps = list(scenario.steps)
+    if _is_explicit(ctx, "url") and url is not None:
+        first_goto_idx = -1
+        for i, s in enumerate(steps):
+            if s.action == "goto":
+                first_goto_idx = i
+                break
+        if first_goto_idx < 0:
+            _die(
+                "--url given but scenario has no `goto` step to rewrite; "
+                "add a `- goto: ...` step or drop --url"
+            )
+        # `steps` items are pydantic BaseModels — `model_copy(update=...)` gives
+        # us a new GotoStep with the overridden url and leaves the rest alone.
+        steps[first_goto_idx] = steps[first_goto_idx].model_copy(update={"url": url})
+
     asyncio.run(
         _do_run(
-            scenario=scenario.model_copy(update={"meta": meta}),
+            scenario=scenario.model_copy(update={"meta": meta, "steps": steps}),
             out=final_out,
             format_=effective_format,
             no_sidecar=no_sidecar,

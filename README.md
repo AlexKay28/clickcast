@@ -100,9 +100,17 @@ clickcast run docs/scenarios/spa.yml \
     --var base_url=https://staging.example.com
 ```
 
-Flags: `--out`, `--format`, `--headful`, `--slowmo MS`, `--var key=value` (repeatable — substitute `{{ key }}` inside the scenario), `--no-sidecar`.
+Flags: `--out`, `--format`, `--headful`, `--slowmo MS`, `--url URL` (retarget the first `goto` step — see below), `--var key=value` (repeatable — substitute `{{ key }}` inside the scenario), `--no-sidecar`.
 
 CLI flags override the scenario's `meta:` block.
+
+**Point an existing scenario at a different environment** with `--url` — no YAML edits, no `{{ URL }}` templating:
+
+```bash
+clickcast run tour.yml --url https://staging.example.com/app
+```
+
+`--url` rewrites the first `goto` step's URL and wins over `--var URL=...`. Only the first `goto` is touched — later `goto` steps are usually intra-app navigation from the entry point, so they stay put.
 
 ### `shot <url>`
 
