@@ -32,6 +32,7 @@ from clickcast.core.actions import (
     BaseStep,
     ClickStep,
     DblClickStep,
+    EvaluateStep,
     GotoStep,
     HoverStep,
     PressStep,
@@ -42,6 +43,7 @@ from clickcast.core.actions import (
     WaitForState,
     WaitForStep,
     WaitStep,
+    WheelStep,
 )
 from clickcast.core.session import Engine, Session, WaitArg
 from clickcast.discovery import Element
@@ -232,14 +234,84 @@ class _BaseReel:
 
     def scroll(
         self,
+        by: int | None = None,
         *,
         to: str | None = None,
-        by: int | None = None,
+        selector: str | None = None,
+        dx: int = 0,
         label: str | None = None,
         dwell: float = 0.0,
         optional: bool = False,
     ) -> Any:
-        self._steps.append(ScrollStep(to=to, by=by, label=label, dwell=dwell, optional=optional))
+        """Scroll the window (default) or a container element.
+
+        Positional ``by`` scrolls by pixels; ``selector`` scopes the scroll
+        to that container instead of the window. Use ``to`` (keyword only)
+        to scroll a target element into view.
+        """
+        self._steps.append(
+            ScrollStep(
+                to=to,
+                by=by,
+                selector=selector,
+                dx=dx,
+                label=label,
+                dwell=dwell,
+                optional=optional,
+            )
+        )
+        return self
+
+    def evaluate(
+        self,
+        expression: str,
+        *args: Any,
+        label: str | None = None,
+        dwell: float = 0.0,
+        optional: bool = False,
+    ) -> Any:
+        """Run an arbitrary JavaScript expression in the page context.
+
+        Extra positional args are passed to Playwright as the ``arg`` array,
+        which the JS side can splat, e.g. ``.evaluate("([a, b]) => …", 1, 2)``.
+        """
+        self._steps.append(
+            EvaluateStep(
+                expression=expression,
+                args=list(args),
+                label=label,
+                dwell=dwell,
+                optional=optional,
+            )
+        )
+        return self
+
+    def wheel(
+        self,
+        dy: int,
+        *,
+        selector: str | None = None,
+        dx: int = 0,
+        label: str | None = None,
+        dwell: float = 0.0,
+        optional: bool = False,
+    ) -> Any:
+        """Dispatch a mouse-wheel event.
+
+        Defaults to the window; when ``selector`` is given, the target is
+        hovered first so the wheel event lands on that widget (WebGL canvas
+        zoom, custom horizontal-on-vertical handlers, etc.).
+        """
+        self._steps.append(
+            WheelStep(
+                dy=dy,
+                dx=dx,
+                selector=selector,
+                label=label,
+                dwell=dwell,
+                optional=optional,
+            )
+        )
         return self
 
     def wait(

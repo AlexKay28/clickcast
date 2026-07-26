@@ -78,7 +78,7 @@ class RunResult:
 
 _ACTION_KEYS = {
     "goto", "click", "dblclick", "hover", "type", "press",
-    "select", "scroll", "wait", "wait_for", "screenshot",
+    "select", "scroll", "wait", "wait_for", "screenshot", "evaluate", "wheel",
 }  # fmt: skip
 
 _COMMON_KEYS = {"label", "dwell", "optional", "repeat"}
@@ -191,6 +191,25 @@ def _normalize_step(raw: Any, index: int) -> dict[str, Any]:
         elif not isinstance(value, bool | int | str | type(None)):
             raise ScenarioError(f"step {index}: screenshot value must be a mapping or scalar")
         # bare `screenshot:` (with no options) is fine — nothing to merge
+
+    elif action == "evaluate":
+        if isinstance(value, str):
+            canonical["expression"] = value
+        elif isinstance(value, dict):
+            canonical.update(value)
+        else:
+            raise ScenarioError(
+                f"step {index}: evaluate value must be a JS expression string or mapping"
+            )
+
+    elif action == "wheel":
+        if isinstance(value, int):
+            # Bare `wheel: 120` — vertical delta only.
+            canonical["dy"] = value
+        elif isinstance(value, dict):
+            canonical.update(value)
+        else:
+            raise ScenarioError(f"step {index}: wheel value must be an int (dy) or mapping")
 
     return canonical
 

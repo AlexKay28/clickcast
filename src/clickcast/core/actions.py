@@ -6,7 +6,7 @@ import asyncio
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from playwright.async_api import Locator
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
@@ -54,6 +54,7 @@ __all__ = [
     "BaseStep",
     "ClickStep",
     "DblClickStep",
+    "EvaluateStep",
     "GotoStep",
     "HoverStep",
     "PressStep",
@@ -65,6 +66,7 @@ __all__ = [
     "WaitForState",
     "WaitForStep",
     "WaitStep",
+    "WheelStep",
     "execute",
     "set_dump_elements",
 ]
@@ -137,6 +139,11 @@ class ScrollStep(BaseStep):
     action: Literal["scroll"] = "scroll"
     to: str | None = None
     by: int | None = None
+    # Optional container selector: when set with `by`, scrolls that element
+    # instead of the window. Ignored when `to` is used.
+    selector: str | None = None
+    # Optional horizontal component; only meaningful with `by`.
+    dx: int = 0
 
 
 class WaitStep(BaseStep):
@@ -166,6 +173,23 @@ class ScreenshotStep(BaseStep):
     path: str | None = None
 
 
+class EvaluateStep(BaseStep):
+    """Run an arbitrary JavaScript expression in the page context."""
+
+    action: Literal["evaluate"] = "evaluate"
+    expression: str
+    args: list[Any] = Field(default_factory=list)
+
+
+class WheelStep(BaseStep):
+    """Dispatch a wheel event. Defaults to the window; scoped when `selector` is given."""
+
+    action: Literal["wheel"] = "wheel"
+    dy: int
+    dx: int = 0
+    selector: str | None = None
+
+
 Step = Annotated[
     GotoStep
     | ClickStep
@@ -177,7 +201,9 @@ Step = Annotated[
     | ScrollStep
     | WaitStep
     | WaitForStep
-    | ScreenshotStep,
+    | ScreenshotStep
+    | EvaluateStep
+    | WheelStep,
     Field(discriminator="action"),
 ]
 
@@ -358,9 +384,29 @@ async def execute(step: BaseStep, session: Session) -> ActionResult:
         elif isinstance(step, ScrollStep):
             if step.to is not None:
                 selector = step.to
-                await session.page.locator(step.to).scroll_into_view_if_needed()
+                await session.page.locator(step.to).scroll_into_view_if_needed(
+                    **({"timeout": timeout} if timeout is not None else {})
+                )
             elif step.by is not None:
-                await session.page.mouse.wheel(0, step.by)
+                if step.selector is not None:
+                    # Container-scoped scroll: mutate scrollTop/scrollLeft of
+                    # the given element instead of dispatching a window wheel.
+                    selector = step.selector
+                    loc = session.page.locator(step.selector)
+                    await loc.evaluate(
+                        "(el, [dx, dy]) => { el.scrollTop += dy; el.scrollLeft += dx; }",
+                        [step.dx, step.by],
+                        **({"timeout": timeout} if timeout is not None else {}),
+                    )
+                else:
+                    # No selector → window scroll. Use `window.scrollBy` (not
+                    # `mouse.wheel`) so the whole page moves regardless of
+                    # which element the mouse happens to be over. Wheel dispatch
+                    # would scroll the element under the cursor, which is the
+                    # WheelStep semantics — not ScrollStep's.
+                    await session.page.evaluate(
+                        "([dx, dy]) => window.scrollBy(dx, dy)", [step.dx, step.by]
+                    )
             else:
                 raise ValueError("ScrollStep requires either `to` (selector) or `by` (pixels)")
         elif isinstance(step, WaitStep):
@@ -384,6 +430,27 @@ async def execute(step: BaseStep, session: Session) -> ActionResult:
             await session.screenshot(path=step.path, full_page=step.full_page)
             if step.path is not None:
                 screenshot_path = Path(step.path)
+        elif isinstance(step, EvaluateStep):
+            # Playwright's page.evaluate takes an optional single `arg`; we
+            # pass the list as one JS-side array so users can splat it inside
+            # their expression (e.g. `([a, b]) => ...`).
+            if step.args:
+                await session.page.evaluate(step.expression, step.args)
+            else:
+                await session.page.evaluate(step.expression)
+        elif isinstance(step, WheelStep):
+            if step.selector is not None:
+                selector = step.selector
+                loc = session.page.locator(step.selector)
+                # Hover the target first so the wheel event goes to it, then
+                # dispatch. This mirrors how a user would scroll a widget.
+                if timeout is not None:
+                    await loc.hover(timeout=timeout)
+                else:
+                    await loc.hover()
+                await session.page.mouse.wheel(step.dx, step.dy)
+            else:
+                await session.page.mouse.wheel(step.dx, step.dy)
         else:
             raise TypeError(f"Unknown step type: {type(step).__name__}")
 

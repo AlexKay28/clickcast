@@ -10,11 +10,13 @@ import clickcast
 from clickcast import AsyncReel, Reel, discover
 from clickcast.core.actions import (
     ClickStep,
+    EvaluateStep,
     GotoStep,
     HoverStep,
     ScrollStep,
     TypeStep,
     WaitForStep,
+    WheelStep,
 )
 
 # ------------------------------------------------------------------
@@ -129,6 +131,54 @@ class TestBuilders:
         assert Reel("u", viewport=(800, 600)).build_scenario().meta.viewport == "800x600"
         assert Reel("u", viewport="800x600").build_scenario().meta.viewport == "800x600"
         assert Reel("u").build_scenario().meta.viewport == "1280x800"  # meta default
+
+    def test_evaluate_and_wheel_chain(self) -> None:
+        reel = (
+            Reel("https://x")
+            .evaluate("document.querySelector('.chart').scrollTop = 200")
+            .wheel(120, selector=".canvas-zoom")
+        )
+        e, w = reel.steps
+        assert isinstance(e, EvaluateStep)
+        assert e.expression.endswith("= 200")
+        assert e.args == []
+        assert isinstance(w, WheelStep)
+        assert w.dy == 120
+        assert w.selector == ".canvas-zoom"
+
+    def test_evaluate_with_positional_args(self) -> None:
+        reel = Reel("https://x").evaluate("([a, b]) => a + b", 1, 2)
+        step = reel.steps[0]
+        assert isinstance(step, EvaluateStep)
+        assert step.args == [1, 2]
+
+    def test_wheel_defaults(self) -> None:
+        reel = Reel("https://x").wheel(50)
+        w = reel.steps[0]
+        assert isinstance(w, WheelStep)
+        assert w.dy == 50
+        assert w.dx == 0
+        assert w.selector is None
+
+    def test_scroll_by_positional_and_selector(self) -> None:
+        reel = Reel("https://x").scroll(400, selector=".chart-container", dx=15)
+        step = reel.steps[0]
+        assert isinstance(step, ScrollStep)
+        assert step.by == 400
+        assert step.selector == ".chart-container"
+        assert step.dx == 15
+
+    def test_issue_108_fluent_chain_compiles(self) -> None:
+        """Acceptance criterion from #108."""
+        reel = (
+            Reel("https://x")
+            .goto()
+            .evaluate("document.querySelector('.chart').scrollTop = 200")
+            .scroll(400, selector=".chart-container")
+            .wheel(120, selector=".canvas-zoom")
+        )
+        actions = [s.action for s in reel.steps]
+        assert actions == ["goto", "evaluate", "scroll", "wheel"]
 
 
 # ------------------------------------------------------------------
