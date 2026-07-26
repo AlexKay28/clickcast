@@ -12,6 +12,7 @@ they're usually intra-app navigation from the entry point.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from unittest.mock import patch
 
@@ -207,6 +208,11 @@ steps:
 
     def test_help_mentions_url_flag(self) -> None:
         """`clickcast run --help` surfaces the new `--url` flag."""
-        r = runner.invoke(app, ["run", "--help"])
+        r = runner.invoke(app, ["run", "--help"], env={"NO_COLOR": "1", "TERM": "dumb"})
         assert r.exit_code == 0
-        assert "--url" in r.stdout
+        # Typer's rich renderer wraps long flag lists across lines and injects
+        # ANSI codes on CI even when NO_COLOR is set. Strip ANSI + collapse
+        # whitespace so the check is layout-agnostic.
+        plain = re.sub(r"\x1b\[[0-9;]*m", "", r.stdout)
+        collapsed = re.sub(r"\s+", " ", plain)
+        assert "--url" in collapsed
