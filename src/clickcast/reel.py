@@ -24,7 +24,9 @@ import asyncio
 from pathlib import Path
 from typing import Any, cast
 
-from clickcast.capture import Recorder
+from PIL import Image
+
+from clickcast.capture import FrameRef, Recorder
 from clickcast.core.actions import (
     BaseStep,
     ClickStep,
@@ -297,6 +299,126 @@ def _viewport_list_from_meta(scenario: Scenario) -> list[int] | None:
         return None
 
 
+def _select_frame(frames: list[FrameRef], index: int) -> FrameRef:
+    """Index into a captured-frame list with negative-index semantics.
+
+    Raises IndexError with a helpful message; callers surface it to users.
+    """
+    if not frames:
+        raise IndexError("no frames were captured — did the scenario run?")
+    try:
+        return frames[index]
+    except IndexError as exc:
+        raise IndexError(
+            f"frame index {index} out of range for {len(frames)} captured frames"
+        ) from exc
+
+
+def _last_frame_for_step(frames: list[FrameRef], step_index: int) -> FrameRef:
+    """Pick the LAST sub-frame recorded for a given step index.
+
+    Per the issue, `save_region_at_step` uses the last sub-frame of the step
+    because it reflects the settled post-action state (pre_action captures
+    sub_index=0; post_action captures 1..N).
+    """
+    matching = [f for f in frames if f.step_index == step_index]
+    if not matching:
+        raise IndexError(
+            f"no frames captured for step_index={step_index} "
+            f"(recorded steps: {sorted({f.step_index for f in frames})})"
+        )
+    # Frames are appended in order, and sub_index monotonically increases per
+    # step; still, sort defensively so callers get the true last frame.
+    matching.sort(key=lambda f: f.sub_index)
+    return matching[-1]
+
+
+def _clip_bbox_to_image(
+    bbox: tuple[int, int, int, int],
+    padding: int,
+    image_size: tuple[int, int],
+) -> tuple[int, int, int, int]:
+    """Apply padding, clip to image edges, return (left, top, right, bottom).
+
+    ``image_size`` is the frame PNG's ``(width, height)`` — because the frame
+    is a viewport screenshot, clipping to the image bounds is equivalent to
+    clipping to the viewport.
+    """
+    x, y, w, h = bbox
+    img_w, img_h = image_size
+    left = max(0, x - padding)
+    top = max(0, y - padding)
+    right = min(img_w, x + w + padding)
+    bottom = min(img_h, y + h + padding)
+    if right <= left or bottom <= top:
+        raise ValueError(
+            f"cropped region is empty after clipping: bbox={bbox} padding={padding} "
+            f"image={image_size}"
+        )
+    return (left, top, right, bottom)
+
+
+def _session_kwargs_for_bbox(scenario: Scenario) -> dict[str, Any]:
+    """Mirror :func:`clickcast.scenario.scenario._session_kwargs_from_meta`
+    for the private-URL-revisit session used by save_region. Kept local to
+    avoid depending on a private symbol from another module.
+    """
+    meta = scenario.meta
+    return {
+        "engine": meta.engine,
+        "viewport": meta.viewport,
+        "device": meta.device,
+        "headful": meta.headful,
+        "slowmo": meta.slowmo,
+        "lang": meta.lang,
+        "dark": meta.dark,
+    }
+
+
+async def _bbox_via_fresh_session(
+    scenario: Scenario, url: str, selector: str
+) -> tuple[int, int, int, int]:
+    """Re-navigate to ``url`` in a throwaway session and read the element bbox.
+
+    This is the "simpler path" from the issue — no need to persist per-step
+    layout data because the URL alone is enough to reproduce the DOM for
+    static pages. Callers that need in-page state must persist bboxes at
+    capture time (deferred follow-up).
+    """
+    async with Session(**_session_kwargs_for_bbox(scenario)) as sess:
+        await sess.goto(url, wait="networkidle")
+        try:
+            box = await sess.bbox(selector)
+        except Exception as exc:
+            raise LookupError(
+                f"selector {selector!r} not found at {url!r} — "
+                f"cannot compute region bbox ({exc.__class__.__name__})"
+            ) from exc
+        if box is None:
+            raise LookupError(
+                f"selector {selector!r} matched an element with no layout "
+                f"box (display:none / detached) at {url!r}"
+            )
+        return box
+
+
+def _crop_and_save(
+    frame_path: Path,
+    bbox: tuple[int, int, int, int],
+    padding: int,
+    out: Path,
+    format_: str,
+) -> Path:
+    """Load frame_path, crop to bbox±padding (clipped to image), save."""
+    with Image.open(frame_path) as im:
+        img = im.convert("RGB") if im.mode not in ("RGB", "RGBA") else im.copy()
+    crop_box = _clip_bbox_to_image(bbox, padding, img.size)
+    cropped = img.crop(crop_box)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    cropped.save(out, format=format_.upper())
+    return out
+
+
 def _write_sidecar_from_builder(
     out: Path,
     no_sidecar: bool,
@@ -327,6 +449,72 @@ def _write_sidecar_from_builder(
 
 class AsyncReel(_BaseReel):
     """Async version of :class:`Reel`. Same builders, awaitable ``save()``."""
+
+    async def _run_and_crop(
+        self,
+        selector: str,
+        out: Path,
+        *,
+        padding: int,
+        format_: str,
+        frame_picker: Any,  # Callable[[list[FrameRef]], FrameRef]
+    ) -> Path:
+        scenario = self.build_scenario()
+        with Recorder(fps=scenario.meta.fps, default_dwell=scenario.meta.dwell) as rec:
+            await run_scenario(scenario, recorder=rec)
+            rec.flush()
+            frame = frame_picker(rec.frames)
+            bbox = await _bbox_via_fresh_session(scenario, self._url, selector)
+            return _crop_and_save(frame.path, bbox, padding, out, format_)
+
+    async def save_region(
+        self,
+        selector: str,
+        out: str | Path,
+        *,
+        frame: int = -1,
+        padding: int = 0,
+        format: str = "png",
+    ) -> Path:
+        """Run the scenario, crop a selector-anchored region from one frame.
+
+        - ``frame`` indexes the flat list of captured frames (negative =
+          from end; ``-1`` is the final frame of the last step).
+        - ``padding`` grows the crop rect on all sides, clipped to viewport.
+        - ``format`` is passed to Pillow's ``Image.save``; default ``png``.
+
+        Raises :class:`LookupError` when ``selector`` is not found on the
+        page after re-navigating to the reel's URL (the "simpler" path from
+        #109 — no in-page state is reconstructed).
+        """
+        out_path = Path(out)
+        return await self._run_and_crop(
+            selector,
+            out_path,
+            padding=padding,
+            format_=format,
+            frame_picker=lambda frames: _select_frame(frames, frame),
+        )
+
+    async def save_region_at_step(
+        self,
+        step_index: int,
+        selector: str,
+        out: str | Path,
+        *,
+        padding: int = 0,
+        format: str = "png",
+    ) -> Path:
+        """Same as :meth:`save_region` but picks the LAST sub-frame of
+        ``step_index`` (i.e. the settled post-action state)."""
+        out_path = Path(out)
+        return await self._run_and_crop(
+            selector,
+            out_path,
+            padding=padding,
+            format_=format,
+            frame_picker=lambda frames: _last_frame_for_step(frames, step_index),
+        )
 
     async def save(
         self,
@@ -369,6 +557,14 @@ class AsyncReel(_BaseReel):
 class Reel(_BaseReel):
     """Sync version of :class:`AsyncReel`. Raises if called inside a running loop."""
 
+    def _as_async(self) -> AsyncReel:
+        """Rebuild an :class:`AsyncReel` sharing this reel's builder state."""
+        async_reel = AsyncReel.__new__(AsyncReel)
+        async_reel._url = self._url
+        async_reel._meta = self._meta
+        async_reel._steps = self._steps
+        return async_reel
+
     def save(
         self,
         path: str | Path,
@@ -380,17 +576,45 @@ class Reel(_BaseReel):
     ) -> Path:
         _fail_if_running_loop("Reel.save()")
         # Reuse AsyncReel's implementation to avoid drift.
-        async_reel = AsyncReel.__new__(AsyncReel)
-        async_reel._url = self._url
-        async_reel._meta = self._meta
-        async_reel._steps = self._steps
         return asyncio.run(
-            async_reel.save(
+            self._as_async().save(
                 path,
                 format=format,
                 quality=quality,
                 loop=loop,
                 no_sidecar=no_sidecar,
+            )
+        )
+
+    def save_region(
+        self,
+        selector: str,
+        out: str | Path,
+        *,
+        frame: int = -1,
+        padding: int = 0,
+        format: str = "png",
+    ) -> Path:
+        """Sync counterpart to :meth:`AsyncReel.save_region`."""
+        _fail_if_running_loop("Reel.save_region()")
+        return asyncio.run(
+            self._as_async().save_region(selector, out, frame=frame, padding=padding, format=format)
+        )
+
+    def save_region_at_step(
+        self,
+        step_index: int,
+        selector: str,
+        out: str | Path,
+        *,
+        padding: int = 0,
+        format: str = "png",
+    ) -> Path:
+        """Sync counterpart to :meth:`AsyncReel.save_region_at_step`."""
+        _fail_if_running_loop("Reel.save_region_at_step()")
+        return asyncio.run(
+            self._as_async().save_region_at_step(
+                step_index, selector, out, padding=padding, format=format
             )
         )
 

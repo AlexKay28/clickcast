@@ -158,6 +158,30 @@ class Session:
             type="png",
         )
 
+    async def bbox(self, selector: str) -> tuple[int, int, int, int] | None:
+        """Return ``(x, y, width, height)`` of the first match for ``selector``.
+
+        Returns ``None`` if the element exists but has no layout box (e.g.
+        ``display: none``). Raises whatever Playwright raises when the
+        selector matches nothing (usually :class:`TimeoutError` from
+        ``wait_for``); callers wrap for a friendlier message.
+        """
+        locator = self.page.locator(selector).first
+        # Ensure the element is present before asking for a box; without this
+        # Playwright returns ``None`` for "not attached yet" *and* for
+        # zero-size elements, which we want to distinguish.
+        await locator.wait_for(state="attached")
+        box = await locator.bounding_box()
+        if box is None:
+            return None
+        # ``round`` on a float already returns an int in Python 3.
+        return (
+            round(box["x"]),
+            round(box["y"]),
+            round(box["width"]),
+            round(box["height"]),
+        )
+
     async def close(self) -> None:
         await self.__aexit__(None, None, None)
 
