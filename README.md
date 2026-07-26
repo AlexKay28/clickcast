@@ -100,7 +100,7 @@ clickcast run docs/scenarios/spa.yml \
     --var base_url=https://staging.example.com
 ```
 
-Flags: `--out`, `--format`, `--headful`, `--slowmo MS`, `--var key=value` (repeatable — substitute `{{ key }}` inside the scenario), `--no-sidecar`.
+Flags: `--out`, `--format`, `--headful`, `--slowmo MS`, `--var key=value` (repeatable — substitute `{{ key }}` inside the scenario), `--url URL` (override the scenario's entry-point URL — rewrites the first `goto` step; wins over `--var URL=...` and `meta.url`), `--no-sidecar`.
 
 CLI flags override the scenario's `meta:` block.
 

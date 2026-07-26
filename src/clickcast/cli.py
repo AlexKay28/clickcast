@@ -35,6 +35,7 @@ from clickcast.config import (
 from clickcast.config import (
     load as load_config,
 )
+from clickcast.core.actions import GotoStep
 from clickcast.core.session import Session
 from clickcast.discovery import Element, discover
 from clickcast.encode import encode
@@ -511,6 +512,16 @@ def run(
         list[str] | None,
         typer.Option("--var", help="Inject a scenario variable as key=value."),
     ] = None,
+    url: Annotated[
+        str | None,
+        typer.Option(
+            "--url",
+            help=(
+                "Override the scenario's entry-point URL. Rewrites the FIRST "
+                "goto step. Wins over --var URL=... and scenario meta.url."
+            ),
+        ),
+    ] = None,
     no_sidecar: NoSidecar = False,
     with_feedback: WithFeedback = False,
     verbose: Verbose = 0,
@@ -543,9 +554,27 @@ def run(
     else:
         effective_format = meta.format
 
+    # `--url` override: rewrite the FIRST goto step's URL. Precedence per #115:
+    # --url > --var URL=... > scenario meta.url > scenario steps[0].url.
+    # Only the first goto is rewritten — subsequent goto steps might be
+    # intra-app navigation and shouldn't be repointed.
+    steps = list(scenario.steps)
+    if _is_explicit(ctx, "url") and url is not None:
+        first_goto_idx: int | None = next(
+            (i for i, s in enumerate(steps) if isinstance(s, GotoStep)),
+            None,
+        )
+        if first_goto_idx is None:
+            _die(
+                "scenario has no goto step — --url has nothing to override. "
+                "Add a `- goto: <url>` step or drop --url."
+            )
+            return  # `_die` raises; hint for the type-checker
+        steps[first_goto_idx] = steps[first_goto_idx].model_copy(update={"url": url})
+
     asyncio.run(
         _do_run(
-            scenario=scenario.model_copy(update={"meta": meta}),
+            scenario=scenario.model_copy(update={"meta": meta, "steps": steps}),
             out=final_out,
             format_=effective_format,
             no_sidecar=no_sidecar,

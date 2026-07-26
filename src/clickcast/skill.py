@@ -111,6 +111,10 @@ COMMAND_BRIEFS: tuple[CommandBrief, ...] = (
         key_flags=(
             FlagBrief("--out PATH", "override the scenario's `meta.out`"),
             FlagBrief("--var key=value", "inject a scenario variable"),
+            FlagBrief(
+                "--url URL",
+                "override the entry-point URL — rewrites the first goto step",
+            ),
             FlagBrief("--with-feedback", "attach the AI-agent feedback pointer block"),
         ),
         example="clickcast run tour.yml --with-feedback",
