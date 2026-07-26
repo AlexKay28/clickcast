@@ -7,18 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+## [0.2.0] — 2026-07-26
+
+Massive AI-agent-experience release. Three new CLI subcommands
+(`report-bug`, `skill`, `assertions`), six new `Reel` methods
+(`evaluate`, `wheel`, `wait_for`, `save_region`, `assertions`,
+`serve_dir`), three new scenario step types (`evaluate`, `wheel`,
+`wait_for`), the AI-agent feedback loop end-to-end, and a
+security-tagged sidecar redaction feature. One flagged breaking change
+(`AnnotateConfig` regrouped into sub-dataclasses); everything else is
+additive.
+
 ### Added
-- **`Reel.serve_dir(path)` + `clickcast.serving.serve_directory`** (closes
-  [#113]). Context manager that serves a local directory over HTTP for the
-  duration of a `with` block — QoL for the pre-push iteration loop so
-  ad-hoc `python3 -m http.server` invocations don't leak past your shell
-  and collide on the next run. Uses `http.server.ThreadingHTTPServer`
-  (parallel browser requests don't queue), auto-picks a free port when
-  `port=None`, binds `127.0.0.1` only by default (opt-in `0.0.0.0` for
-  LAN exposure), tears the socket down on context exit. Standalone helper
-  is importable directly (`from clickcast.serving import serve_directory`);
-  `Reel.serve_dir` is the classmethod wrapper for callers already reaching
-  for `Reel`.
+- **`Reel.evaluate()`, `Reel.wheel()`, container-scoped `Reel.scroll()`**
+  (closes [#108]). Three long-missing fluent-API primitives:
+  `evaluate(js_expression, *args)` for arbitrary JS in the page;
+  `wheel(dy, *, dx=0, selector=None)` for wheel-driven UIs; and extending
+  `scroll` with an optional `selector` so container-scoped scroll works.
+  New `EvaluateStep` / `WheelStep` in `actions.py`; scenario YAML gains
+  matching step kinds.
+- **`Reel.wait_for(selector, state='stable', ...)` + `goto(retries=N)`**
+  (closes [#111]). `state='stable'` polls the element's bounding box every
+  50ms and returns once it hasn't moved for `quiet_ms` — replaces the
+  `dwell: 3.0`/`dwell: 5.0` guessing. `visible`/`hidden`/`attached`/
+  `detached` delegate to Playwright's `locator.wait_for(state=...)`.
+  `GotoStep.retries` wraps `session.goto` in a retry loop on
+  `TimeoutError` with exponential backoff — smooths over cold-serverless
+  first-load flakes.
+- **`Reel.assertions()` + `assertions_diff()` + `clickcast assertions`
+  CLI** (closes [#112]). CI-stable subset of the sidecar (same input →
+  byte-identical output). `clickcast assertions <sidecar.json> [--baseline
+  PATH] [--json]` exits nonzero on drift so `.github/workflows/*.yml`
+  regression recipes collapse from ~50 lines to ~2. New
+  `docs/assertions-schema/v1.json` versioned contract.
+- **`Reel.serve_dir(path)` context manager + `serve_directory()` helper**
+  (closes [#113]). Own the local static server's lifetime with a `with`
+  block instead of `python3 -m http.server 8091 &`-and-hope. Loopback-only
+  bind, `ThreadingHTTPServer`, auto-picks a free port. New
+  `clickcast.serving` module.
+- **`clickcast run --url <URL>` first-class flag** (closes [#115]).
+  Overrides the first `goto` step's URL after scenario load. Precedence:
+  `--url` > `--var URL=...` > scenario `meta.url` > `steps[0].url`.
+- **Selector-not-found diagnostics with candidate hints** (closes [#114]).
+  When a `click`/`hover`/`type`/`dblclick` selector resolves to 0
+  elements, the executor scores every discovered element by role match
+  (+0.4), name similarity (+0.6 × SequenceMatcher ratio), and an
+  exact-name-match bonus (+0.5); top-5 attached to the step's `error`
+  field. `--dump-elements` on `auto` / `run` echoes the full pool to
+  stderr. New `clickcast.discovery.hints` module.
+- **Sidecar URL / query-string redaction** (closes [#110]).
+  `Reel(redact_patterns=[...], strip_query_strings=False)` (also
+  `--redact-pattern` / `--strip-query-strings` on `auto` and `run`). Fixes
+  a token-leak footgun for Vercel/Cloudflare/Netlify auth-bypass tokens
+  baked into recorded URLs. Patterns applied to every string in the
+  sidecar; matches replaced with `«redacted»`.
 - **`Reel.save_region(selector, out, ...)` + `save_region_at_step`** (closes
   [#109]). Element-anchored crops from any captured frame — no more
   hand-picked pixel coords that rot with every layout tweak. Runs the
@@ -305,6 +348,7 @@ Initial public release.
   × Python 3.10–3.13) → PyPI → GitHub release, all via Trusted Publishing.
 
 [Unreleased]: https://github.com/AlexKay28/clickcast/compare/v0.1.3...HEAD
+[0.2.0]: https://github.com/AlexKay28/clickcast/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/AlexKay28/clickcast/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/AlexKay28/clickcast/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/AlexKay28/clickcast/compare/v0.1.0...v0.1.1
@@ -344,4 +388,10 @@ Initial public release.
 [#40]: https://github.com/AlexKay28/clickcast/issues/40
 [#103]: https://github.com/AlexKay28/clickcast/issues/103
 [#109]: https://github.com/AlexKay28/clickcast/issues/109
+[#108]: https://github.com/AlexKay28/clickcast/issues/108
+[#110]: https://github.com/AlexKay28/clickcast/issues/110
+[#111]: https://github.com/AlexKay28/clickcast/issues/111
+[#112]: https://github.com/AlexKay28/clickcast/issues/112
 [#113]: https://github.com/AlexKay28/clickcast/issues/113
+[#114]: https://github.com/AlexKay28/clickcast/issues/114
+[#115]: https://github.com/AlexKay28/clickcast/issues/115
