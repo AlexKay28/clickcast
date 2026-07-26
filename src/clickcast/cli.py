@@ -11,6 +11,7 @@ import asyncio
 import inspect
 import json
 import logging
+import re
 import shutil
 import subprocess
 import sys
@@ -136,6 +137,31 @@ WithFeedback = Annotated[
         ),
     ),
 ]
+# #110 — sidecar token-leak footgun fix. Repeatable regex flag scrubs matches
+# with «redacted»; the boolean flag drops query strings entirely from URL fields.
+RedactPattern = Annotated[
+    list[str] | None,
+    typer.Option(
+        "--redact-pattern",
+        help=(
+            "Regex applied to every string in the sidecar; matches are replaced "
+            "with «redacted». Repeatable. Use to blot out auth-bypass tokens "
+            "leaked into recorded URLs (Vercel / Cloudflare / Netlify previews). "
+            "Example: --redact-pattern 'x-vercel-protection-bypass=[^&]+'."
+        ),
+    ),
+]
+StripQueryStrings = Annotated[
+    bool,
+    typer.Option(
+        "--strip-query-strings",
+        help=(
+            "Drop the query string from every recorded URL in the sidecar. "
+            "Coarse but safe default for auth-bypassed preview flows — turn on "
+            "when you don't need query params to reproduce the tour."
+        ),
+    ),
+]
 Fps = Annotated[int, typer.Option("--fps", help="Frames per second.")]
 Verbose = Annotated[
     int,
@@ -215,13 +241,37 @@ def _write_sidecar(
     media: Media,
     *,
     with_feedback: bool = False,
+    redact_patterns: list[re.Pattern[str]] | None = None,
+    strip_query_strings: bool = False,
 ) -> Path | None:
     if no_sidecar or builder is None:
         return None
     sidecar = out.with_suffix(out.suffix + ".json")
     report = builder.build(media)
-    write_report(report, sidecar, with_feedback=with_feedback)
+    write_report(
+        report,
+        sidecar,
+        with_feedback=with_feedback,
+        redact_patterns=redact_patterns,
+        strip_query_strings=strip_query_strings,
+    )
     return sidecar
+
+
+def _compile_redact_patterns(raw: list[str] | None) -> list[re.Pattern[str]]:
+    """Compile ``--redact-pattern`` values, dying with a user-friendly error
+    when a pattern doesn't parse. Returns an empty list when nothing was passed
+    so callers can pass it through unconditionally.
+    """
+    if not raw:
+        return []
+    compiled: list[re.Pattern[str]] = []
+    for src in raw:
+        try:
+            compiled.append(re.compile(src))
+        except re.error as e:
+            raise typer.BadParameter(f"invalid --redact-pattern {src!r}: {e}") from e
+    return compiled
 
 
 # ==========================================================================
@@ -413,6 +463,8 @@ def auto(
     loop: Loop = 0,
     no_sidecar: NoSidecar = False,
     with_feedback: WithFeedback = False,
+    redact_pattern: RedactPattern = None,
+    strip_query_strings: StripQueryStrings = False,
     verbose: Verbose = 0,
     dump_elements: DumpElements = False,
 ) -> None:
@@ -422,6 +474,7 @@ def auto(
         _die(f"--traversal must be 'dfs' or 'bfs', got {traversal!r}")
     if pace not in _PACE_TABLE:
         _die(f"--pace must be one of {sorted(_PACE_TABLE)}, got {pace!r}")
+    compiled_redacts = _compile_redact_patterns(redact_pattern)
 
     # Pace presets set fps + dwell defaults; explicit CLI flags still win.
     # `_is_explicit` returns True only when the user typed --fps / --dwell —
@@ -452,6 +505,8 @@ def auto(
             loop=loop,
             no_sidecar=no_sidecar,
             with_feedback=with_feedback,
+            redact_patterns=compiled_redacts,
+            strip_query_strings=strip_query_strings,
             zoom_on_click_factor=(zoom_on_click if zoom_on_click > 1.0 else None),
         )
     )
@@ -479,6 +534,8 @@ async def _do_auto(
     loop: int,
     no_sidecar: bool,
     with_feedback: bool = False,
+    redact_patterns: list[re.Pattern[str]] | None = None,
+    strip_query_strings: bool = False,
     zoom_on_click_factor: float | None = None,
 ) -> None:
     await run_tour(
@@ -500,6 +557,8 @@ async def _do_auto(
             loop=loop,
             no_sidecar=no_sidecar,
             with_feedback=with_feedback,
+            redact_patterns=list(redact_patterns or []),
+            strip_query_strings=strip_query_strings,
             zoom_on_click_factor=zoom_on_click_factor,
         )
     )
@@ -540,10 +599,13 @@ def run(
     ] = None,
     no_sidecar: NoSidecar = False,
     with_feedback: WithFeedback = False,
+    redact_pattern: RedactPattern = None,
+    strip_query_strings: StripQueryStrings = False,
     verbose: Verbose = 0,
     dump_elements: DumpElements = False,
 ) -> None:
     set_dump_elements(dump_elements)
+    compiled_redacts = _compile_redact_patterns(redact_pattern)
     variables: dict[str, str] = {}
     for pair in var or []:
         if "=" not in pair:
@@ -599,6 +661,8 @@ def run(
             format_=effective_format,
             no_sidecar=no_sidecar,
             with_feedback=with_feedback,
+            redact_patterns=compiled_redacts,
+            strip_query_strings=strip_query_strings,
         )
     )
 
@@ -662,6 +726,8 @@ async def _do_run(
     format_: str | None,
     no_sidecar: bool,
     with_feedback: bool = False,
+    redact_patterns: list[re.Pattern[str]] | None = None,
+    strip_query_strings: bool = False,
 ) -> None:
     builder: ReportBuilder | None = None
     if not no_sidecar:
@@ -692,7 +758,15 @@ async def _do_run(
     if builder is not None and not result.ok:
         builder.add_warning(f"scenario failed at step {result.failed_at}")
     media = _make_media(enc, scenario.meta.fps)
-    sidecar = _write_sidecar(out_path, no_sidecar, builder, media, with_feedback=with_feedback)
+    sidecar = _write_sidecar(
+        out_path,
+        no_sidecar,
+        builder,
+        media,
+        with_feedback=with_feedback,
+        redact_patterns=redact_patterns,
+        strip_query_strings=strip_query_strings,
+    )
     typer.echo(f"✔ {enc.path} ({enc.size_bytes // 1024} KB, {enc.frame_count} frames)")
     if not result.ok:
         failed_at = result.failed_at

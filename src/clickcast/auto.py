@@ -24,6 +24,7 @@ Design notes:
 from __future__ import annotations
 
 import logging
+import re
 import time
 from collections import deque
 from dataclasses import dataclass, field
@@ -130,6 +131,11 @@ class AutoConfig:
     # Attach the machine-discoverable feedback pointer block to the sidecar.
     # Opt-in — nothing goes on the sidecar unless the caller asks for it. See #40.
     with_feedback: bool = False
+    # Sidecar redaction (#110). ``redact_patterns`` blot out matched substrings
+    # with «redacted» across every string in the payload. ``strip_query_strings``
+    # drops the query string from URL fields entirely. Both no-op when unset.
+    redact_patterns: list[re.Pattern[str]] = field(default_factory=list)
+    strip_query_strings: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -449,7 +455,13 @@ async def run_tour(cfg: AutoConfig) -> None:
             )
             media = _make_media(enc, cfg.fps)
             sidecar = _write_sidecar(
-                out_path, cfg.no_sidecar, builder, media, with_feedback=cfg.with_feedback
+                out_path,
+                cfg.no_sidecar,
+                builder,
+                media,
+                with_feedback=cfg.with_feedback,
+                redact_patterns=cfg.redact_patterns,
+                strip_query_strings=cfg.strip_query_strings,
             )
 
     tour_elapsed = time.monotonic() - tour_started
@@ -490,10 +502,18 @@ def _write_sidecar(
     media: Media,
     *,
     with_feedback: bool = False,
+    redact_patterns: list[re.Pattern[str]] | None = None,
+    strip_query_strings: bool = False,
 ) -> Path | None:
     if no_sidecar or builder is None:
         return None
     sidecar = out.with_suffix(out.suffix + ".json")
     report = builder.build(media)
-    write_report(report, sidecar, with_feedback=with_feedback)
+    write_report(
+        report,
+        sidecar,
+        with_feedback=with_feedback,
+        redact_patterns=redact_patterns,
+        strip_query_strings=strip_query_strings,
+    )
     return sidecar

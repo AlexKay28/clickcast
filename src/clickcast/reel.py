@@ -21,6 +21,7 @@ The API is a thin, chainable wrapper around the shipped subsystems:
 from __future__ import annotations
 
 import asyncio
+import re
 from pathlib import Path
 from typing import Any, cast
 
@@ -76,6 +77,8 @@ class _BaseReel:
         dark: bool = False,
         fps: int = 12,
         dwell: float = 1.0,
+        redact_patterns: list[re.Pattern[str]] | None = None,
+        strip_query_strings: bool = False,
     ) -> None:
         self._url = url
         vp = self._viewport_str(viewport)
@@ -96,6 +99,12 @@ class _BaseReel:
         # Populated by save() so post-run consumers (assertions(), test
         # harnesses) can inspect the finalized Report without re-executing.
         self._last_report: Report | None = None
+        # Sidecar redaction (#110) — patterns applied at save time to any
+        # string in the report, matches replaced with «redacted». Query-string
+        # stripping is a coarse-but-safe default for preview-URL flows behind
+        # auth-bypass tokens. Both no-op when unset.
+        self._redact_patterns: list[re.Pattern[str]] = list(redact_patterns or [])
+        self._strip_query_strings: bool = strip_query_strings
 
     @staticmethod
     def _viewport_str(v: str | tuple[int, int] | None) -> str | None:
@@ -501,10 +510,10 @@ def _build_report_if_needed(
 ) -> Report | None:
     """Build the finalized Report from a builder + encoder result.
 
-    Split out from :func:`_write_sidecar_from_builder` so callers that
-    want to inspect the report post-run (``Reel.assertions()``) can share
-    the same finalization path — ``ReportBuilder.build`` detaches
-    listeners and must run at most once per builder.
+    Split so callers that want to inspect the report post-run
+    (``Reel.assertions()``) can share the same finalization path —
+    ``ReportBuilder.build`` detaches listeners and must run at most
+    once per builder.
     """
     if builder is None:
         return None
@@ -523,11 +532,19 @@ def _write_sidecar_from_report(
     out: Path,
     no_sidecar: bool,
     report: Report | None,
+    *,
+    redact_patterns: list[re.Pattern[str]] | None = None,
+    strip_query_strings: bool = False,
 ) -> Path | None:
     if no_sidecar or report is None:
         return None
     sidecar = out.with_suffix(out.suffix + ".json")
-    write_report(report, sidecar)
+    write_report(
+        report,
+        sidecar,
+        redact_patterns=redact_patterns,
+        strip_query_strings=strip_query_strings,
+    )
     return sidecar
 
 
@@ -637,7 +654,13 @@ class AsyncReel(_BaseReel):
             builder.add_warning(f"scenario failed at step {result.failed_at}")
         report = _build_report_if_needed(builder, enc, scenario.meta.fps)
         self._last_report = report
-        _write_sidecar_from_report(out, no_sidecar, report)
+        _write_sidecar_from_report(
+            out,
+            no_sidecar,
+            report,
+            redact_patterns=self._redact_patterns,
+            strip_query_strings=self._strip_query_strings,
+        )
         return enc.path
 
 
@@ -655,6 +678,8 @@ class Reel(_BaseReel):
         async_reel._url = self._url
         async_reel._meta = self._meta
         async_reel._steps = self._steps
+        async_reel._redact_patterns = self._redact_patterns
+        async_reel._strip_query_strings = self._strip_query_strings
         return async_reel
 
     def save(
