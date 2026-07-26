@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`Reel.save_region(selector, out, ...)` + `save_region_at_step`** (closes
+  [#109]). Element-anchored crops from any captured frame — no more
+  hand-picked pixel coords that rot with every layout tweak. Runs the
+  scenario, re-navigates to the reel's URL in a throwaway Session to read
+  the current bbox, then crops the target frame's PNG (bbox ± padding,
+  clipped to viewport) and writes it. Signature:
+  ``save_region(selector, out, *, frame=-1, padding=0, format='png')``;
+  ``save_region_at_step(step_index, selector, out, ...)`` picks the last
+  sub-frame of the given step. Missing selectors raise ``LookupError``
+  with the URL + selector for actionable debugging. Available on both
+  ``Reel`` (sync) and ``AsyncReel`` (async). Adds ``Session.bbox(selector)``
+  helper as a byproduct.
 - **`clickcast skill`** (closes [#103]). New subcommand that prints a single
   self-contained AI-friendly brief covering every command, when to use each,
   its key flags with examples, the machine-contract URLs (reel sidecar +
@@ -320,3 +332,4 @@ Initial public release.
 [#75]: https://github.com/AlexKay28/clickcast/issues/75
 [#40]: https://github.com/AlexKay28/clickcast/issues/40
 [#103]: https://github.com/AlexKay28/clickcast/issues/103
+[#109]: https://github.com/AlexKay28/clickcast/issues/109
