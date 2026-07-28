@@ -1,0 +1,352 @@
+{
+  "schema_version": 1,
+  "clickcast_version": "0.2.0",
+  "url": "https://react.dev/",
+  "engine": "chromium",
+  "viewport": [
+    1280,
+    800
+  ],
+  "started_at": "2026-07-28T17:13:19.608369+00:00",
+  "duration_s": 28.154074728488922,
+  "media": {
+    "path": "/tmp/human-demo/auto-v07.gif",
+    "format": "gif",
+    "size_bytes": 1001479,
+    "frame_count": 77,
+    "duration_s": 9.625,
+    "fps": 8
+  },
+  "discovered_elements": [
+    {
+      "selector": "role=link[name=\"React\"]",
+      "role": "link",
+      "text": "React",
+      "bbox": [
+        16,
+        8,
+        48,
+        48
+      ],
+      "score": 3,
+      "source": "dom-heuristic"
+    },
+    {
+      "selector": "role=button[name=\"Use Dark Mode\"]",
+      "role": "button",
+      "text": "Use Dark Mode",
+      "bbox": [
+        1116,
+        8,
+        48,
+        48
+      ],
+      "score": 3,
+      "source": "dom-heuristic"
+    },
+    {
+      "selector": "role=link[name=\"Translations\"]",
+      "role": "link",
+      "text": "Translations",
+      "bbox": [
+        1164,
+        8,
+        48,
+        48
+      ],
+      "score": 3,
+      "source": "dom-heuristic"
+    },
+    {
+      "selector": "role=link[name=\"Open on GitHub\"]",
+      "role": "link",
+      "text": "Open on GitHub",
+      "bbox": [
+        1212,
+        8,
+        48,
+        48
+      ],
+      "score": 3,
+      "source": "dom-heuristic"
+    },
+    {
+      "selector": "role=link[name=\"v19.2\"]",
+      "role": "link",
+      "text": "v19.2",
+      "bbox": [
+        68,
+        9,
+        32,
+        46
+      ],
+      "score": 3,
+      "source": "dom-heuristic"
+    }
+  ],
+  "steps": [
+    {
+      "index": 0,
+      "action": "goto",
+      "args": {
+        "timeout_ms": null,
+        "url": "https://react.dev/",
+        "wait": "networkidle",
+        "retries": 0
+      },
+      "status": "ok",
+      "duration_ms": 2271.7416249215603,
+      "frames": [
+        "frame-0000-001.png",
+        "frame-0000-002.png",
+        "frame-0000-003.png",
+        "frame-0000-004.png",
+        "frame-0000-005.png",
+        "frame-0000-006.png",
+        "frame-0000-007.png",
+        "frame-0000-008.png",
+        "frame-0000-009.png",
+        "frame-0000-010.png"
+      ],
+      "label": null,
+      "cursor_xy": null,
+      "page_state": {
+        "title": "React",
+        "url_after": "https://react.dev/",
+        "console_errors": [],
+        "page_errors": [],
+        "network_failed": [
+          "https://region1.google-analytics.com/g/collect?v=2&tid=G-B1E83PJ3RT&gtm=45je67r0v9119811439za200zd9119811439&_p=1785258799810&gcd=13l3lPl2l1l1&npa=1&dma_cps=a&dma=1&are=1&cid=925316326.1785258800&frm=0&ngs=1&pscdl=noapi&rcb=18&sr=1280x800&uaa=x86&uab=64&uafvl=HeadlessChrome%3B149.0.7827.55%7CChromium%3B149.0.7827.55%7CNot)A%253BBrand%3B24.0.0.0&uam=&uamb=0&uap=Linux&uapv=&uaw=0&ul=en-us&_s=1&tag_exp=115938465~115938468~118897920~118897930~119896802&sid=1785258800&sct=1&seg=0&dl=https%3A%2F%2Freact.dev%2F&dt=React&en=page_view&_fv=1&_nsi=1&_ss=1&_ee=1&tfd=390"
+        ]
+      },
+      "error": null
+    },
+    {
+      "index": 1,
+      "action": "click",
+      "args": {
+        "timeout_ms": 15000,
+        "selector": "role=link[name=\"React\"]"
+      },
+      "status": "ok",
+      "duration_ms": 1327.755754813552,
+      "frames": [
+        "frame-0001-001.png",
+        "frame-0001-002.png",
+        "frame-0001-003.png",
+        "frame-0001-004.png",
+        "frame-0001-005.png",
+        "frame-0001-006.png",
+        "frame-0001-007.png",
+        "frame-0001-008.png",
+        "frame-0001-009.png",
+        "frame-0001-010.png"
+      ],
+      "label": "React",
+      "cursor_xy": [
+        40,
+        32
+      ],
+      "page_state": {
+        "title": "React",
+        "url_after": "https://react.dev/",
+        "console_errors": [],
+        "page_errors": [],
+        "network_failed": [
+          "https://react.dev/_next/data/WQ7qjXrq2XtGI7r5ZjD6d/index.json"
+        ]
+      },
+      "error": null
+    },
+    {
+      "index": 2,
+      "action": "click",
+      "args": {
+        "timeout_ms": 15000,
+        "selector": "role=button[name=\"Use Dark Mode\"]"
+      },
+      "status": "ok",
+      "duration_ms": 1314.1933660954237,
+      "frames": [
+        "frame-0002-001.png",
+        "frame-0002-002.png",
+        "frame-0002-003.png",
+        "frame-0002-004.png",
+        "frame-0002-005.png",
+        "frame-0002-006.png",
+        "frame-0002-007.png",
+        "frame-0002-008.png",
+        "frame-0002-009.png",
+        "frame-0002-010.png"
+      ],
+      "label": "Use Dark Mode",
+      "cursor_xy": [
+        1140,
+        32
+      ],
+      "page_state": {
+        "title": "React",
+        "url_after": "https://react.dev/",
+        "console_errors": [],
+        "page_errors": [],
+        "network_failed": []
+      },
+      "error": null
+    },
+    {
+      "index": 3,
+      "action": "click",
+      "args": {
+        "timeout_ms": 15000,
+        "selector": "role=link[name=\"Translations\"]"
+      },
+      "status": "ok",
+      "duration_ms": 1307.967210188508,
+      "frames": [
+        "frame-0003-001.png",
+        "frame-0003-002.png",
+        "frame-0003-003.png",
+        "frame-0003-004.png",
+        "frame-0003-005.png",
+        "frame-0003-006.png",
+        "frame-0003-007.png",
+        "frame-0003-008.png",
+        "frame-0003-009.png",
+        "frame-0003-010.png"
+      ],
+      "label": "Translations",
+      "cursor_xy": [
+        1188,
+        32
+      ],
+      "page_state": {
+        "title": "Translations \u2013 React",
+        "url_after": "https://react.dev/community/translations",
+        "console_errors": [],
+        "page_errors": [],
+        "network_failed": [
+          "https://react.dev/_next/data/WQ7qjXrq2XtGI7r5ZjD6d/community/translations.json?markdownPath=community&markdownPath=translations",
+          "https://region1.google-analytics.com/g/collect?v=2&tid=G-B1E83PJ3RT&gtm=45je67r0v9119811439za200zd9119811439&_p=1785258799810&gcd=13l3lPl2l1l1&npa=1&dma_cps=a&dma=1&_eu=AAAAAAQ&are=1&cid=925316326.1785258800&frm=0&ngs=1&pscdl=noapi&rcb=18&sr=1280x800&uaa=x86&uab=64&uafvl=HeadlessChrome%3B149.0.7827.55%7CChromium%3B149.0.7827.55%7CNot)A%253BBrand%3B24.0.0.0&uam=&uamb=0&uap=Linux&uapv=&uaw=0&ul=en-us&tag_exp=115938465~115938468~118897920~118897930~119896802&sid=1785258800&sct=1&seg=0&dl=https%3A%2F%2Freact.dev%2F&dt=React&_s=2&tfd=13034"
+        ]
+      },
+      "error": null
+    },
+    {
+      "index": 4,
+      "action": "click",
+      "args": {
+        "timeout_ms": 15000,
+        "selector": "role=link[name=\"Open on GitHub\"]"
+      },
+      "status": "ok",
+      "duration_ms": 1294.289581477642,
+      "frames": [
+        "frame-0004-001.png",
+        "frame-0004-002.png",
+        "frame-0004-003.png",
+        "frame-0004-004.png",
+        "frame-0004-005.png",
+        "frame-0004-006.png",
+        "frame-0004-007.png",
+        "frame-0004-008.png",
+        "frame-0004-009.png",
+        "frame-0004-010.png"
+      ],
+      "label": "Open on GitHub",
+      "cursor_xy": [
+        1236,
+        32
+      ],
+      "page_state": {
+        "title": "React",
+        "url_after": "https://react.dev/",
+        "console_errors": [],
+        "page_errors": [],
+        "network_failed": [
+          "https://react.dev/_next/data/WQ7qjXrq2XtGI7r5ZjD6d/index.json"
+        ]
+      },
+      "error": null
+    },
+    {
+      "index": 5,
+      "action": "click",
+      "args": {
+        "timeout_ms": 15000,
+        "selector": "role=link[name=\"v19.2\"]"
+      },
+      "status": "ok",
+      "duration_ms": 1315.1465840637684,
+      "frames": [
+        "frame-0005-001.png",
+        "frame-0005-002.png",
+        "frame-0005-003.png",
+        "frame-0005-004.png",
+        "frame-0005-005.png",
+        "frame-0005-006.png",
+        "frame-0005-007.png",
+        "frame-0005-008.png",
+        "frame-0005-009.png",
+        "frame-0005-010.png"
+      ],
+      "label": "v19.2",
+      "cursor_xy": [
+        84,
+        32
+      ],
+      "page_state": {
+        "title": "React Versions \u2013 React",
+        "url_after": "https://react.dev/versions",
+        "console_errors": [],
+        "page_errors": [],
+        "network_failed": [
+          "https://react.dev/_next/data/WQ7qjXrq2XtGI7r5ZjD6d/versions.json?markdownPath=versions"
+        ]
+      },
+      "error": null
+    },
+    {
+      "index": 6,
+      "action": "scroll",
+      "args": {
+        "timeout_ms": null,
+        "to": null,
+        "by": 600,
+        "selector": null,
+        "dx": 0
+      },
+      "status": "ok",
+      "duration_ms": 1206.209920346737,
+      "frames": [
+        "frame-0006-001.png",
+        "frame-0006-002.png",
+        "frame-0006-003.png",
+        "frame-0006-004.png",
+        "frame-0006-005.png",
+        "frame-0006-006.png",
+        "frame-0006-007.png",
+        "frame-0006-008.png",
+        "frame-0006-009.png",
+        "frame-0006-010.png"
+      ],
+      "label": null,
+      "cursor_xy": null,
+      "page_state": {
+        "title": "React",
+        "url_after": "https://react.dev/",
+        "console_errors": [],
+        "page_errors": [],
+        "network_failed": [
+          "https://www.youtube.com/api/stats/atr?ns=yt&el=embedded&cpn=zLQ8orppjL1TNuhe&ver=2&cmt=0&fs=0&rt=1.083&euri=https%3A%2F%2Freact.dev%2F&lact=1124&cl=954349858&mos=0&volume=100&cbr=HeadlessChrome&cbrver=149.0.7827.55&c=WEB_EMBEDDED_PLAYER&cver=2.20260727.01.00&cplayer=UNIPLAYER&cos=X11&cplatform=DESKTOP&epm=1&hl=de_DE&cr=DE&len=4751&fexp=v1%2C24004644%2C27058999%2C34656%2C124674%2C117689%2C9252%2C3479%2C13030%2C23206%2C100702%2C15105%2C25059%2C4174%2C30447%2C18705%2C21437%2C4571%2C29103%2C9404%2C23826%2C9500%2C1840%2C18114%2C27601%2C13160%2C56551%2C34313%2C9181%2C15416%2C82%2C29960%2C7525%2C366%2C5666%2C1168%2C372%2C7759%2C16452%2C172%2C8868%2C3475%2C5353%2C11462%2C927%2C2249%2C115%2C72%2C86%2C6416%2C5393%2C6573%2C6478%2C756%2C17223%2C13330%2C3895%2C4186%2C1977%2C904%2C653%2C2%2C7891%2C1295%2C6288%2C4458%2C2%2C3%2C16445%2C1455%2C4313%2C6019%2C783%2C15382%2C3490&muted=0&docid=XxVg_s8xAms",
+          "https://www.youtube.com/youtubei/v1/log_event?alt=json",
+          "https://react.dev/_next/data/WQ7qjXrq2XtGI7r5ZjD6d/index.json",
+          "https://region1.google-analytics.com/g/collect?v=2&tid=G-B1E83PJ3RT&gtm=45je67r0v9119811439za200zd9119811439&_p=1785258799810&gcd=13l3lPl2l1l1&npa=1&dma_cps=a&dma=1&_eu=AAAAAAQ&are=1&cid=925316326.1785258800&frm=0&ngs=1&pscdl=noapi&rcb=18&sr=1280x800&uaa=x86&uab=64&uafvl=HeadlessChrome%3B149.0.7827.55%7CChromium%3B149.0.7827.55%7CNot)A%253BBrand%3B24.0.0.0&uam=&uamb=0&uap=Linux&uapv=&uaw=0&ul=en-us&tag_exp=115938465~115938468~118897920~118897930~119896802&sid=1785258800&sct=1&seg=1&dl=https%3A%2F%2Freact.dev%2F&dt=React&_s=3&tfd=18164"
+        ]
+      },
+      "error": null
+    }
+  ],
+  "warnings": [],
+  "errors": [],
+  "feedback": null
+}

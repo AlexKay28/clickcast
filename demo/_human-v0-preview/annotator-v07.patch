@@ -1,0 +1,161 @@
+diff --git a/src/clickcast/annotate/annotator.py b/src/clickcast/annotate/annotator.py
+index 5776c3e..8680ccc 100644
+--- a/src/clickcast/annotate/annotator.py
++++ b/src/clickcast/annotate/annotator.py
+@@ -95,6 +95,11 @@ class CursorStyle:
+     arrow_head_size: int = 10
+     arrow_min_distance: int = 10
+     arrow_max_distance: int = 600
++    # When True, draw ONE arrow from the oldest tracked history entry to the
++    # newest, instead of chaining an arrow per adjacent-pair. Reads as a
++    # single motion vector for human viewers. Default False for backwards
++    # compatibility with the chain-of-arrows shape shipped in v0.2.0.
++    single_arrow: bool = False
+     # Smooth cursor interpolation between recorded positions. See #75.
+     # Consumed by :func:`clickcast.annotate.interpolate.interpolate_cursor_motion`
+     # which runs before the annotator pass; the annotator itself only reads
+@@ -116,11 +121,16 @@ class ProgressStyle:
+ 
+ @dataclass(slots=True)
+ class ActionsPanelStyle:
+-    """Top-right actions-panel style + layout.
++    """Actions-panel style + layout.
+ 
+     Small side panel showing the last N actions with the current one
+     highlighted — gives viewers (human and LLM alike) an at-a-glance sense of
+     "where we are in the tour" that the progress bar alone can't convey.
++
++    ``position`` picks the corner. The panel used to be hardcoded top-right
++    which frequently sits over a site's top-nav icons — the very things
++    the tour is clicking on. `bottom-right` and `bottom-left` are safer
++    defaults for human-audience demos.
+     """
+ 
+     max_rows: int = 6
+@@ -138,6 +148,7 @@ class ActionsPanelStyle:
+     current_marker: str = "▶ "
+     radius: int = 8
+     max_label_chars: int = 32
++    position: Literal["top-right", "top-left", "bottom-right", "bottom-left"] = "top-right"
+ 
+ 
+ @dataclass(slots=True)
+@@ -211,9 +222,18 @@ class Annotator:
+         self._font = _load_font(self.config)
+         self._panel_font = _load_font_with_size(self.config, self.config.panel.font_size)
+         self._cursor_history: list[tuple[int, int]] = []
++        # Sticky "previous distinct → current" arrow endpoints (single_arrow mode).
++        # Updated only when the cursor MOVES to a new-enough position, so the arrow
++        # persists across all dwell frames until the next real move.
++        self._sticky_arrow_from: tuple[int, int] | None = None
++        self._sticky_arrow_to: tuple[int, int] | None = None
++        self._sticky_last_cursor: tuple[int, int] | None = None
+ 
+     def reset_cursor(self) -> None:
+         self._cursor_history.clear()
++        self._sticky_arrow_from = None
++        self._sticky_arrow_to = None
++        self._sticky_last_cursor = None
+ 
+     def annotate(
+         self,
+@@ -247,6 +267,23 @@ class Annotator:
+ 
+         if cursor_xy is not None:
+             self._cursor_history.append(cursor_xy)
++            # Sticky-arrow bookkeeping: whenever the cursor arrives at a
++            # position sufficiently different from the last known one, treat
++            # that as a MOVE and update the sticky arrow endpoints. The arrow
++            # then persists visually across every subsequent dwell frame until
++            # another move happens — so the human viewer sees a single, held
++            # A→B vector rather than a flash of arrow during transition frames
++            # only.
++            move_thresh = self.config.cursor_style.arrow_min_distance
++            if self._sticky_last_cursor is None:
++                self._sticky_last_cursor = cursor_xy
++            else:
++                dx = cursor_xy[0] - self._sticky_last_cursor[0]
++                dy = cursor_xy[1] - self._sticky_last_cursor[1]
++                if dx * dx + dy * dy >= move_thresh * move_thresh:
++                    self._sticky_arrow_from = self._sticky_last_cursor
++                    self._sticky_arrow_to = cursor_xy
++                    self._sticky_last_cursor = cursor_xy
+             history_cap = max(self.config.cursor_style.trail_length + 1, 1)
+             while len(self._cursor_history) > history_cap:
+                 self._cursor_history.pop(0)
+@@ -306,20 +343,41 @@ class Annotator:
+         od = ImageDraw.Draw(overlay)
+ 
+         if style.arrows:
+-            # Motion vectors between consecutive tracked positions. See #73.
+-            pairs = list(zip(self._cursor_history, self._cursor_history[1:], strict=False))
+-            for i, (older, newer) in enumerate(pairs):
++            if (
++                style.single_arrow
++                and self._sticky_arrow_from is not None
++                and self._sticky_arrow_to is not None
++            ):
++                # Sticky arrow: held from move-detection until the NEXT
++                # move-detection, so the viewer sees one static A→B vector
++                # for the full duration of every step rather than a brief
++                # flash during the transition frames.
++                older = self._sticky_arrow_from
++                newer = self._sticky_arrow_to
+                 dx = newer[0] - older[0]
+                 dy = newer[1] - older[1]
+                 dist_sq = dx * dx + dy * dy
+-                if dist_sq < style.arrow_min_distance * style.arrow_min_distance:
+-                    continue  # jitter — skip
+-                if dist_sq > style.arrow_max_distance * style.arrow_max_distance:
+-                    continue  # teleport (cross-page) — skip
+-                fade = (i + 1) / len(pairs)
+-                r, g, b, a = style.arrow_color
+-                faded = (r, g, b, int(a * fade))
+-                self._draw_arrow(od, older, newer, faded, style)
++                if (
++                    style.arrow_min_distance * style.arrow_min_distance
++                    <= dist_sq
++                    <= style.arrow_max_distance * style.arrow_max_distance
++                ):
++                    self._draw_arrow(od, older, newer, style.arrow_color, style)
++            else:
++                # Motion vectors between consecutive tracked positions. See #73.
++                pairs = list(zip(self._cursor_history, self._cursor_history[1:], strict=False))
++                for i, (older, newer) in enumerate(pairs):
++                    dx = newer[0] - older[0]
++                    dy = newer[1] - older[1]
++                    dist_sq = dx * dx + dy * dy
++                    if dist_sq < style.arrow_min_distance * style.arrow_min_distance:
++                        continue  # jitter — skip
++                    if dist_sq > style.arrow_max_distance * style.arrow_max_distance:
++                        continue  # teleport (cross-page) — skip
++                    fade = (i + 1) / len(pairs)
++                    r, g, b, a = style.arrow_color
++                    faded = (r, g, b, int(a * fade))
++                    self._draw_arrow(od, older, newer, faded, style)
+         else:
+             trail = self._cursor_history[:-1]
+             for i, pos in enumerate(trail):
+@@ -438,9 +496,19 @@ class Annotator:
+         box_w = text_w + 2 * style.padding_x
+         box_h = text_h + 2 * style.padding_y
+ 
+-        img_w, _ = canvas.size
+-        x = img_w - box_w - style.margin
+-        y = style.margin
++        img_w, img_h = canvas.size
++        if style.position == "top-right":
++            x = img_w - box_w - style.margin
++            y = style.margin
++        elif style.position == "top-left":
++            x = style.margin
++            y = style.margin
++        elif style.position == "bottom-right":
++            x = img_w - box_w - style.margin
++            y = img_h - box_h - style.margin
++        else:  # bottom-left
++            x = style.margin
++            y = img_h - box_h - style.margin
+ 
+         overlay = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+         od = ImageDraw.Draw(overlay)
