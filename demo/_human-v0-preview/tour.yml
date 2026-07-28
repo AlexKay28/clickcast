@@ -1,0 +1,30 @@
+meta:
+  name: "clickcast human tour · react.dev"
+  viewport: 1280x800
+  fps: 8
+  dwell: 1.5
+  format: gif
+  out: /tmp/human-demo/tour.gif
+
+steps:
+  - goto: https://react.dev/
+    wait: networkidle
+    dwell: 3.0
+    label: "Land on react.dev"
+
+  - click: 'role=link[name="Use Dark Mode"]'
+    dwell: 2.5
+    label: "Open · toggle Dark Mode"
+
+  - click: 'role=link[name="Use Dark Mode"]'
+    dwell: 2.0
+    label: "Close · toggle back (symmetric)"
+
+  - click: 'role=link[name="Learn"]'
+    dwell: 2.5
+    label: "Navigate · click Learn"
+
+  - scroll:
+      by: 400
+    dwell: 1.5
+    label: "Scroll to see content"
