@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`CursorStyle.single_arrow`** (opt-in, default `False` — chain mode
+  preserved) — draws one arrow from the previous distinct cursor position
+  to the current one that persists across every subsequent dwell frame
+  until the next move, instead of a chain of per-hop arrows that flashes
+  on during transitions and disappears once history fills. Reads as a
+  single held A→B vector — much easier to follow for a human watching
+  the reel without a sidecar. Backed by three sticky-state fields on
+  `Annotator` (`_sticky_arrow_from` / `_to` / `_last_cursor`), reset by
+  `Annotator.reset_cursor()`.
+- **`ActionsPanelStyle.position: "top-right" | "top-left" |
+  "bottom-right" | "bottom-left"`** (default `"top-right"` — shipped
+  behaviour preserved) — anchors the actions panel to the chosen corner.
+  The top-right default frequently sat exactly on a site's top-nav
+  icons — the very click targets the tour was pointing at; `bottom-right`
+  or `bottom-left` is safer for docs-style targets. See #129 for the
+  broader "human-observable demo mode" context.
 
 ## [0.2.0] — 2026-07-26
 
@@ -395,3 +412,4 @@ Initial public release.
 [#113]: https://github.com/AlexKay28/clickcast/issues/113
 [#114]: https://github.com/AlexKay28/clickcast/issues/114
 [#115]: https://github.com/AlexKay28/clickcast/issues/115
+[#129]: https://github.com/AlexKay28/clickcast/issues/129
