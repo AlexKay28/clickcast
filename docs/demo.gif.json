@@ -1,101 +1,35 @@
 {
   "schema_version": 1,
   "clickcast_version": "0.2.0",
-  "url": "https://react.dev/",
+  "url": "https://tailwindcss.com/",
   "engine": "chromium",
   "viewport": [
     1280,
     800
   ],
-  "started_at": "2026-07-29T10:17:38.806693+00:00",
-  "duration_s": 28.492916870862246,
+  "started_at": "2026-07-29T10:28:24.330172+00:00",
+  "duration_s": 34.77977657690644,
   "media": {
-    "path": "/tmp/demo-raw.gif",
+    "path": "/tmp/tw-tour.gif",
     "format": "gif",
-    "size_bytes": 1005950,
-    "frame_count": 77,
-    "duration_s": 9.625,
+    "size_bytes": 984514,
+    "frame_count": 115,
+    "duration_s": 14.375,
     "fps": 8
   },
-  "discovered_elements": [
-    {
-      "selector": "role=link[name=\"React\"]",
-      "role": "link",
-      "text": "React",
-      "bbox": [
-        16,
-        8,
-        48,
-        48
-      ],
-      "score": 3,
-      "source": "dom-heuristic"
-    },
-    {
-      "selector": "role=button[name=\"Use Dark Mode\"]",
-      "role": "button",
-      "text": "Use Dark Mode",
-      "bbox": [
-        1116,
-        8,
-        48,
-        48
-      ],
-      "score": 3,
-      "source": "dom-heuristic"
-    },
-    {
-      "selector": "role=link[name=\"Translations\"]",
-      "role": "link",
-      "text": "Translations",
-      "bbox": [
-        1164,
-        8,
-        48,
-        48
-      ],
-      "score": 3,
-      "source": "dom-heuristic"
-    },
-    {
-      "selector": "role=link[name=\"Open on GitHub\"]",
-      "role": "link",
-      "text": "Open on GitHub",
-      "bbox": [
-        1212,
-        8,
-        48,
-        48
-      ],
-      "score": 3,
-      "source": "dom-heuristic"
-    },
-    {
-      "selector": "role=link[name=\"v19.2\"]",
-      "role": "link",
-      "text": "v19.2",
-      "bbox": [
-        68,
-        9,
-        32,
-        46
-      ],
-      "score": 3,
-      "source": "dom-heuristic"
-    }
-  ],
+  "discovered_elements": [],
   "steps": [
     {
       "index": 0,
       "action": "goto",
       "args": {
         "timeout_ms": null,
-        "url": "https://react.dev/",
+        "url": "https://tailwindcss.com/",
         "wait": "networkidle",
         "retries": 0
       },
       "status": "ok",
-      "duration_ms": 2384.5767490565777,
+      "duration_ms": 6121.7472814023495,
       "frames": [
         "frame-0000-001.png",
         "frame-0000-002.png",
@@ -106,17 +40,31 @@
         "frame-0000-007.png",
         "frame-0000-008.png",
         "frame-0000-009.png",
-        "frame-0000-010.png"
+        "frame-0000-010.png",
+        "frame-0000-011.png",
+        "frame-0000-012.png",
+        "frame-0000-013.png",
+        "frame-0000-014.png",
+        "frame-0000-015.png",
+        "frame-0000-016.png",
+        "frame-0000-017.png",
+        "frame-0000-018.png",
+        "frame-0000-019.png",
+        "frame-0000-020.png",
+        "frame-0000-021.png",
+        "frame-0000-022.png",
+        "frame-0000-023.png",
+        "frame-0000-024.png"
       ],
-      "label": null,
+      "label": "Land on tailwindcss.com",
       "cursor_xy": null,
       "page_state": {
-        "title": "React",
-        "url_after": "https://react.dev/",
+        "title": "Tailwind CSS - Rapidly build modern websites without ever leaving your HTML.",
+        "url_after": "https://tailwindcss.com/",
         "console_errors": [],
         "page_errors": [],
         "network_failed": [
-          "https://region1.google-analytics.com/g/collect?v=2&tid=G-B1E83PJ3RT&gtm=45je67r2v9119811439za200zd9119811439&_p=1785320259078&gcd=13l3lPl2l1l1&npa=1&dma_cps=a&dma=1&are=1&cid=1480160946.1785320259&frm=0&ngs=1&pscdl=noapi&rcb=4&sr=1280x800&uaa=x86&uab=64&uafvl=HeadlessChrome%3B149.0.7827.55%7CChromium%3B149.0.7827.55%7CNot)A%253BBrand%3B24.0.0.0&uam=&uamb=0&uap=Linux&uapv=&uaw=0&ul=en-us&_s=1&tag_exp=115616986~115938466~115938469~118897920~118897930~119896803~120084214&sid=1785320259&sct=1&seg=0&dl=https%3A%2F%2Freact.dev%2F&dt=React&en=page_view&_fv=1&_nsi=1&_ss=1&_ee=1&tfd=608"
+          "https://region1.google-analytics.com/g/collect?v=2&tid=G-TMR96VNVMT&gtm=45je67r2v9256037244za200zd9256037244&_p=1785320906578&gcd=13l3l3l2l1l1&npa=1&dma_cps=a&dma=1&are=1&cid=1948717386.1785320907&frm=0&ngs=1&pscdl=noapi&rcb=0&sr=1280x800&uaa=x86&uab=64&uafvl=HeadlessChrome%3B149.0.7827.55%7CChromium%3B149.0.7827.55%7CNot)A%253BBrand%3B24.0.0.0&uam=&uamb=0&uap=Linux&uapv=&uaw=0&ul=en-us&_s=1&tag_exp=115938466~115938468~118897920~118897930~119896803~120084215&sid=1785320906&sct=1&seg=0&dl=https%3A%2F%2Ftailwindcss.com%2F&dt=Tailwind%20CSS%20-%20Rapidly%20build%20modern%20websites%20without%20ever%20leaving%20your%20HTML.&en=page_view&_fv=1&_nsi=1&_ss=1&_ee=1&tfd=1176"
         ]
       },
       "error": null
@@ -125,11 +73,11 @@
       "index": 1,
       "action": "click",
       "args": {
-        "timeout_ms": 15000,
-        "selector": "role=link[name=\"React\"]"
+        "timeout_ms": null,
+        "selector": "role=button[name=\"Select version of library\"]"
       },
       "status": "ok",
-      "duration_ms": 1330.6779246777296,
+      "duration_ms": 2297.3589282482862,
       "frames": [
         "frame-0001-001.png",
         "frame-0001-002.png",
@@ -140,33 +88,38 @@
         "frame-0001-007.png",
         "frame-0001-008.png",
         "frame-0001-009.png",
-        "frame-0001-010.png"
+        "frame-0001-010.png",
+        "frame-0001-011.png",
+        "frame-0001-012.png",
+        "frame-0001-013.png",
+        "frame-0001-014.png",
+        "frame-0001-015.png",
+        "frame-0001-016.png"
       ],
-      "label": "React",
+      "label": "Open version dropdown",
       "cursor_xy": [
-        40,
-        32
+        229,
+        28
       ],
       "page_state": {
-        "title": "React",
-        "url_after": "https://react.dev/",
+        "title": "Tailwind CSS - Rapidly build modern websites without ever leaving your HTML.",
+        "url_after": "https://tailwindcss.com/",
         "console_errors": [],
         "page_errors": [],
-        "network_failed": [
-          "https://react.dev/_next/data/WQ7qjXrq2XtGI7r5ZjD6d/index.json"
-        ]
+        "network_failed": []
       },
       "error": null
     },
     {
       "index": 2,
-      "action": "click",
+      "action": "press",
       "args": {
-        "timeout_ms": 15000,
-        "selector": "role=button[name=\"Use Dark Mode\"]"
+        "timeout_ms": null,
+        "key": "Escape",
+        "selector": null
       },
       "status": "ok",
-      "duration_ms": 1328.9898484945297,
+      "duration_ms": 1610.3851348161697,
       "frames": [
         "frame-0002-001.png",
         "frame-0002-002.png",
@@ -177,16 +130,15 @@
         "frame-0002-007.png",
         "frame-0002-008.png",
         "frame-0002-009.png",
-        "frame-0002-010.png"
+        "frame-0002-010.png",
+        "frame-0002-011.png",
+        "frame-0002-012.png"
       ],
-      "label": "Use Dark Mode",
-      "cursor_xy": [
-        1140,
-        32
-      ],
+      "label": "Close (symmetric)",
+      "cursor_xy": null,
       "page_state": {
-        "title": "React",
-        "url_after": "https://react.dev/",
+        "title": "Tailwind CSS - Rapidly build modern websites without ever leaving your HTML.",
+        "url_after": "https://tailwindcss.com/",
         "console_errors": [],
         "page_errors": [],
         "network_failed": []
@@ -197,11 +149,11 @@
       "index": 3,
       "action": "click",
       "args": {
-        "timeout_ms": 15000,
-        "selector": "role=link[name=\"Translations\"]"
+        "timeout_ms": null,
+        "selector": "role=button[name=\"Ctrl K\"]"
       },
       "status": "ok",
-      "duration_ms": 1338.8011083006859,
+      "duration_ms": 2638.3343264460564,
       "frames": [
         "frame-0003-001.png",
         "frame-0003-002.png",
@@ -212,33 +164,42 @@
         "frame-0003-007.png",
         "frame-0003-008.png",
         "frame-0003-009.png",
-        "frame-0003-010.png"
+        "frame-0003-010.png",
+        "frame-0003-011.png",
+        "frame-0003-012.png",
+        "frame-0003-013.png",
+        "frame-0003-014.png",
+        "frame-0003-015.png",
+        "frame-0003-016.png",
+        "frame-0003-017.png",
+        "frame-0003-018.png",
+        "frame-0003-019.png",
+        "frame-0003-020.png"
       ],
-      "label": "Translations",
+      "label": "Open search overlay",
       "cursor_xy": [
-        1188,
-        32
+        830,
+        28
       ],
       "page_state": {
-        "title": "Translations \u2013 React",
-        "url_after": "https://react.dev/community/translations",
+        "title": "Tailwind CSS - Rapidly build modern websites without ever leaving your HTML.",
+        "url_after": "https://tailwindcss.com/",
         "console_errors": [],
         "page_errors": [],
-        "network_failed": [
-          "https://react.dev/_next/data/WQ7qjXrq2XtGI7r5ZjD6d/community/translations.json?markdownPath=community&markdownPath=translations"
-        ]
+        "network_failed": []
       },
       "error": null
     },
     {
       "index": 4,
-      "action": "click",
+      "action": "press",
       "args": {
-        "timeout_ms": 15000,
-        "selector": "role=link[name=\"Open on GitHub\"]"
+        "timeout_ms": null,
+        "key": "Escape",
+        "selector": null
       },
       "status": "ok",
-      "duration_ms": 1289.7390220314264,
+      "duration_ms": 1516.3125954568386,
       "frames": [
         "frame-0004-001.png",
         "frame-0004-002.png",
@@ -249,34 +210,33 @@
         "frame-0004-007.png",
         "frame-0004-008.png",
         "frame-0004-009.png",
-        "frame-0004-010.png"
+        "frame-0004-010.png",
+        "frame-0004-011.png",
+        "frame-0004-012.png"
       ],
-      "label": "Open on GitHub",
-      "cursor_xy": [
-        1236,
-        32
-      ],
+      "label": "Close (symmetric)",
+      "cursor_xy": null,
       "page_state": {
-        "title": "React",
-        "url_after": "https://react.dev/",
+        "title": "Tailwind CSS - Rapidly build modern websites without ever leaving your HTML.",
+        "url_after": "https://tailwindcss.com/",
         "console_errors": [],
         "page_errors": [],
-        "network_failed": [
-          "https://region1.google-analytics.com/g/collect?v=2&tid=G-B1E83PJ3RT&gtm=45je67r2v9119811439za200zd9119811439&_p=1785320259078&gcd=13l3lPl2l1l1&npa=1&dma_cps=a&dma=1&_eu=AAAAAAQ&are=1&cid=1480160946.1785320259&frm=0&ngs=1&pscdl=noapi&rcb=4&sr=1280x800&uaa=x86&uab=64&uafvl=HeadlessChrome%3B149.0.7827.55%7CChromium%3B149.0.7827.55%7CNot)A%253BBrand%3B24.0.0.0&uam=&uamb=0&uap=Linux&uapv=&uaw=0&ul=en-us&tag_exp=115616986~115938466~115938469~118897920~118897930~119896803~120084214&sid=1785320259&sct=1&seg=0&dl=https%3A%2F%2Freact.dev%2F&dt=React&_s=2&tfd=13136",
-          "https://react.dev/_next/data/WQ7qjXrq2XtGI7r5ZjD6d/index.json"
-        ]
+        "network_failed": []
       },
       "error": null
     },
     {
       "index": 5,
-      "action": "click",
+      "action": "scroll",
       "args": {
-        "timeout_ms": 15000,
-        "selector": "role=link[name=\"v19.2\"]"
+        "timeout_ms": null,
+        "to": null,
+        "by": 500,
+        "selector": null,
+        "dx": 0
       },
       "status": "ok",
-      "duration_ms": 1284.8595269024372,
+      "duration_ms": 1505.6871566921473,
       "frames": [
         "frame-0005-001.png",
         "frame-0005-002.png",
@@ -287,21 +247,18 @@
         "frame-0005-007.png",
         "frame-0005-008.png",
         "frame-0005-009.png",
-        "frame-0005-010.png"
+        "frame-0005-010.png",
+        "frame-0005-011.png",
+        "frame-0005-012.png"
       ],
-      "label": "v19.2",
-      "cursor_xy": [
-        84,
-        32
-      ],
+      "label": "Scroll down",
+      "cursor_xy": null,
       "page_state": {
-        "title": "React Versions \u2013 React",
-        "url_after": "https://react.dev/versions",
+        "title": "Tailwind CSS - Rapidly build modern websites without ever leaving your HTML.",
+        "url_after": "https://tailwindcss.com/",
         "console_errors": [],
         "page_errors": [],
-        "network_failed": [
-          "https://react.dev/_next/data/WQ7qjXrq2XtGI7r5ZjD6d/versions.json?markdownPath=versions"
-        ]
+        "network_failed": []
       },
       "error": null
     },
@@ -311,12 +268,12 @@
       "args": {
         "timeout_ms": null,
         "to": null,
-        "by": 600,
+        "by": -500,
         "selector": null,
         "dx": 0
       },
       "status": "ok",
-      "duration_ms": 1208.6565028876066,
+      "duration_ms": 1505.0577241927385,
       "frames": [
         "frame-0006-001.png",
         "frame-0006-002.png",
@@ -327,21 +284,18 @@
         "frame-0006-007.png",
         "frame-0006-008.png",
         "frame-0006-009.png",
-        "frame-0006-010.png"
+        "frame-0006-010.png",
+        "frame-0006-011.png",
+        "frame-0006-012.png"
       ],
-      "label": null,
+      "label": "Scroll back up (symmetric)",
       "cursor_xy": null,
       "page_state": {
-        "title": "React",
-        "url_after": "https://react.dev/",
+        "title": "Tailwind CSS - Rapidly build modern websites without ever leaving your HTML.",
+        "url_after": "https://tailwindcss.com/",
         "console_errors": [],
         "page_errors": [],
-        "network_failed": [
-          "https://www.youtube.com/api/stats/atr?ns=yt&el=embedded&cpn=_NrT67kh4ist6vYS&ver=2&cmt=0&fs=0&rt=0.996&euri=https%3A%2F%2Freact.dev%2F&lact=1028&cl=954349858&mos=0&volume=100&cbr=HeadlessChrome&cbrver=149.0.7827.55&c=WEB_EMBEDDED_PLAYER&cver=2.20260727.10.00&cplayer=UNIPLAYER&cos=X11&cplatform=DESKTOP&epm=1&hl=fi_FI&cr=FI&len=4751&fexp=v1%2C24004644%2C27058999%2C34656%2C124674%2C117689%2C9252%2C3479%2C13030%2C23206%2C35405%2C65297%2C2877%2C12228%2C25059%2C4174%2C30446%2C18706%2C21437%2C4571%2C9672%2C3343%2C1191%2C11920%2C2977%2C6621%2C2783%2C23826%2C9500%2C1840%2C45715%2C13160%2C453%2C35510%2C20588%2C4657%2C29656%2C9181%2C15416%2C82%2C29960%2C7524%2C367%2C5666%2C1168%2C372%2C7758%2C16453%2C3172%2C5868%2C3475%2C26%2C5327%2C9867%2C1595%2C927%2C2249%2C115%2C71%2C87%2C6416%2C1701%2C119%2C3573%2C6572%2C5016%2C1354%2C109%2C756%2C17223%2C9717%2C1414%2C1295%2C904%2C3895%2C2456%2C846%2C884%2C1977%2C904%2C653%2C2%2C7891%2C1295%2C6288%2C4457%2C3%2C3%2C8812%2C7633%2C1455%2C4313%2C1584%2C4435%2C783%2C2456%2C3%2C12922%2C4420%2C2014%2C167&muted=0&docid=XxVg_s8xAms",
-          "https://www.youtube.com/youtubei/v1/log_event?alt=json",
-          "https://react.dev/_next/data/WQ7qjXrq2XtGI7r5ZjD6d/index.json",
-          "https://region1.google-analytics.com/g/collect?v=2&tid=G-B1E83PJ3RT&gtm=45je67r2v9119811439za200zd9119811439&_p=1785320259078&gcd=13l3lPl2l1l1&npa=1&dma_cps=a&dma=1&_eu=AAAAAAQ&are=1&cid=1480160946.1785320259&frm=0&ngs=1&pscdl=noapi&rcb=4&sr=1280x800&uaa=x86&uab=64&uafvl=HeadlessChrome%3B149.0.7827.55%7CChromium%3B149.0.7827.55%7CNot)A%253BBrand%3B24.0.0.0&uam=&uamb=0&uap=Linux&uapv=&uaw=0&ul=en-us&tag_exp=115616986~115938466~115938469~118897920~118897930~119896803~120084214&sid=1785320259&sct=1&seg=1&dl=https%3A%2F%2Freact.dev%2F&dt=React&_s=3&tfd=18238"
-        ]
+        "network_failed": []
       },
       "error": null
     }
