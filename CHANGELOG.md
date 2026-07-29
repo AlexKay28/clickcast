@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-07-29
+
+A small-but-visible polish release focused on human-legible reels.
+Backwards-compatible with 0.2.0 (all new fields default to shipped
+behaviour).
+
 ### Added
 - **`CursorStyle.single_arrow`** (opt-in, default `False` — chain mode
   preserved) — draws one arrow from the previous distinct cursor position
@@ -24,6 +30,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   icons — the very click targets the tour was pointing at; `bottom-right`
   or `bottom-left` is safer for docs-style targets. See #129 for the
   broader "human-observable demo mode" context.
+
+### Docs
+- **New guide `docs/ONE_PAGE_NAVIGATION_ORDER_TIPS.md`** — nine
+  principles for authoring scenarios that a human can watch without
+  pausing (one-page tours, symmetric open/close pairs, explicit intent
+  labels, ready-to-copy template + anti-patterns).
+- **`docs/demo.gif` rebuilt as a scripted single-page tour of
+  tailwindcss.com** — every click has a visible on-page reaction under
+  the cursor, symmetric open/close pairs, no scene cuts. Replaces the
+  previous auto-tour of react.dev.
+
+### CI
+- **`.github/workflows/demo.yml` defaults** — target changed from
+  `worldsight-weld.vercel.app` (was producing 0-click reels) to
+  `react.dev`, click-timeout bumped from 5 s to 15 s to survive
+  cold-serverless first-paint. The auto-regenerate-after-release job
+  won't overwrite the hero GIF with a broken one on the next release.
 
 ## [0.2.0] — 2026-07-26
 
@@ -365,6 +388,7 @@ Initial public release.
   × Python 3.10–3.13) → PyPI → GitHub release, all via Trusted Publishing.
 
 [Unreleased]: https://github.com/AlexKay28/clickcast/compare/v0.1.3...HEAD
+[0.2.1]: https://github.com/AlexKay28/clickcast/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/AlexKay28/clickcast/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/AlexKay28/clickcast/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/AlexKay28/clickcast/compare/v0.1.1...v0.1.2
