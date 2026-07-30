@@ -8,10 +8,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, model_validator
 
 from clickcast.core.actions import ActionResult, Step, execute
+from clickcast.core.opts import BrowserOpts, RenderOpts
 from clickcast.core.session import Session
+from clickcast.core.viewport import Viewport
 
 if TYPE_CHECKING:
     from clickcast.capture import Recorder
@@ -35,26 +37,122 @@ class ScenarioError(Exception):
 # ------- Models --------------------------------------------------------------
 
 
+_BROWSER_FIELDS: frozenset[str] = frozenset(
+    {"engine", "viewport", "device", "headful", "lang", "dark", "slowmo", "proxy"}
+)
+_RENDER_FIELDS: frozenset[str] = frozenset({"fps", "quality", "loop", "format"})
+
+
 class Meta(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    """Scenario-level meta configuration.
+
+    Since #97 the browser-behaviour and render-output fields are grouped
+    into nested :class:`~clickcast.core.opts.BrowserOpts` and
+    :class:`~clickcast.core.opts.RenderOpts`. Existing YAML scenarios that
+    used flat fields (``engine: chromium`` at ``meta`` root) still load —
+    a :func:`~pydantic.model_validator` migrates the flat shape into
+    ``browser`` / ``render`` before pydantic validates. Old flat readers
+    (``meta.engine``, ``meta.viewport``, ...) are preserved as
+    ``@property`` accessors so existing call sites don't have to change
+    (writers use the nested shape: ``meta.browser.headful = True``).
+    """
+
+    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
 
     name: str | None = None
-    engine: str = "chromium"
-    viewport: str | None = "1280x800"
-    device: str | None = None
-    fps: int = 12
+    browser: BrowserOpts = Field(default_factory=BrowserOpts)
+    render: RenderOpts = Field(default_factory=RenderOpts)
     dwell: float = 1.0
-    format: str = "gif"
     out: str = "reel.gif"
-    lang: str | None = None
-    dark: bool = False
-    headful: bool = False
-    slowmo: int = 0
-    proxy: str | None = None
     # Free-form until #8 defines AnnotateConfig
     annotate: dict[str, Any] | None = None
     # Optional include-parent path — deferred implementation per roadmap
     extends: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_flat_to_nested(cls, values: Any) -> Any:
+        """Accept legacy flat YAML (``engine: chromium`` at ``meta`` root)
+        by moving those keys into a synthesized ``browser`` / ``render``
+        sub-dict before pydantic validation. New scenarios can write
+        either shape (or a mix — the flat keys always win over any
+        nested ``browser: {}``, which is the natural user expectation)."""
+        if not isinstance(values, dict):
+            return values
+        values = dict(values)
+        browser = dict(values.pop("browser", None) or {})
+        render = dict(values.pop("render", None) or {})
+        for key in list(values):
+            if key in _BROWSER_FIELDS:
+                # Flat wins over any nested value the user also typed —
+                # matches the natural "more specific / later" override
+                # intuition.
+                browser[key] = values.pop(key)
+            elif key in _RENDER_FIELDS:
+                render[key] = values.pop(key)
+        # `viewport` and BrowserOpts want a `Viewport`, but flat YAML sends
+        # a string ("1280x800"). Coerce here so pydantic doesn't complain
+        # about the arbitrary type.
+        if "viewport" in browser and browser["viewport"] is not None:
+            browser["viewport"] = Viewport.parse(browser["viewport"])
+        if browser:
+            values["browser"] = BrowserOpts(**browser)
+        if render:
+            values["render"] = RenderOpts(**render)
+        return values
+
+    # --- Backwards-compat flat readers ---------------------------------
+    # Keep the shipped `meta.engine`, `meta.viewport`, ... call sites
+    # working without a codebase-wide rename. Writers migrate to the
+    # nested shape (`meta.browser.headful = True`).
+
+    @property
+    def engine(self) -> str:
+        return self.browser.engine
+
+    @property
+    def viewport(self) -> str | None:
+        return str(self.browser.viewport) if self.browser.viewport else None
+
+    @property
+    def device(self) -> str | None:
+        return self.browser.device
+
+    @property
+    def headful(self) -> bool:
+        return self.browser.headful
+
+    @property
+    def lang(self) -> str | None:
+        return self.browser.lang
+
+    @property
+    def dark(self) -> bool:
+        return self.browser.dark
+
+    @property
+    def slowmo(self) -> int:
+        return self.browser.slowmo
+
+    @property
+    def proxy(self) -> str | None:
+        return self.browser.proxy
+
+    @property
+    def fps(self) -> int:
+        return self.render.fps
+
+    @property
+    def quality(self) -> int:
+        return self.render.quality
+
+    @property
+    def loop(self) -> int:
+        return self.render.loop
+
+    @property
+    def format(self) -> str:
+        return self.render.format
 
 
 class Scenario(BaseModel):
