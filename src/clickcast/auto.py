@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import logging
 import re
+import sys
 import time
 from collections import deque
 from dataclasses import dataclass, field
@@ -50,7 +51,7 @@ from clickcast.core.session import Session
 from clickcast.discovery import discover
 from clickcast.discovery.urlutil import is_same_origin, normalize_url
 from clickcast.encode import encode
-from clickcast.feedback import Media, ReportBuilder
+from clickcast.feedback import Media, ReportBuilder, StepReport, build_advisories
 from clickcast.feedback import write as write_report
 
 __all__ = ["AutoConfig", "explore_page", "run_tour"]
@@ -536,13 +537,23 @@ async def run_tour(cfg: AutoConfig) -> None:
             )
 
     tour_elapsed = time.monotonic() - tour_started
+    total_clicks = cfg.max_steps - clicks_remaining
     typer.echo(
         f"✔ {enc.path} ({enc.size_bytes // 1024} KB, {enc.frame_count} frames, "
         f"{enc.duration_s:.1f}s reel, {pages_visited} page(s), "
-        f"{cfg.max_steps - clicks_remaining} clicks, wall {tour_elapsed:.1f}s)"
+        f"{total_clicks} clicks, wall {tour_elapsed:.1f}s)"
     )
     if sidecar:
         typer.echo(f"  sidecar: {sidecar}")
+    # Track A of #138: heuristic advisories on the completed tour. Prints to
+    # stderr with a ⚠ marker so an AI parsing the run's output can act on
+    # them; each carries a stable id + doc URL for programmatic follow-up.
+    if builder is not None:
+        nav_clicks = _count_nav_clicks(builder.steps)
+        for adv in build_advisories(
+            builder.steps, media, total_clicks=total_clicks, nav_clicks=nav_clicks
+        ):
+            print(f"⚠ {adv.message} — see {adv.doc_url}", file=sys.stderr)
 
 
 # ---------------------------------------------------------------------------
@@ -553,6 +564,31 @@ async def run_tour(cfg: AutoConfig) -> None:
 def _die(msg: str, code: int = 1) -> None:
     typer.secho(msg, fg=typer.colors.RED, err=True)
     raise typer.Exit(code)
+
+
+def _count_nav_clicks(steps: list[StepReport]) -> int:
+    """Count click steps whose post-action URL differs from the prior step's.
+
+    Used to feed :func:`clickcast.feedback.build_advisories` the tour-level
+    nav-ratio signal without threading a new counter through ``explore_page``.
+    Only ``ok`` click steps count — failed clicks can't have caused a nav.
+    """
+    nav = 0
+    prev_url = None
+    for step in steps:
+        state = step.page_state
+        current_url = state.url_after if state is not None else None
+        if (
+            step.action == "click"
+            and step.status == "ok"
+            and prev_url
+            and current_url
+            and current_url != prev_url
+        ):
+            nav += 1
+        if current_url:
+            prev_url = current_url
+    return nav
 
 
 def _make_media(enc: Any, fps: int) -> Media:

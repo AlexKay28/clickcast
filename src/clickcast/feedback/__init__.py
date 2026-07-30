@@ -6,6 +6,7 @@ import json
 import re
 from pathlib import Path
 
+from clickcast.feedback.advisories import Advisory, build_advisories
 from clickcast.feedback.assertions import (
     ASSERTIONS_SCHEMA_VERSION,
     build_assertions,
@@ -31,6 +32,7 @@ from clickcast.feedback.redact import strip_query_strings as _strip_query_string
 
 __all__ = [
     "ASSERTIONS_SCHEMA_VERSION",
+    "Advisory",
     "Assertions",
     "DiscoveredElement",
     "Feedback",
@@ -42,6 +44,7 @@ __all__ = [
     "ReportBuilder",
     "StepAssertion",
     "StepReport",
+    "build_advisories",
     "build_assertions",
     "build_feedback",
     "diff_assertions",
