@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] — 2026-07-30
+
+Agent-experience release. Three new opt-in features (a `--for-humans`
+composite for human-legible reels, a `clickcast feedback` capture-session
+substrate, and post-tour stderr advisories) built on top of three
+opt-in refactors (a single `Viewport` value type, grouped `BrowserOpts`
++ `RenderOpts` dataclasses, and a narrow `Session→Page` seam that
+hides Playwright from business-logic modules). Backwards-compatible
+with 0.2.1 — every refactor keeps its old public API via property
+accessors or dataclass composition; every new feature is off by default.
+
 ### Added
 - **`clickcast feedback ...` capture-session substrate** (closes [#124] —
   partial v1; heuristics engine + `feedback file` emitter deferred).
