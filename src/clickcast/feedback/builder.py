@@ -106,6 +106,17 @@ class ReportBuilder:
             )
         )
 
+    @property
+    def steps(self) -> list[StepReport]:
+        """Read-only view of the recorded step reports so far.
+
+        Exposed so the orchestrator can feed the running step history to
+        :func:`clickcast.feedback.build_advisories` at tour end without
+        reaching into the private list. Returns the live list (not a copy)
+        — callers must not mutate it.
+        """
+        return self._steps
+
     def add_warning(self, msg: str) -> None:
         self._warnings.append(msg)
 
