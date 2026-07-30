@@ -37,6 +37,7 @@ from clickcast.config import (
     load as load_config,
 )
 from clickcast.core.actions import set_dump_elements
+from clickcast.core.opts import BrowserOpts
 from clickcast.core.session import Session
 from clickcast.core.viewport import Viewport
 from clickcast.discovery import Element, discover
@@ -216,15 +217,20 @@ def _session_kwargs(
     dark: bool,
     slowmo: int = 0,
 ) -> dict[str, Any]:
-    return {
-        "engine": engine,
-        "viewport": _parse_viewport(viewport),
-        "device": device,
-        "headful": headful,
-        "lang": lang,
-        "dark": dark,
-        "slowmo": slowmo,
-    }
+    """Kept as the CLI's ``BrowserOpts`` factory: turns the flat CLI-flag
+    args into a :class:`~clickcast.core.opts.BrowserOpts` and returns its
+    :meth:`~clickcast.core.opts.BrowserOpts.to_session_kwargs` shape.
+    Since #97 the field list lives in ``BrowserOpts``; this function is
+    only glue for turning ``typer`` params into that dataclass."""
+    return BrowserOpts(
+        engine=engine,
+        viewport=Viewport.parse(viewport),
+        device=device,
+        headful=headful,
+        lang=lang,
+        dark=dark,
+        slowmo=slowmo,
+    ).to_session_kwargs()
 
 
 def _make_media(enc: Any, fps: int) -> Media:
@@ -627,12 +633,12 @@ def run(
     #   - COMMANDLINE : user explicitly typed --flag  → wins over meta
     #   - DEFAULT / DEFAULT_MAP / ENVIRONMENT : filled through Config → meta wins
     # Compared on `.name` so we don't need to import Typer's vendored Click.
-    meta = scenario.meta.model_copy()
+    meta = scenario.meta.model_copy(deep=True)
     final_out = out or meta.out
     if _is_explicit(ctx, "headful"):
-        meta.headful = headful
+        meta.browser.headful = headful
     if _is_explicit(ctx, "slowmo"):
-        meta.slowmo = slowmo
+        meta.browser.slowmo = slowmo
     if _is_explicit(ctx, "format") and format:
         effective_format: str | None = format
     else:

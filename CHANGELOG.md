@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Grouped `BrowserOpts` + `RenderOpts` dataclasses** (closes [#97]).
+  New `clickcast.core.opts` module holds the 8 browser-behaviour fields
+  (`engine`, `viewport`, `device`, `headful`, `lang`, `dark`, `slowmo`,
+  `proxy`) and 4 render-output fields (`fps`, `quality`, `loop`,
+  `format`) as the single source of truth. `Meta` embeds them as nested
+  fields; a pydantic `model_validator(mode="before")` accepts both the
+  new nested YAML shape AND the legacy flat shape (flat wins over
+  nested in a conflict, matching natural override intuition). `Meta`
+  keeps `@property` accessors for the flat field names so shipped
+  callers (`meta.engine`, `meta.viewport`, ...) don't have to change —
+  writers migrate to the nested form (`meta.browser.headful = True`).
+  `BrowserOpts.viewport` uses the `Viewport` value type from #96.
+  `Session._session_kwargs` is now `BrowserOpts.to_session_kwargs()`.
+  Config-side migration (env vars, TOML) deferred to a small follow-up
+  so this PR stays scoped; existing env-var behaviour is unchanged.
 - **Single `Viewport` value type** (closes [#96]). New
   `clickcast.core.viewport.Viewport` frozen dataclass replaces the six
   ad-hoc `"WxH"` parsers previously scattered across `session.py`,
@@ -453,3 +468,4 @@ Initial public release.
 [#115]: https://github.com/AlexKay28/clickcast/issues/115
 [#129]: https://github.com/AlexKay28/clickcast/issues/129
 [#96]: https://github.com/AlexKay28/clickcast/issues/96
+[#97]: https://github.com/AlexKay28/clickcast/issues/97
