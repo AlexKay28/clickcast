@@ -89,6 +89,18 @@ COMMAND_BRIEFS: tuple[CommandBrief, ...] = (
                 "speed preset — sets --fps and --dwell together",
             ),
             FlagBrief(
+                "--for-humans",
+                "composite flag: flip pace/zoom/highlight/cards to human defaults",
+            ),
+            FlagBrief(
+                "--highlight-target",
+                "draw a pulsing ring on the click target BEFORE the ripple fires",
+            ),
+            FlagBrief(
+                "--title-card / --summary-card",
+                "bookend the reel with title / stats-summary cards",
+            ),
+            FlagBrief(
                 "--with-feedback",
                 "attach the AI-agent feedback pointer block to the sidecar",
             ),
@@ -98,7 +110,7 @@ COMMAND_BRIEFS: tuple[CommandBrief, ...] = (
             ),
             FlagBrief("--seed-url URL", "extra URLs to visit in a fixed order"),
         ),
-        example="clickcast auto https://example.com --with-feedback --pace fast",
+        example="clickcast auto https://example.com --for-humans",
     ),
     CommandBrief(
         name="run",

@@ -103,6 +103,38 @@ class Recorder:
         self._sub_index = 0
         return await self._capture(session, cursor_xy=None)
 
+    async def pre_action_pad(self, count: int) -> list[Path]:
+        """Duplicate the most-recent pre-action frame ``count`` extra times.
+
+        Extra copies land at the current ``step_index`` with increasing
+        ``sub_index`` values BEFORE any ``post_action`` runs, so the
+        annotator sees them as pre-click sub-frames. The
+        ``--for-humans`` pipeline uses this to give the pre-click target
+        highlight ring several frames of hold time before the ripple fires
+        (see #129 Track A).
+
+        Must be called after ``pre_action`` and before ``post_action``.
+        Raises ``RuntimeError`` if there is no pre-action frame to
+        duplicate — misuse rather than a silent no-op.
+        """
+        if count <= 0:
+            return []
+        if not self._frames:
+            raise RuntimeError("pre_action_pad requires a prior pre_action frame to duplicate")
+        source = self._frames[-1]
+        if source.step_index != self._step_index or source.sub_index != 0:
+            raise RuntimeError(
+                "pre_action_pad must be called immediately after pre_action "
+                "(no other capture may intervene)"
+            )
+        paths: list[Path] = []
+        for _ in range(count):
+            copy_path = self._next_path()
+            shutil.copyfile(source.path, copy_path)
+            self._record(copy_path, cursor_xy=None)
+            paths.append(copy_path)
+        return paths
+
     async def post_action(
         self,
         session: Session,

@@ -19,6 +19,7 @@ __all__ = [
     "LabelStyle",
     "ProgressStyle",
     "RippleStyle",
+    "TargetHighlightStyle",
 ]
 
 _BUNDLED_FONT = "DejaVuSans.ttf"
@@ -156,6 +157,30 @@ class ActionsPanelStyle:
 
 
 @dataclass(slots=True)
+class TargetHighlightStyle:
+    """Pre-click target-highlight ring appearance.
+
+    A soft, pulsing outline that appears around the resolved click target on
+    the pre-click frame(s) so a human viewer's eye locks onto the target
+    BEFORE the ripple fires. See #129 Track A.
+
+    ``padding`` inflates the bbox outward so the ring never sits on top of
+    the target's own edge (which reads as a border, not a highlight).
+    ``pulse_count`` divides the ring's alpha modulation into N cycles across
+    however many highlight frames the recorder emits — 1 is a steady ring;
+    2-3 gives a gentle breathing effect.
+    """
+
+    color: tuple[int, int, int] = (255, 200, 40)
+    width: int = 4
+    padding: int = 8
+    radius: int = 12
+    alpha_min: int = 90
+    alpha_max: int = 230
+    pulse_count: int = 2
+
+
+@dataclass(slots=True)
 class AnnotateConfig:
     """Toggles + tunables for every annotation layer.
 
@@ -173,6 +198,12 @@ class AnnotateConfig:
     cursor: bool = True
     progress: bool = True
     actions_panel: bool = True
+    # Pre-click target-highlight ring around the resolved click bbox — draws
+    # ONLY when the pipeline passes a ``target_bbox`` for the frame's step
+    # (typically set on pre-click sub-frames). Off by default so shipped
+    # tours don't gain the extra overlay; ``--for-humans`` flips it on.
+    # See #129 Track A.
+    target_highlight: bool = False
 
     # Font ---------------------------------------------------------------
     font_path: str | Path | None = None  # None → bundled DejaVuSans.ttf
@@ -186,6 +217,7 @@ class AnnotateConfig:
     cursor_style: CursorStyle = field(default_factory=CursorStyle)
     progress_style: ProgressStyle = field(default_factory=ProgressStyle)
     panel: ActionsPanelStyle = field(default_factory=ActionsPanelStyle)
+    target: TargetHighlightStyle = field(default_factory=TargetHighlightStyle)
 
 
 def _load_font(config: AnnotateConfig) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
@@ -252,6 +284,8 @@ class Annotator:
         click_at: tuple[int, int] | None = None,
         ripple_stage: int = 0,
         all_labels: list[str] | None = None,
+        target_bbox: tuple[int, int, int, int] | None = None,
+        target_pulse_phase: float = 0.0,
     ) -> Path:
         """Composite the enabled layers onto ``frame_path``; return output Path.
 
@@ -262,6 +296,12 @@ class Annotator:
         ``step_index``. When set (and ``actions_panel=True`` in config), the
         actions-list side panel renders the last N labels with the current one
         highlighted.
+
+        ``target_bbox`` is ``(x, y, width, height)`` for the resolved click
+        target on this frame; when set (and ``target_highlight=True``),
+        draws a soft pulsing ring around it. ``target_pulse_phase`` is
+        0.0..1.0 across the ring's lifetime — the caller advances it per
+        frame so successive frames render at slightly different alphas.
         """
         src = Path(frame_path)
         dst = Path(out_path) if out_path else src.with_name(f"{src.stem}.annotated.png")
@@ -294,6 +334,8 @@ class Annotator:
 
         if self.config.progress:
             self._draw_progress(canvas, step_index, total_steps)
+        if self.config.target_highlight and target_bbox is not None:
+            self._draw_target_highlight(canvas, target_bbox, target_pulse_phase)
         if self.config.clicks and click_at is not None and ripple_stage > 0:
             self._draw_ripple(canvas, click_at, ripple_stage)
         if self.config.cursor and self._cursor_history:
@@ -336,6 +378,54 @@ class Annotator:
         od = ImageDraw.Draw(overlay)
         od.ellipse(
             [at[0] - radius, at[1] - radius, at[0] + radius, at[1] + radius],
+            outline=(*style.color, alpha),
+            width=style.width,
+        )
+        canvas.alpha_composite(overlay)
+
+    def _draw_target_highlight(
+        self,
+        canvas: Image.Image,
+        bbox: tuple[int, int, int, int],
+        phase: float,
+    ) -> None:
+        """Composite a soft, pulsing rounded rectangle around ``bbox``.
+
+        ``phase`` is 0.0..1.0 across the highlight's lifetime; alpha
+        modulates as a sine wave with ``style.pulse_count`` cycles so a
+        series of frames "breathes." A single frame renders at alpha_max
+        (phase 0 → sin(0) = 0 → alpha = alpha_max ... but the formula uses
+        1 - abs(sin), so phase 0 renders at alpha_max cleanly).
+
+        The bbox is inflated by ``style.padding`` outward before drawing —
+        the ring never sits on top of the target's own edge.
+        """
+        style = self.config.target
+        x, y, w, h = bbox
+        pad = style.padding
+        x0 = x - pad
+        y0 = y - pad
+        x1 = x + w + pad
+        y1 = y + h + pad
+        # Clip to canvas so a partially off-screen target still gets the ring.
+        cw, ch = canvas.size
+        x0 = max(0, x0)
+        y0 = max(0, y0)
+        x1 = min(cw, x1)
+        y1 = min(ch, y1)
+        if x1 <= x0 or y1 <= y0:
+            return
+        # Pulsing alpha: |sin(phase * pulse_count * pi)| gives N cycles across
+        # phase 0..1, and 1 - that gives a value that peaks at phase 0 (the
+        # first pre-click frame — brightest — attention-grabbing) and dips at
+        # the midpoints. A single frame (phase = 0) lands at alpha_max cleanly.
+        modulation = 1.0 - abs(math.sin(phase * max(style.pulse_count, 1) * math.pi))
+        alpha = int(style.alpha_min + (style.alpha_max - style.alpha_min) * modulation)
+        overlay = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+        od = ImageDraw.Draw(overlay)
+        od.rounded_rectangle(
+            [x0, y0, x1, y1],
+            radius=style.radius,
             outline=(*style.color, alpha),
             width=style.width,
         )

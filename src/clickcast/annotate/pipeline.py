@@ -24,10 +24,17 @@ class StepAnnotation:
     ``label`` shows in the bottom banner while the step is on screen. ``click_at``
     (if set) draws a fading ripple over the first ``ripple_stages`` sub-frames
     after the click.
+
+    ``target_bbox`` is the ``(x, y, width, height)`` of the resolved click
+    target, captured pre-click. When set (and ``AnnotateConfig.target_highlight``
+    is on), the annotator draws a pulsing ring around the bbox on the pre-click
+    frame(s) of this step — the sub-frames BEFORE the ripple fires. See
+    #129 Track A.
     """
 
     label: str | None = None
     click_at: tuple[int, int] | None = None
+    target_bbox: tuple[int, int, int, int] | None = None
 
 
 def annotate_frames_dir(
@@ -61,17 +68,58 @@ def annotate_frames_dir(
         (steps.get(i, StepAnnotation()).label or "…") for i in range(total_steps)
     ]
 
+    # Per-step: how many pre-click sub-frames precede the first post-click
+    # frame. Pre-click frames are those where the recorder wrote
+    # ``cursor_xy=None`` (pre_action + pre_action_pad); the first frame with
+    # a non-None cursor_xy is the actual click frame. Post-click sub-indices
+    # start at that offset. Ripple stages are counted from the click frame,
+    # not from sub_index=0 — otherwise pre-click padding would consume every
+    # ripple stage silently.
+    pre_click_count: dict[int, int] = {}
+    for f in frames:
+        idx = f["step_index"]
+        if idx in pre_click_count:
+            continue
+        # Walk the step's sub-frames in order; count leading Nones.
+        if f["cursor_xy"] is None:
+            pre_click_count[idx] = pre_click_count.get(idx, 0) + 1
+
+    # Second pass to correctly count LEADING Nones per step (the naive
+    # increment above overcounts if cursor_xy is None post-click too — e.g.
+    # scroll/goto steps). Reset and walk deterministically:
+    pre_click_count.clear()
+    for idx in range(total_steps):
+        count = 0
+        for f in frames:
+            if f["step_index"] != idx:
+                continue
+            if f["cursor_xy"] is not None:
+                break
+            count += 1
+        pre_click_count[idx] = count
+
     for entry in frames:
         step_index = entry["step_index"]
         sub_index = entry["sub_index"]
         cursor_xy_raw = entry.get("cursor_xy")
         cursor_xy = tuple(cursor_xy_raw) if cursor_xy_raw else None
         step_ann = steps.get(step_index, StepAnnotation())
-        # Ripple only fires on the first N sub-frames after a click.
-        if step_ann.click_at is not None and sub_index < ann.config.ripple.stages:
-            ripple_stage = sub_index + 1
+        pre_n = pre_click_count.get(step_index, 0)
+        # Ripple only fires on the first N POST-CLICK sub-frames (offset by
+        # pre-click padding count so highlight-ring frames don't consume it).
+        if step_ann.click_at is not None:
+            post_offset = sub_index - pre_n
+            ripple_stage = post_offset + 1 if 0 <= post_offset < ann.config.ripple.stages else 0
         else:
             ripple_stage = 0
+        # Target highlight — draw on pre-click sub-frames only (sub_index
+        # < pre_n), which is where the recorder held the target still.
+        target_bbox: tuple[int, int, int, int] | None = None
+        target_pulse_phase = 0.0
+        if step_ann.target_bbox is not None and step_ann.click_at is not None and sub_index < pre_n:
+            target_bbox = step_ann.target_bbox
+            # Distribute pulse phase evenly across the pre-click frames.
+            target_pulse_phase = sub_index / max(pre_n - 1, 1) if pre_n > 1 else 0.0
         frame_path = frames_dir / entry["path"]
         ann.annotate(
             frame_path,
@@ -83,5 +131,7 @@ def annotate_frames_dir(
             click_at=step_ann.click_at,
             ripple_stage=ripple_stage,
             all_labels=all_labels,
+            target_bbox=target_bbox,
+            target_pulse_phase=target_pulse_phase,
         )
     return len(frames)
