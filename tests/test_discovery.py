@@ -155,7 +155,7 @@ class TestDisambiguateSelectors:
             source="dom-heuristic",
         )
         sess = MagicMock()
-        sess.page.locator.return_value.count = AsyncMock(return_value=1)
+        sess.locator.return_value.count = AsyncMock(return_value=1)
         out = await _disambiguate_selectors(sess, [el])
         assert out[0].selector == 'role=link[name="Only Once"]', (
             "should not touch a unique selector"
@@ -176,7 +176,7 @@ class TestDisambiguateSelectors:
             source="dom-heuristic",
         )
         sess = MagicMock()
-        sess.page.locator.return_value.count = AsyncMock(return_value=2)
+        sess.locator.return_value.count = AsyncMock(return_value=2)
         out = await _disambiguate_selectors(sess, [el])
         assert out[0].selector == 'role=link[name="Community"] >> nth=0', (
             f"expected nth=0 appended, got {out[0].selector!r}"
@@ -199,10 +199,10 @@ class TestDisambiguateSelectors:
             source="dom-heuristic",
         )
         sess = MagicMock()
-        sess.page.locator = MagicMock()  # tracked
+        sess.locator = MagicMock()  # tracked
         out = await _disambiguate_selectors(sess, [el])
         assert out[0].selector == "#reset-btn"
-        sess.page.locator.assert_not_called()
+        sess.locator.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_testid_selector_skips_count_check(self) -> None:
@@ -219,10 +219,10 @@ class TestDisambiguateSelectors:
             source="dom-heuristic",
         )
         sess = MagicMock()
-        sess.page.locator = MagicMock()
+        sess.locator = MagicMock()
         out = await _disambiguate_selectors(sess, [el])
         assert out[0].selector == '[data-testid="save"]'
-        sess.page.locator.assert_not_called()
+        sess.locator.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_locator_error_leaves_selector_alone(self) -> None:
@@ -241,7 +241,7 @@ class TestDisambiguateSelectors:
             source="dom-heuristic",
         )
         sess = MagicMock()
-        sess.page.locator.return_value.count = AsyncMock(side_effect=RuntimeError("bad selector"))
+        sess.locator.return_value.count = AsyncMock(side_effect=RuntimeError("bad selector"))
         out = await _disambiguate_selectors(sess, [el])
         assert out[0].selector == "role=button[name='junk']"
 

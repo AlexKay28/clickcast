@@ -1,7 +1,7 @@
 """Per-step page-state collector.
 
 Subscribes to ``console``, ``pageerror`` and ``requestfailed`` events on a
-Playwright :class:`Page` and keeps a per-step buffer. Call
+:class:`~clickcast.core.session.Session` and keeps a per-step buffer. Call
 :meth:`snapshot_and_clear` after each action to fold the buffered events plus
 the current title/URL into a :class:`~clickcast.feedback.models.PageState`.
 """
@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 from clickcast.feedback.models import PageState
 
 if TYPE_CHECKING:
-    from playwright.async_api import Page
+    from clickcast.core.session import Session
 
 
 __all__ = ["PageStateCollector"]
@@ -23,28 +23,28 @@ __all__ = ["PageStateCollector"]
 class PageStateCollector:
     _MAX = 50
 
-    def __init__(self, page: Page) -> None:
-        self._page = page
+    def __init__(self, session: Session) -> None:
+        self._session = session
         self._attached = False
         self._console_errors: list[str] = []
         self._page_errors: list[str] = []
         self._network_failed: list[str] = []
 
-        page.on("console", self._on_console)
-        page.on("pageerror", self._on_pageerror)
-        page.on("requestfailed", self._on_requestfailed)
+        session.on("console", self._on_console)
+        session.on("pageerror", self._on_pageerror)
+        session.on("requestfailed", self._on_requestfailed)
         self._attached = True
 
     def detach(self) -> None:
-        """Remove all listeners from the page. Idempotent."""
+        """Remove all listeners from the session's page. Idempotent."""
         if not self._attached:
             return
         with contextlib.suppress(Exception):
-            self._page.remove_listener("console", self._on_console)
+            self._session.off("console", self._on_console)
         with contextlib.suppress(Exception):
-            self._page.remove_listener("pageerror", self._on_pageerror)
+            self._session.off("pageerror", self._on_pageerror)
         with contextlib.suppress(Exception):
-            self._page.remove_listener("requestfailed", self._on_requestfailed)
+            self._session.off("requestfailed", self._on_requestfailed)
         self._attached = False
 
     def _on_console(self, msg: Any) -> None:
@@ -71,12 +71,15 @@ class PageStateCollector:
 
     async def snapshot_and_clear(self) -> PageState:
         """Capture the current title / URL and buffered events, then clear."""
+        # Belt-and-suspenders: Session.title() and .url_now already swallow
+        # exceptions, but tests that pass a raw duck-typed object rely on
+        # this collector catching too.
         try:
-            title = await self._page.title()
+            title = await self._session.title()
         except Exception:
             title = ""
         try:
-            url_after = self._page.url or ""
+            url_after = self._session.url_now
         except Exception:
             url_after = ""
 
