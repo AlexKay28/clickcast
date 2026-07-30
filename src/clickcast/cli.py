@@ -38,6 +38,7 @@ from clickcast.config import (
 )
 from clickcast.core.actions import set_dump_elements
 from clickcast.core.session import Session
+from clickcast.core.viewport import Viewport
 from clickcast.discovery import Element, discover
 from clickcast.encode import encode
 from clickcast.feedback import Media, ReportBuilder, feedback_pointer_lines
@@ -103,7 +104,7 @@ _FEEDBACK_EPILOG = "\n".join(
 # Shared option types (Annotated makes them reusable across commands)
 # ==========================================================================
 
-Viewport = Annotated[str, typer.Option("--viewport", help="Viewport WxH, e.g. 1280x800.")]
+ViewportArg = Annotated[str, typer.Option("--viewport", help="Viewport WxH, e.g. 1280x800.")]
 Device = Annotated[
     str | None,
     typer.Option("--device", help="Device preset, e.g. 'iPhone 15'."),
@@ -185,10 +186,13 @@ DumpElements = Annotated[
 
 
 def _parse_viewport(v: str) -> tuple[int, int]:
+    """Typer-friendly shim: wraps :meth:`Viewport.parse` and remaps the
+    ``ValueError`` to ``typer.BadParameter`` so Click formats the message
+    the way the rest of the CLI does. Returns a tuple for the existing
+    session-kwargs shape (Session accepts tuples too)."""
     try:
-        w, h = v.lower().split("x", 1)
-        return (int(w), int(h))
-    except ValueError as e:
+        return Viewport.parse(v).as_tuple()
+    except (TypeError, ValueError) as e:
         raise typer.BadParameter(f"invalid viewport {v!r}; expected WxH") from e
 
 
@@ -451,7 +455,7 @@ def auto(
             help="Seconds to hold after networkidle before interacting (SPA hydration).",
         ),
     ] = 2.0,
-    viewport: Viewport = "1280x800",
+    viewport: ViewportArg = "1280x800",
     device: Device = None,
     engine: Engine = "chromium",
     headful: Headful = False,
@@ -735,9 +739,8 @@ async def _do_run(
         viewport_list: list[int] | None = None
         if vp:
             try:
-                w, h = vp.lower().split("x", 1)
-                viewport_list = [int(w), int(h)]
-            except ValueError:
+                viewport_list = Viewport.parse(vp).as_list()
+            except (TypeError, ValueError):
                 viewport_list = None
         builder = ReportBuilder(engine=scenario.meta.engine, viewport=viewport_list)
 
@@ -807,7 +810,7 @@ def shot(
             help="load | domcontentloaded | networkidle | selector | float seconds.",
         ),
     ] = "networkidle",
-    viewport: Viewport = "1280x800",
+    viewport: ViewportArg = "1280x800",
     device: Device = None,
     engine: Engine = "chromium",
     dark: Dark = False,
@@ -937,7 +940,7 @@ def elements(
     as_json: Annotated[
         bool, typer.Option("--json", help="Emit machine-readable JSON on stdout.")
     ] = False,
-    viewport: Viewport = "1280x800",
+    viewport: ViewportArg = "1280x800",
     engine: Engine = "chromium",
 ) -> None:
     result_elements = asyncio.run(

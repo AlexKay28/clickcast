@@ -16,6 +16,8 @@ from playwright.async_api import (
     async_playwright,
 )
 
+from clickcast.core.viewport import Viewport
+
 __all__ = ["Engine", "LoadState", "Session", "WaitArg"]
 
 Engine = Literal["chromium", "firefox", "webkit"]
@@ -23,15 +25,6 @@ LoadState = Literal["load", "domcontentloaded", "networkidle"]
 WaitArg = int | float | str
 
 _LOAD_STATES: frozenset[str] = frozenset({"load", "domcontentloaded", "networkidle"})
-
-
-def _parse_viewport(v: str | tuple[int, int] | None) -> tuple[int, int] | None:
-    if v is None:
-        return None
-    if isinstance(v, tuple):
-        return (int(v[0]), int(v[1]))
-    w, h = v.lower().split("x", 1)
-    return (int(w), int(h))
 
 
 class Session:
@@ -48,7 +41,7 @@ class Session:
         self,
         *,
         engine: Engine = "chromium",
-        viewport: str | tuple[int, int] | None = None,
+        viewport: str | tuple[int, int] | Viewport | None = None,
         device: str | None = None,
         headful: bool = False,
         slowmo: int = 0,
@@ -121,8 +114,9 @@ class Session:
             if preset is None:
                 raise ValueError(f"Unknown device preset: {self.device!r}")
             kwargs.update(preset)
-        if (vp := _parse_viewport(self.viewport)) is not None:
-            kwargs["viewport"] = {"width": vp[0], "height": vp[1]}
+        if self.viewport is not None:
+            vp = Viewport.parse(self.viewport)
+            kwargs["viewport"] = {"width": vp.width, "height": vp.height}
         if self.lang:
             kwargs["locale"] = self.lang
         if self.dark:

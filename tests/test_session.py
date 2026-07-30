@@ -2,23 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from clickcast.core.session import Session, _parse_viewport
+from clickcast.core.session import Session
 
 pytestmark = pytest.mark.unit
 
-
-class TestParseViewport:
-    def test_none(self) -> None:
-        assert _parse_viewport(None) is None
-
-    def test_tuple(self) -> None:
-        assert _parse_viewport((800, 600)) == (800, 600)
-
-    def test_string(self) -> None:
-        assert _parse_viewport("1280x800") == (1280, 800)
-
-    def test_string_uppercase(self) -> None:
-        assert _parse_viewport("1280X800") == (1280, 800)
+# `_parse_viewport` was removed in the #96 refactor — parsing lives in
+# `clickcast.core.viewport.Viewport.parse` now, covered by
+# `tests/test_viewport.py`. The session-side behaviour is exercised in
+# `test_context_kwargs_*` below.
 
 
 def test_page_property_raises_when_closed() -> None:

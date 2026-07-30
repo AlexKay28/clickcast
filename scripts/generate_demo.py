@@ -22,6 +22,7 @@ import logging
 from pathlib import Path
 
 from clickcast.auto import AutoConfig, run_tour
+from clickcast.core.viewport import Viewport
 
 log = logging.getLogger("clickcast.demo")
 
@@ -117,7 +118,7 @@ def main() -> None:
             args.dwell = preset_dwell
         log.info("resolved --pace=%s → fps=%d dwell=%.2fs", args.pace, args.fps, args.dwell)
 
-    w, h = args.viewport.lower().split("x")
+    vp = Viewport.parse(args.viewport)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     asyncio.run(
@@ -133,7 +134,7 @@ def main() -> None:
                 seed_urls=[],
                 dwell=args.dwell,
                 initial_wait=args.initial_wait,
-                session_kwargs={"viewport": (int(w), int(h))},
+                session_kwargs={"viewport": vp.as_tuple()},
                 fps=args.fps,
                 format="gif",
                 quality=8,
