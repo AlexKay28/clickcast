@@ -38,7 +38,7 @@ import os
 import sys
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 if sys.version_info >= (3, 11):
@@ -48,6 +48,9 @@ else:  # pragma: no cover — CI covers 3.11+
 
 import tomlkit
 from pydantic import BaseModel, ConfigDict, Field
+
+# datetime.UTC is 3.11+; project's requires-python is 3.10.
+UTC = timezone.utc
 
 __all__ = [
     "ActiveSession",
