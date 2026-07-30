@@ -48,6 +48,7 @@ from clickcast.core.actions import (
     WheelStep,
 )
 from clickcast.core.session import Engine, Session, WaitArg
+from clickcast.core.viewport import Viewport
 from clickcast.discovery import Element
 from clickcast.discovery import discover as _async_discover
 from clickcast.encode import EncodeResult, Format, encode
@@ -73,7 +74,7 @@ class _BaseReel:
         self,
         url: str,
         *,
-        viewport: str | tuple[int, int] | None = None,
+        viewport: str | tuple[int, int] | Viewport | None = None,
         engine: Engine = "chromium",
         device: str | None = None,
         headful: bool = False,
@@ -112,12 +113,13 @@ class _BaseReel:
         self._strip_query_strings: bool = strip_query_strings
 
     @staticmethod
-    def _viewport_str(v: str | tuple[int, int] | None) -> str | None:
+    def _viewport_str(v: str | tuple[int, int] | Viewport | None) -> str | None:
+        """Coerce any accepted viewport input into the canonical ``"WxH"``
+        string that ``Meta`` stores. Kept as a staticmethod for
+        backwards-compat with the private-symbol test hook at line 870."""
         if v is None:
             return None
-        if isinstance(v, tuple):
-            return f"{v[0]}x{v[1]}"
-        return v
+        return str(Viewport.parse(v))
 
     # ------------------------------------------------------------------
     # Chainable builder methods — every one returns `self`
@@ -452,9 +454,8 @@ def _viewport_list_from_meta(scenario: Scenario) -> list[int] | None:
     if not vp:
         return None
     try:
-        w, h = vp.lower().split("x", 1)
-        return [int(w), int(h)]
-    except ValueError:
+        return Viewport.parse(vp).as_list()
+    except (TypeError, ValueError):
         return None
 
 
@@ -857,7 +858,7 @@ def discover(
     *,
     interactive: bool = True,
     limit: int = 20,
-    viewport: str | tuple[int, int] | None = None,
+    viewport: str | tuple[int, int] | Viewport | None = None,
     engine: Engine = "chromium",
 ) -> list[Element]:
     """Sync wrapper around :func:`clickcast.discovery.discover`.

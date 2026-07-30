@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Single `Viewport` value type** (closes [#96]). New
+  `clickcast.core.viewport.Viewport` frozen dataclass replaces the six
+  ad-hoc `"WxH"` parsers previously scattered across `session.py`,
+  `cli.py`, `reel.py`, and `scripts/generate_demo.py`. Public API:
+  `Viewport.parse(raw)` accepts `str | tuple[int, int] | Viewport`
+  idempotently; `__str__` returns `"WxH"`; `as_tuple()` and `as_list()`
+  for the downstream shapes Playwright and the sidecar respectively want.
+  All viewport-accepting APIs (`Session.__init__`, `Reel.__init__`,
+  `clickcast.discover(viewport=...)`) now accept `Viewport` instances too.
+  Backwards-compatible for callers passing strings or tuples.
+- **CLI type-alias rename**: `Viewport = Annotated[str, typer.Option(...)]`
+  in `cli.py` is now `ViewportArg` to avoid shadowing the new value type.
+  No user-facing change (only internal typing).
+
 ## [0.2.1] — 2026-07-29
 
 A small-but-visible polish release focused on human-legible reels.
@@ -437,3 +452,4 @@ Initial public release.
 [#114]: https://github.com/AlexKay28/clickcast/issues/114
 [#115]: https://github.com/AlexKay28/clickcast/issues/115
 [#129]: https://github.com/AlexKay28/clickcast/issues/129
+[#96]: https://github.com/AlexKay28/clickcast/issues/96
