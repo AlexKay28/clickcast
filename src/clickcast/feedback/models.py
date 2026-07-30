@@ -1,10 +1,10 @@
-"""Pydantic models for the AI-feedback sidecar (schema v1)."""
+"""Pydantic models for the AI-feedback sidecar (schema v1 + v2 graph)."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_serializer
 
 
 class Media(BaseModel):
@@ -98,17 +98,111 @@ class Feedback(BaseModel):
     template: FeedbackTemplate
 
 
+class PageNode(BaseModel):
+    """A distinct URL visited during the tour — a node in the app graph.
+
+    Identified by URL (canonical). ``first_seen_step`` / ``last_seen_step``
+    span the index range in ``Report.steps`` during which the URL was the
+    active page — lets a consumer find the frames + actions that touched it
+    without re-scanning the whole step list.
+
+    ``components`` names the ids of ``ComponentNode`` entries that were
+    detected on this page. Empty in the v2-shipped-first slice — the
+    landmark-detection pass that fingerprints reusable subtrees (nav,
+    footer, sidebar) ships as a follow-up.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    kind: Literal["page"] = "page"
+    url: str
+    title: str = ""
+    dom_signature: str = ""
+    first_seen_step: int = Field(ge=0)
+    last_seen_step: int = Field(ge=0)
+    components: list[str] = Field(default_factory=list)
+
+
+class ComponentNode(BaseModel):
+    """A stable DOM subtree that appears on ≥ 2 ``PageNode`` entries.
+
+    Deduped across pages by ``dom_signature`` — same primary-nav rendered on
+    /pricing and /docs surfaces exactly one ``ComponentNode``. Empty list in
+    the v2-shipped-first slice (see :class:`PageNode.components`).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    kind: Literal["component"] = "component"
+    role: str
+    selector: str = ""
+    bbox: list[int] = Field(default_factory=list)
+    dom_signature: str
+    seen_on_nodes: list[str] = Field(default_factory=list)
+
+
+class Edge(BaseModel):
+    """A transition between two ``PageNode`` entries.
+
+    Only ``transition_kind: "navigation"`` ships in the v2-first slice — the
+    click caused ``page_state.url_after`` to change. ``reveal`` and
+    ``dismiss`` classification requires DOM diffing across step boundaries
+    and is deferred to a follow-up.
+    """
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    from_: str = Field(alias="from", serialization_alias="from")
+    to: str
+    via_step: int = Field(ge=0)
+    selector: str | None = None
+    transition_kind: Literal["navigation"] = "navigation"
+
+    @model_serializer(mode="wrap")
+    def _serialize_from_alias(self, handler: Any) -> dict[str, Any]:
+        """Force ``from_`` → ``"from"`` on every serialization path.
+
+        Pydantic's default ``model_dump`` returns field names, not aliases,
+        so without this override the sidecar would contain ``"from_"``
+        instead of the JSON-schema-declared ``"from"`` key.
+        """
+        data: dict[str, Any] = handler(self)
+        if "from_" in data:
+            data = {("from" if k == "from_" else k): v for k, v in data.items()}
+        return data
+
+
+class Graph(BaseModel):
+    """Structural summary of the app the tour uncovered — v2 additive block.
+
+    Attached to :class:`Report.graph` when the builder can extract at least
+    one page node. Consumed by LLM agents to reason about "the shape of this
+    app" rather than "what happened in this specific sequence".
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    nodes: list[PageNode | ComponentNode] = Field(default_factory=list)
+    edges: list[Edge] = Field(default_factory=list)
+
+
 class Report(BaseModel):
     """AI-feedback sidecar — the primary contract for downstream agents.
 
     Deliberately does NOT set ``extra="forbid"`` at the top level so #29 Track
     C can add a ``graph`` block without a breaking schema change. The nested
     models above DO forbid extras — those shapes are stable.
+
+    v2 (this release) adds the optional ``graph`` block. v1 sidecars round-
+    trip through the v2 model unchanged: ``graph`` is optional and defaults
+    to ``None`` when absent.
     """
 
     # No extra="forbid" here — see docstring above.
 
-    schema_version: int = 1
+    schema_version: int = 2
     clickcast_version: str
     url: str | None = None
     engine: str = "chromium"
@@ -121,6 +215,7 @@ class Report(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
     feedback: Feedback | None = None
+    graph: Graph | None = None
 
 
 class StepAssertion(BaseModel):

@@ -1,16 +1,20 @@
-# AI-feedback sidecar — schema v1
+# AI-feedback sidecar — schema v2
 
 Every non-`--no-sidecar` reel writes a sidecar JSON next to the media
 file (`tour.gif` → `tour.gif.json`). This is the primary contract an AI
 consumer reads. The canonical JSON Schema lives at
-[`src/clickcast/feedback/schema/v1.json`](../src/clickcast/feedback/schema/v1.json).
+[`src/clickcast/feedback/schema/v2.json`](../src/clickcast/feedback/schema/v2.json).
+The prior [`v1.json`](../src/clickcast/feedback/schema/v1.json) is
+preserved verbatim for downstream consumers that bookmarked it — v2 is
+strictly additive over v1 (see the "v1 → v2 additive contract" section
+below).
 
 ## Top-level shape
 
 ```jsonc
 {
-  "schema_version": 1,          // this document's version
-  "clickcast_version": "0.1.0", // the package version that wrote it
+  "schema_version": 2,          // this document's version
+  "clickcast_version": "0.2.4", // the package version that wrote it
   "url": "https://example.com", // seed URL (nullable — YAML runs may not have one)
   "engine": "chromium",         // playwright engine
   "viewport": [1280, 800],
@@ -20,13 +24,14 @@ consumer reads. The canonical JSON Schema lives at
   "discovered_elements": [...], // ranked elements from discover()
   "steps": [...],               // one entry per step iteration
   "warnings": [],
-  "errors": []
+  "errors": [],
+  "graph": {...}                // v2 additive: app-shape summary (nullable)
 }
 ```
 
 `schema_version` and `clickcast_version` let consumers verify
 compatibility before parsing. Bump `schema_version` on any breaking
-change; the current stable release is **v1**.
+change; the current stable release is **v2**.
 
 ## `media`
 
@@ -86,17 +91,75 @@ One entry per step iteration (a `repeat: N` step produces `N` entries).
 in `ActionResult` terms — the sidecar reports `"skipped"` and keeps the
 error message.
 
-## Forward compatibility
+## `graph` — v2 additive block
 
-The top-level `Report` deliberately does **not** forbid unknown keys. A
-future `schema_version: 2` (tracked in [#29 Track C](https://github.com/AlexKay28/clickcast/issues/29))
-adds a top-level `graph` block for BFS-style exploration. v1 consumers
-that ignore unknown fields will keep working; consumers that need the
-graph should switch to the v2 schema when it ships.
+Populated by [`clickcast.feedback.graph.build_graph`] when the tour
+produced at least one recorded `page_state.url_after`. Absent (or
+`null`) for tours that never left the discovery pass and for v1
+sidecars written before #107 landed. See
+[#29 Track C](https://github.com/AlexKay28/clickcast/issues/29) /
+[#107](https://github.com/AlexKay28/clickcast/issues/107) for the
+motivation — the LLM planning surface that consumes the sidecar wants
+to reason about "the shape of this app" rather than "what happened in
+this specific sequence".
+
+```jsonc
+{
+  "nodes": [
+    {
+      "id": "n1",
+      "kind": "page",
+      "url": "https://example.com/pricing",
+      "title": "Pricing — Example",
+      "dom_signature": "",
+      "first_seen_step": 0,
+      "last_seen_step": 3,
+      "components": []            // ids of component nodes on this page
+    }
+    // "kind": "component" nodes ship empty in this release — the
+    // landmark-detection pass (role + aria-label + bbox fingerprint) is
+    // a follow-up. `dom_signature` helper is exported today so the
+    // follow-up plugs straight in.
+  ],
+  "edges": [
+    {
+      "from": "n1",
+      "to": "n2",
+      "via_step": 2,
+      "selector": "a:has-text('Docs')",
+      "transition_kind": "navigation"    // only kind shipped in v2-first
+    }
+  ]
+}
+```
+
+Deferred to follow-ups (tracked separately):
+
+- `transition_kind: "reveal"` / `"dismiss"` — modal / drawer open+close
+  detection requires DOM diffing across step boundaries.
+- `ComponentNode` extraction — landmark fingerprinting from `discovery/`
+  output plus dedup across pages via `dom_signature`.
+
+## v1 → v2 additive contract
+
+v2 is **strictly additive** over v1:
+
+- All v1 fields are unchanged (same names, same types, same defaults).
+- `schema_version` default bumped from 1 → 2.
+- One new optional top-level field: `graph` (defaults to `null`).
+
+Consequences:
+
+- **v1 files load through v2**: `graph` is optional, so an old sidecar
+  parses cleanly and `report.graph is None`.
+- **v2 files parsed by v1 consumers**: the top-level `Report` never
+  forbade unknown keys precisely so this works. A v1 parser that
+  ignores unknown fields keeps working; a v1 parser that reads
+  `schema_version` and refuses > 1 will (correctly) opt out.
 
 The nested sub-models (`Media`, `DiscoveredElement`, `StepReport`,
-`PageState`) DO forbid extras — those shapes are stable within a
-major schema version.
+`PageState`, `PageNode`, `ComponentNode`, `Edge`, `Graph`) DO forbid
+extras — those shapes are stable within a major schema version.
 
 ## Reading the sidecar
 

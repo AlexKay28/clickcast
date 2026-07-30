@@ -46,7 +46,7 @@ SKILL_SCHEMA_VERSION = 1
 
 SIDECAR_SCHEMA_URL = (
     "https://raw.githubusercontent.com/AlexKay28/clickcast/main/"
-    "src/clickcast/feedback/schema/v1.json"
+    "src/clickcast/feedback/schema/v2.json"
 )
 
 SUMMARY = (
@@ -180,7 +180,10 @@ COMMAND_BRIEFS: tuple[CommandBrief, ...] = (
     ),
     CommandBrief(
         name="report-bug",
-        summary="Turn a sidecar into an actionable AI-agent bug report.",
+        summary=(
+            "Turn a sidecar into an actionable AI-agent bug report. "
+            "Renders v2 sidecar graph block (nodes/edges for LLM planning) when present."
+        ),
         when_to_use=(
             "Something in a reel or sidecar looks wrong. Produces diagnostics "
             "plus a prefilled GitHub issue URL. See docs/for-agents.md."

@@ -20,7 +20,7 @@ from clickcast.feedback import (
 )
 
 REPO_ROOT = Path(__file__).parent.parent
-SCHEMA_PATH = REPO_ROOT / "src" / "clickcast" / "feedback" / "schema" / "v1.json"
+SCHEMA_PATH = REPO_ROOT / "src" / "clickcast" / "feedback" / "schema" / "v2.json"
 
 
 # ------------------------------------------------------------------
@@ -75,8 +75,12 @@ class TestModels:
         with pytest.raises(ValidationError):
             StepReport(index=0, action="goto", duration_ms=1.0)  # type: ignore[call-arg]
 
-    def test_report_default_schema_version_is_1(self) -> None:
-        assert _valid_report().schema_version == 1
+    def test_report_default_schema_version_is_2(self) -> None:
+        # Bumped to 2 in #107: the optional additive `graph` block ships.
+        # v1 sidecars still validate under this model (see the
+        # forward-compat test below and the v1-backcompat test in
+        # tests/test_graph.py).
+        assert _valid_report().schema_version == 2
 
     def test_report_defaults_are_forward_compatible(self) -> None:
         # Roadmap #29 Track C adds a top-level `graph` block. The base model
@@ -105,10 +109,10 @@ class TestJsonSchema:
             "and commit the update"
         )
 
-    def test_schema_advertises_v1(self) -> None:
+    def test_schema_advertises_v2(self) -> None:
         schema = json.loads(SCHEMA_PATH.read_text())
-        # schema_version has default 1 in the model — check the default made it
-        assert schema["properties"]["schema_version"]["default"] == 1
+        # schema_version has default 2 in the model — check the default made it
+        assert schema["properties"]["schema_version"]["default"] == 2
 
 
 # ------------------------------------------------------------------
@@ -127,7 +131,7 @@ class TestRoundTrip:
         path = write(_valid_report(), tmp_path / "tour.gif.json")
         # Must be valid JSON with predictable indentation
         payload = json.loads(path.read_text())
-        assert payload["schema_version"] == 1
+        assert payload["schema_version"] == 2
         assert payload["media"]["format"] == "gif"
 
     def test_load_missing_file_raises(self, tmp_path: Path) -> None:

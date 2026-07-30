@@ -15,12 +15,17 @@ from clickcast.feedback.assertions import (
 )
 from clickcast.feedback.builder import ReportBuilder
 from clickcast.feedback.collector import PageStateCollector
+from clickcast.feedback.graph import build_graph, dom_signature
 from clickcast.feedback.models import (
     Assertions,
+    ComponentNode,
     DiscoveredElement,
+    Edge,
     Feedback,
     FeedbackTemplate,
+    Graph,
     Media,
+    PageNode,
     PageState,
     Report,
     StepAssertion,
@@ -34,10 +39,14 @@ __all__ = [
     "ASSERTIONS_SCHEMA_VERSION",
     "Advisory",
     "Assertions",
+    "ComponentNode",
     "DiscoveredElement",
+    "Edge",
     "Feedback",
     "FeedbackTemplate",
+    "Graph",
     "Media",
+    "PageNode",
     "PageState",
     "PageStateCollector",
     "Report",
@@ -47,7 +56,9 @@ __all__ = [
     "build_advisories",
     "build_assertions",
     "build_feedback",
+    "build_graph",
     "diff_assertions",
+    "dom_signature",
     "feedback_pointer_lines",
     "load",
     "load_assertions",
