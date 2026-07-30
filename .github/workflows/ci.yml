@@ -31,7 +31,9 @@ jobs:
       - run: mypy
 
   test:
-    needs: lint
+    # No `needs: lint` — run lint and test in parallel so a format-only nit
+    # doesn't stall the whole ~10-min test matrix. Branch protection still
+    # requires both jobs green, so the merge-gate guarantee is unchanged.
     strategy:
       fail-fast: false
       matrix:
@@ -48,6 +50,16 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
       - run: pip install -e ".[dev]"
+      # Resolve the installed playwright version and feed it into the cache
+      # key. `hashFiles('pyproject.toml')` alone only changes when the pinned
+      # RANGE changes; a 1.44.0 -> 1.44.1 resolver bump would silently reuse
+      # a stale browser bundle and produce `Executable doesn't exist at ...`
+      # runtime errors that look intermittent. See #43 item 3.
+      - name: Resolve Playwright version
+        id: pw-version
+        run: |
+          v=$(python -c "from importlib.metadata import version; print(version('playwright'))")
+          echo "version=$v" >> "$GITHUB_OUTPUT"
       - name: Cache Playwright browsers
         id: pw-cache
         uses: actions/cache@v4
@@ -55,11 +67,22 @@ jobs:
           path: |
             ~/.cache/ms-playwright
             ~/Library/Caches/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pyproject.toml') }}
-      - name: Install Playwright chromium (Linux)
-        if: runner.os == 'Linux'
+          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
+      # Symmetric branches per OS: on cache HIT we skip the browser download
+      # entirely and only re-run `install-deps` (fast apt pass on Linux, no-op
+      # on macOS); on cache MISS we do the full `install --with-deps`. Prior
+      # Linux branch ran `--with-deps` unconditionally, paying the apt cost
+      # on every job. See #46 item 4.
+      - name: Install Playwright system deps (Linux, cache hit)
+        if: runner.os == 'Linux' && steps.pw-cache.outputs.cache-hit == 'true'
+        run: playwright install-deps chromium
+      - name: Install Playwright chromium (Linux, cache miss)
+        if: runner.os == 'Linux' && steps.pw-cache.outputs.cache-hit != 'true'
         run: playwright install --with-deps chromium
-      - name: Install Playwright chromium (macOS)
+      - name: Install Playwright system deps (macOS, cache hit)
+        if: runner.os == 'macOS' && steps.pw-cache.outputs.cache-hit == 'true'
+        run: playwright install-deps chromium
+      - name: Install Playwright chromium (macOS, cache miss)
         if: runner.os == 'macOS' && steps.pw-cache.outputs.cache-hit != 'true'
-        run: playwright install chromium
+        run: playwright install --with-deps chromium
       - run: pytest -m "not slow"

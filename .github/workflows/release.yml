@@ -53,6 +53,14 @@ jobs:
       - run: pip install --upgrade build
       - run: python -m build
 
+      # Catch broken PyPI-project-page metadata (bad long_description
+      # rendering, unknown classifier) BEFORE the wheel gets uploaded.
+      # See #46 item 3.
+      - name: Verify distribution metadata
+        run: |
+          pip install twine
+          twine check dist/*
+
       - name: List built artifacts
         run: ls -la dist/
 
@@ -79,7 +87,11 @@ jobs:
           path: dist/
 
       - name: Publish to TestPyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        # SHA-pinned instead of the moving `release/v1` ref — a compromised
+        # tag on that action would otherwise publish arbitrary code to PyPI
+        # under our Trusted-Publishing OIDC identity. Bump the SHA + version
+        # comment together when upgrading. See #46 item 5.
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
           repository-url: https://test.pypi.org/legacy/
 
@@ -143,6 +155,33 @@ jobs:
           fi
           clickcast --help > /dev/null
 
+      # Real smoke-test — exercises the reel pipeline and verifies bundled
+      # resources (font + JSON schema) actually made it into the wheel. The
+      # prior `--version`/`--help` block was a pure Python-import check; a
+      # wheel missing `annotate/fonts/DejaVuSans.ttf` or `feedback/schema/v1.json`,
+      # or with a broken `importlib.resources` path, would upload to PyPI green.
+      # Motivated by the same class of "3.10 didn't work" bug the v0.2.2 -> v0.2.3
+      # hotfix caught — a real invocation catches what an import check can't.
+      # See #43 item 2.
+      - name: Install Playwright chromium (for real smoke-test)
+        run: python -m playwright install chromium
+
+      - name: Smoke-test screenshot + bundled resources
+        run: |
+          set -euo pipefail
+          clickcast shot 'data:text/html,<h1>x</h1>' --out /tmp/s.png
+          test -s /tmp/s.png
+          # PNG magic bytes: 89 50 4E 47 = "\x89PNG". Python check keeps the
+          # comparison portable across od(1) formatting differences on
+          # linux/macos.
+          python -c "import sys; assert open('/tmp/s.png','rb').read(4) == b'\x89PNG', 'bad PNG magic'"
+          python -c "
+          from clickcast.annotate import Annotator
+          import importlib.resources as r, json
+          Annotator()   # loads bundled font
+          json.loads((r.files('clickcast.feedback')/'schema/v1.json').read_text())
+          "
+
   # ------------------------------------------------------------------
   # Publish to PyPI (only for non-prerelease tags)
   # ------------------------------------------------------------------
@@ -162,7 +201,8 @@ jobs:
           path: dist/
 
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        # SHA-pinned; see the same-named step in `test-release`. See #46 item 5.
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
 
   # ------------------------------------------------------------------
   # Cut a GitHub release with auto-generated notes + attached artifacts
