@@ -7,7 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3] — 2026-07-30
+
+Hotfix over 0.2.2 — same content, plus one Python-3.10 compatibility fix
+that the smoke-test caught before 0.2.2 could reach real PyPI. Tag
+`v0.2.2` was pushed, blocked at the smoke-test stage on all four
+Python-3.10 combos, and deleted; 0.2.2 was never on `pypi.org/clickcast`.
+
+### Fixed
+- **`from datetime import UTC` broke on Python 3.10** (introduced by
+  [#124]). `datetime.UTC` is a 3.11+ alias for `datetime.timezone.utc`;
+  the project's `requires-python = ">=3.10"` says 3.10 must work.
+  Import replaced with `from datetime import datetime, timezone` +
+  a module-level `UTC = timezone.utc`. mypy passed locally because
+  mypy's `python_version` is pinned to 3.12 in `pyproject.toml` (see
+  the existing comment there) — the release smoke-test on 3.10 is
+  the guard that catches this class of bug. The full 0.2.2 change
+  list is unchanged.
+
 ## [0.2.2] — 2026-07-30
+
+*Tag pushed and deleted; never on PyPI. See 0.2.3.*
 
 Agent-experience release. Three new opt-in features (a `--for-humans`
 composite for human-legible reels, a `clickcast feedback` capture-session
