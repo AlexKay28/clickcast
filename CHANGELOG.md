@@ -45,11 +45,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     modes (missing font, missing schema, broken CLI dispatch, missing
     browsers) that the prior import-only check would have missed —
     same class of "packaged, but not really usable" bug the v0.2.2 →
-    v0.2.3 `datetime.UTC` hotfix caught ([#43] item 2). Deferred to
-    parallel PRs: `pyproject.toml` `[test]`-extras split ([#46]
-    item 2) and `ThreadingHTTPServer` fixture ([#43] item 1).
+    v0.2.3 `datetime.UTC` hotfix caught ([#43] item 2).
     Deferred to follow-ups: `actionlint` / `pip-audit` / `codespell`
     / `hatch-vcs` from [#46]'s "optional but recommended" list.
+- **`pyproject.toml`: split `[project.optional-dependencies]` into
+  `test` / `dev` / `publish` extras** (partial [#46]). `test` is the
+  minimal `pytest{,-asyncio,-cov}` set every CI test-matrix job needs;
+  `dev` is `clickcast[test]` plus lint / type-check / hooks / build;
+  `publish` is `build + twine` for the release workflow. Contributors
+  doing pytest work can now install a leaner `.[test]` extra. All
+  currently-pinned deps preserved; this is a partition, not a rewrite.
+  Workflow-YAML consumers of the new extras land in a sibling PR.
+
+### Fixed
+- **`tests/conftest.py`: fixture site now uses `ThreadingHTTPServer`**
+  (closes [#43] item 1). `HTTPServer` serves one request at a time;
+  Chromium fires many parallel requests on a real page load (favicon,
+  subresources, HMR probes), which caused request queuing and
+  intermittent 30-second Playwright timeouts under CI load. Switched
+  to `ThreadingHTTPServer` with `daemon_threads = True` so the server
+  handles concurrent requests and tests can shut down cleanly on
+  failure. No test changes required — no existing test relied on
+  request serialization.
 
 ## [0.2.3] — 2026-07-30
 
