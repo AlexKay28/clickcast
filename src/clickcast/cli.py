@@ -15,6 +15,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -50,6 +51,8 @@ from clickcast.feedback.pointers import (
     REPORT_URL,
     SCHEMA_URL,
 )
+from clickcast.feedback.session.cli import feedback_app
+from clickcast.feedback.session.storage import record_invocation_safe
 from clickcast.scenario import ScenarioError, load
 from clickcast.scenario import run as run_scenario
 
@@ -1413,5 +1416,64 @@ def skill(
         typer.echo(render_markdown())
 
 
+# ==========================================================================
+# clickcast feedback …  (#124 v1)
+# ==========================================================================
+
+# Sub-app: `clickcast feedback start|stop|status|list|summary`. Grouped
+# rather than flat so the noun/verb pairing reads naturally. See
+# `src/clickcast/feedback/session/cli.py` for the command bodies.
+app.add_typer(feedback_app, name="feedback")
+
+
+# ==========================================================================
+# Entrypoint wrapper — #124 recording hook
+# ==========================================================================
+
+
+def main() -> None:
+    """Console-script entrypoint. Wraps :data:`app` so an active feedback
+    session (see #124) gets one JSONL line per invocation with the real
+    exit code and wall time.
+
+    Click's ``Context.call_on_close`` runs before the ``SystemExit``
+    surfaces to callers — meaning it can't see the code the command
+    exited with. Wrapping at the entrypoint layer is the simplest
+    place to observe both success (code 0) and failure (whatever
+    ``typer.Exit`` / ``SystemExit`` was raised). The recording is
+    best-effort: if anything goes wrong appending the event, the
+    original exit still propagates unchanged so users NEVER get a
+    mystery failure caused by the recorder.
+    """
+    start_monotonic = time.monotonic()
+    argv = list(sys.argv[1:])
+    exit_code = 0
+    try:
+        app()
+    except SystemExit as e:
+        # `typer.Exit(code=N)` bubbles up as `SystemExit(N)`. Preserve it.
+        code = e.code
+        if isinstance(code, int):
+            exit_code = code
+        elif code is None:
+            exit_code = 0
+        else:
+            # Non-numeric exit (a message string) — treat as error.
+            exit_code = 1
+        raise
+    except BaseException:
+        # Any uncaught exception is a nonzero exit — record it as such
+        # before re-raising so the user still sees the traceback.
+        exit_code = 1
+        raise
+    finally:
+        wall_ms = int((time.monotonic() - start_monotonic) * 1000)
+        record_invocation_safe(
+            argv,
+            exit_code=exit_code,
+            wall_time_ms=wall_ms,
+        )
+
+
 if __name__ == "__main__":
-    app()
+    main()

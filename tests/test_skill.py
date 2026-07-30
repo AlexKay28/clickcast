@@ -41,6 +41,20 @@ def _registered_name(cmd: object) -> str:
     return fn_name.replace("_", "-")
 
 
+def _registered_command_names() -> set[str]:
+    """All CLI-visible top-level names on the root app.
+
+    Since #124, ``clickcast feedback …`` is a sub-app registered via
+    ``app.add_typer`` — it lands on ``registered_groups``, not
+    ``registered_commands``. Both surfaces need a skill brief so an
+    agent that sees ``clickcast feedback`` in ``--help`` can find its
+    entry in ``clickcast skill`` too.
+    """
+    names = {_registered_name(cmd) for cmd in app.registered_commands}
+    names |= {_registered_name(grp) for grp in app.registered_groups}
+    return names
+
+
 def _assert_matches_schema(payload: dict) -> None:
     """Hand-rolled structural check against docs/skill-schema/v1.json.
 
@@ -72,7 +86,7 @@ class TestDriftGuard:
     """The skill brief must stay in lockstep with the registered subcommands."""
 
     def test_every_registered_command_has_a_brief(self) -> None:
-        registered = {_registered_name(cmd) for cmd in app.registered_commands}
+        registered = _registered_command_names()
         briefed = {c.name for c in COMMAND_BRIEFS}
         missing = registered - briefed
         assert not missing, (
@@ -81,7 +95,7 @@ class TestDriftGuard:
         )
 
     def test_no_dangling_brief_entries(self) -> None:
-        registered = {_registered_name(cmd) for cmd in app.registered_commands}
+        registered = _registered_command_names()
         briefed = {c.name for c in COMMAND_BRIEFS}
         dangling = briefed - registered
         assert not dangling, (
@@ -135,11 +149,13 @@ class TestMarkdown:
     def test_contains_sidecar_schema_url(self) -> None:
         assert SIDECAR_SCHEMA_URL in render_markdown()
 
-    def test_word_count_under_800(self) -> None:
-        # The proposal target was ~500 words; 800 gives room for growth
-        # without letting the brief bloat into a manual.
+    def test_word_count_under_900(self) -> None:
+        # The proposal target was ~500 words; the cap gives room for growth
+        # without letting the brief bloat into a manual. Bumped from 800 to
+        # 900 when `feedback` (#124) added the 12th command — legitimate
+        # growth from a new command shouldn't force pruning the other 11.
         words = len(render_markdown().split())
-        assert words < 800, f"brief has grown to {words} words — trim it"
+        assert words < 900, f"brief has grown to {words} words — trim it"
 
     def test_starts_with_versioned_header(self) -> None:
         assert render_markdown().splitlines()[0] == (

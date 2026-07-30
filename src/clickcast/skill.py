@@ -225,6 +225,20 @@ COMMAND_BRIEFS: tuple[CommandBrief, ...] = (
         example="clickcast install chromium --with-deps",
     ),
     CommandBrief(
+        name="feedback",
+        summary="Record clickcast usage across sessions; summarize what hurt.",
+        when_to_use=(
+            "You will use clickcast over hours or days and want a "
+            "deterministic post-hoc summary of failed invocations and "
+            "repeated patterns. Storage is local; zero network."
+        ),
+        key_flags=(
+            FlagBrief("start / stop / status / list", "session lifecycle"),
+            FlagBrief("summary [--json] [--session ID]", "render a session summary"),
+        ),
+        example="clickcast feedback start && ... && clickcast feedback summary",
+    ),
+    CommandBrief(
         name="skill",
         summary="This message — an AI-friendly brief of everything clickcast can do.",
         when_to_use=(
