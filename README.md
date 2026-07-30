@@ -9,7 +9,9 @@
 
 > **What's new** — see [`CHANGELOG.md`](CHANGELOG.md) for the latest release notes.
 
-![clickcast touring react.dev — cursor arrows, actions panel, zoom-on-click closeups](docs/demo.gif)
+![clickcast · scripted tour of tailwindcss.com — sticky A→B arrow, actions panel bottom-right, symmetric open/close pairs](docs/demo.gif)
+
+> **See [`docs/ONE_PAGE_NAVIGATION_ORDER_TIPS.md`](docs/ONE_PAGE_NAVIGATION_ORDER_TIPS.md)** for the nine principles behind why this reel reads as legibly as it does — and the scenario template you can copy for your own reels.
 
 > **Not to be confused with [vercel-labs/webreel](https://github.com/vercel-labs/webreel)** — that's a TypeScript tool for authoring polished demo videos. `clickcast` is a Python tool aimed primarily at *AI agents* that need a visual modality onto a live web UI, and secondarily at humans who want reproducible demo reels.
 
