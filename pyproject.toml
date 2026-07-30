@@ -52,7 +52,7 @@ dev = [
 ]
 
 [project.scripts]
-clickcast = "clickcast.cli:app"
+clickcast = "clickcast.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/AlexKay28/clickcast"

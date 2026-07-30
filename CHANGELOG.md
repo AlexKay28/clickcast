@@ -8,6 +8,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`clickcast feedback ...` capture-session substrate** (closes [#124] —
+  partial v1; heuristics engine + `feedback file` emitter deferred).
+  New Typer sub-app with `start [--label NAME]` / `stop` / `status` /
+  `list` / `summary [--json] [--session ID]`. A thin `main()` wrapper
+  around the Typer app records one JSONL event per CLI invocation
+  (argv, exit_code, wall_time_ms, cwd, git_rev-if-present) into
+  `${XDG_STATE_HOME:-~/.local/state}/clickcast/feedback/<session>/`
+  whenever a session is active. `summary` renders a deterministic
+  Markdown or JSON report — invocation count, top argv patterns,
+  failed-invocation list, session duration. Zero network by default;
+  storage is fully local. Recording is best-effort — a corrupt or
+  missing session file NEVER breaks a CLI invocation, the recorder
+  just no-ops. Skill brief gains a `feedback` command entry so agents
+  discover the loop from message one. Heuristics/pattern-library
+  (repeated-same-command, wrapper-script detection, etc.) and the
+  `feedback file` GH-issue emitter deferred to follow-ups; this PR
+  ships the substrate so the observable loop (start → use tool →
+  `summary` shows real evidence) works today.
+- **Skill brief word-count cap bumped 800 → 900** (piggybacked on
+  [#124]). The 800 ceiling in `tests/test_skill.py` was set for 11
+  commands; adding the `feedback` sub-app pushed the total past 800
+  legitimately. Trimming the other 11 briefs to make room would have
+  hurt information density for AI agents that rely on the brief. The
+  spirit of the guard (\"don\'t let it become a manual\") is preserved
+  at 900.
 - **`clickcast auto --for-humans` composite flag** (closes [#129] —
   partial; Tracks A/E/F, follow-ups filed for B/C/D). One flag flips
   five sub-flags to human-friendly defaults (`--pace onboarding`,
@@ -565,3 +590,4 @@ Initial public release.
 [#97]: https://github.com/AlexKay28/clickcast/issues/97
 [#98]: https://github.com/AlexKay28/clickcast/issues/98
 [#138]: https://github.com/AlexKay28/clickcast/issues/138
+[#124]: https://github.com/AlexKay28/clickcast/issues/124
