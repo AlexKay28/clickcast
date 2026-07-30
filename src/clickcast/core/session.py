@@ -11,14 +11,25 @@ from typing import Any, Literal
 from playwright.async_api import (
     Browser,
     BrowserContext,
+    Locator,
     Page,
     Playwright,
     async_playwright,
 )
+from playwright.async_api import (
+    TimeoutError as PlaywrightTimeoutError,
+)
 
 from clickcast.core.viewport import Viewport
 
-__all__ = ["Engine", "LoadState", "Session", "WaitArg"]
+__all__ = [
+    "Engine",
+    "LoadState",
+    "Locator",
+    "PlaywrightTimeoutError",
+    "Session",
+    "WaitArg",
+]
 
 Engine = Literal["chromium", "firefox", "webkit"]
 LoadState = Literal["load", "domcontentloaded", "networkidle"]
@@ -178,6 +189,63 @@ class Session:
 
     async def close(self) -> None:
         await self.__aexit__(None, None, None)
+
+    # ------------------------------------------------------------------
+    # Narrow Page seam (#98) — every business-logic caller reaches through
+    # these methods instead of `session.page.*`. Playwright's `Locator` /
+    # `TimeoutError` types are re-exported from this module so callers
+    # never need to `from playwright.async_api import ...`.
+    # ------------------------------------------------------------------
+
+    def locator(self, selector: str) -> Locator:
+        """Return a Playwright :class:`Locator` for ``selector``."""
+        return self.page.locator(selector)
+
+    async def evaluate(self, script: str, *args: Any) -> Any:
+        """Run a JS ``script`` in the page context. Positional ``args`` are
+        packed into a single array argument as Playwright's ``evaluate``
+        expects a single JSON-serializable payload."""
+        if args:
+            payload = args[0] if len(args) == 1 else list(args)
+            return await self.page.evaluate(script, payload)
+        return await self.page.evaluate(script)
+
+    async def press_key(self, key: str) -> None:
+        """Press ``key`` on the page-level keyboard (no locator needed)."""
+        await self.page.keyboard.press(key)
+
+    async def wheel(self, dx: int, dy: int) -> None:
+        """Dispatch a page-level wheel event at the current mouse position."""
+        await self.page.mouse.wheel(dx, dy)
+
+    async def title(self) -> str:
+        """Return the current page title. Empty string on failure."""
+        try:
+            return await self.page.title()
+        except Exception:
+            return ""
+
+    @property
+    def url_now(self) -> str:
+        """Return the current page URL. Empty string on failure. Kept as a
+        distinct name from ``self.url`` (the constructor arg) so callers can
+        tell them apart."""
+        try:
+            return self.page.url or ""
+        except Exception:
+            return ""
+
+    def on(self, event: str, callback: Any) -> None:
+        """Subscribe ``callback`` to a page event
+        (``console`` / ``pageerror`` / ``requestfailed`` / etc.)."""
+        # Playwright's Page.on has per-event Literal-typed overloads; our
+        # narrow-seam wrapper accepts the union of them as a plain str for
+        # collector-side flexibility.
+        self.page.on(event, callback)  # type: ignore[call-overload]
+
+    def off(self, event: str, callback: Any) -> None:
+        """Unsubscribe ``callback`` from a page event. Idempotent."""
+        self.page.remove_listener(event, callback)
 
     async def wait(self, wait: WaitArg | None) -> None:
         """Polymorphic wait: number → sleep, load-state → wait_for_load_state, else selector."""

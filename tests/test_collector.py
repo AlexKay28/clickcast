@@ -19,11 +19,16 @@ class _FakeRequest:
 
 
 class _FakePage:
-    """Enough of a Playwright Page for the collector to run against."""
+    """Enough of a Session for the collector to run against.
+
+    Kept named ``_FakePage`` for the historical test-file naming, but as
+    of #98 the collector talks to a :class:`Session` (`.on / .off /
+    .title / .url_now`), not a Playwright Page directly.
+    """
 
     def __init__(self, title: str = "T", url: str = "http://x/") -> None:
         self._title = title
-        self.url = url
+        self.url_now = url
         self._listeners: dict[str, list[Any]] = {
             "console": [],
             "pageerror": [],
@@ -33,7 +38,7 @@ class _FakePage:
     def on(self, event: str, cb: Any) -> None:
         self._listeners[event].append(cb)
 
-    def remove_listener(self, event: str, cb: Any) -> None:
+    def off(self, event: str, cb: Any) -> None:
         self._listeners[event].remove(cb)
 
     async def title(self) -> str:

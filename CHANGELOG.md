@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Narrowed Session→Page seam** (closes [#98]). `Session` gains a
+  small set of methods that hide Playwright's Page under a stable
+  interface: `locator(selector)`, `evaluate(script, *args)`,
+  `press_key(key)`, `wheel(dx, dy)`, `title()`, `url_now`, `on(event,
+  cb)`, `off(event, cb)`. Playwright's `Locator` and `TimeoutError`
+  types are re-exported from `clickcast.core.session` so downstream
+  code never imports from `playwright.*` directly. Migrated:
+  `clickcast.core.actions`, `clickcast.discovery.discovery`, and
+  `clickcast.feedback.collector` all switch from
+  `session.page.locator/evaluate/keyboard/mouse` (20 call sites) and
+  `Page.on/remove_listener` to the new narrow surface. `collector`
+  now takes a `Session` instead of a bare `Page`. Zero user-visible
+  behavior change; unblocks session-swap for CI, session-level policy
+  (retry, tracing), and cleaner dependency reasoning.
 - **Grouped `BrowserOpts` + `RenderOpts` dataclasses** (closes [#97]).
   New `clickcast.core.opts` module holds the 8 browser-behaviour fields
   (`engine`, `viewport`, `device`, `headful`, `lang`, `dark`, `slowmo`,
@@ -469,3 +483,4 @@ Initial public release.
 [#129]: https://github.com/AlexKay28/clickcast/issues/129
 [#96]: https://github.com/AlexKay28/clickcast/issues/96
 [#97]: https://github.com/AlexKay28/clickcast/issues/97
+[#98]: https://github.com/AlexKay28/clickcast/issues/98

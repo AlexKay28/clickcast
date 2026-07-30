@@ -213,7 +213,7 @@ async def _disambiguate_selectors(session: Session, elements: list[Element]) -> 
             disambiguated.append(el)
             continue
         try:
-            count = await session.page.locator(el.selector).count()
+            count = await session.locator(el.selector).count()
         except Exception:
             # Malformed selector or Playwright error — leave as-is; the
             # downstream click will surface the real error.
@@ -227,7 +227,7 @@ async def _disambiguate_selectors(session: Session, elements: list[Element]) -> 
 
 
 async def _discover_on_page(session: Session, *, interactive: bool, limit: int) -> list[Element]:
-    raw = cast(list[dict[str, Any]], await session.page.evaluate(_DISCOVERY_JS))
+    raw = cast(list[dict[str, Any]], await session.evaluate(_DISCOVERY_JS))
     elements: list[Element] = []
     for c in raw:
         if interactive and not c["visible"]:

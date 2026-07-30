@@ -8,11 +8,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from playwright.async_api import Locator
-from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from pydantic import BaseModel, ConfigDict, Field
 
-from clickcast.core.session import Session, WaitArg
+from clickcast.core.session import Locator, PlaywrightTimeoutError, Session, WaitArg
 
 # Selector shapes whose failures benefit from suggest_candidates hints
 # (see #114). We only augment click-shaped step errors — a scroll/wait/goto
@@ -267,7 +265,7 @@ async def _wait_for_stable(
     Error message includes selector + the most recent bbox history so callers
     can debug jittery elements.
     """
-    loc = session.page.locator(selector)
+    loc = session.locator(selector)
     deadline = time.monotonic() + timeout
     history: list[tuple[float, tuple[float, float, float, float] | None]] = []
     last_box: tuple[float, float, float, float] | None = None
@@ -334,7 +332,7 @@ async def execute(step: BaseStep, session: Session) -> ActionResult:
             await _goto_with_retries(session, step)
         elif isinstance(step, ClickStep):
             selector = step.selector
-            loc = session.page.locator(step.selector)
+            loc = session.locator(step.selector)
             cursor_xy = await _center_of(loc, timeout_ms=timeout)
             if timeout is not None:
                 await loc.click(timeout=timeout)
@@ -342,7 +340,7 @@ async def execute(step: BaseStep, session: Session) -> ActionResult:
                 await loc.click()
         elif isinstance(step, DblClickStep):
             selector = step.selector
-            loc = session.page.locator(step.selector)
+            loc = session.locator(step.selector)
             cursor_xy = await _center_of(loc, timeout_ms=timeout)
             if timeout is not None:
                 await loc.dblclick(timeout=timeout)
@@ -350,7 +348,7 @@ async def execute(step: BaseStep, session: Session) -> ActionResult:
                 await loc.dblclick()
         elif isinstance(step, HoverStep):
             selector = step.selector
-            loc = session.page.locator(step.selector)
+            loc = session.locator(step.selector)
             cursor_xy = await _center_of(loc, timeout_ms=timeout)
             if timeout is not None:
                 await loc.hover(timeout=timeout)
@@ -358,7 +356,7 @@ async def execute(step: BaseStep, session: Session) -> ActionResult:
                 await loc.hover()
         elif isinstance(step, TypeStep):
             selector = step.into
-            loc = session.page.locator(step.into)
+            loc = session.locator(step.into)
             cursor_xy = await _center_of(loc, timeout_ms=timeout)
             if timeout is not None:
                 await loc.press_sequentially(step.text, delay=step.delay, timeout=timeout)
@@ -368,14 +366,14 @@ async def execute(step: BaseStep, session: Session) -> ActionResult:
             selector = step.selector
             if step.selector:
                 if timeout is not None:
-                    await session.page.locator(step.selector).press(step.key, timeout=timeout)
+                    await session.locator(step.selector).press(step.key, timeout=timeout)
                 else:
-                    await session.page.locator(step.selector).press(step.key)
+                    await session.locator(step.selector).press(step.key)
             else:
-                await session.page.keyboard.press(step.key)
+                await session.press_key(step.key)
         elif isinstance(step, SelectStep):
             selector = step.into
-            loc = session.page.locator(step.into)
+            loc = session.locator(step.into)
             cursor_xy = await _center_of(loc, timeout_ms=timeout)
             if timeout is not None:
                 await loc.select_option(step.value, timeout=timeout)
@@ -384,7 +382,7 @@ async def execute(step: BaseStep, session: Session) -> ActionResult:
         elif isinstance(step, ScrollStep):
             if step.to is not None:
                 selector = step.to
-                await session.page.locator(step.to).scroll_into_view_if_needed(
+                await session.locator(step.to).scroll_into_view_if_needed(
                     **({"timeout": timeout} if timeout is not None else {})
                 )
             elif step.by is not None:
@@ -392,7 +390,7 @@ async def execute(step: BaseStep, session: Session) -> ActionResult:
                     # Container-scoped scroll: mutate scrollTop/scrollLeft of
                     # the given element instead of dispatching a window wheel.
                     selector = step.selector
-                    loc = session.page.locator(step.selector)
+                    loc = session.locator(step.selector)
                     await loc.evaluate(
                         "(el, [dx, dy]) => { el.scrollTop += dy; el.scrollLeft += dx; }",
                         [step.dx, step.by],
@@ -404,7 +402,7 @@ async def execute(step: BaseStep, session: Session) -> ActionResult:
                     # which element the mouse happens to be over. Wheel dispatch
                     # would scroll the element under the cursor, which is the
                     # WheelStep semantics — not ScrollStep's.
-                    await session.page.evaluate(
+                    await session.evaluate(
                         "([dx, dy]) => window.scrollBy(dx, dy)", [step.dx, step.by]
                     )
             else:
@@ -422,7 +420,7 @@ async def execute(step: BaseStep, session: Session) -> ActionResult:
                 )
             else:
                 # visible|hidden|attached|detached — delegate to Playwright.
-                await session.page.locator(step.selector).wait_for(
+                await session.locator(step.selector).wait_for(
                     state=step.state,
                     timeout=int(step.timeout * 1000),
                 )
@@ -435,22 +433,22 @@ async def execute(step: BaseStep, session: Session) -> ActionResult:
             # pass the list as one JS-side array so users can splat it inside
             # their expression (e.g. `([a, b]) => ...`).
             if step.args:
-                await session.page.evaluate(step.expression, step.args)
+                await session.evaluate(step.expression, step.args)
             else:
-                await session.page.evaluate(step.expression)
+                await session.evaluate(step.expression)
         elif isinstance(step, WheelStep):
             if step.selector is not None:
                 selector = step.selector
-                loc = session.page.locator(step.selector)
+                loc = session.locator(step.selector)
                 # Hover the target first so the wheel event goes to it, then
                 # dispatch. This mirrors how a user would scroll a widget.
                 if timeout is not None:
                     await loc.hover(timeout=timeout)
                 else:
                     await loc.hover()
-                await session.page.mouse.wheel(step.dx, step.dy)
+                await session.wheel(step.dx, step.dy)
             else:
-                await session.page.mouse.wheel(step.dx, step.dy)
+                await session.wheel(step.dx, step.dy)
         else:
             raise TypeError(f"Unknown step type: {type(step).__name__}")
 

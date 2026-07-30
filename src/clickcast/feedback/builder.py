@@ -59,8 +59,10 @@ class ReportBuilder:
         self._start_mono = time.monotonic()
 
     def attach(self, session: Session) -> None:
-        """Wire the collector to the session's page — call once, at the start."""
-        self._collector = PageStateCollector(session.page)
+        """Wire the collector to the session — call once, at the start.
+        Since #98 the collector uses Session's narrow event surface
+        (``session.on/off``) instead of reaching through ``session.page``."""
+        self._collector = PageStateCollector(session)
 
     def set_discovered(self, elements: list[Element]) -> None:
         self._discovered = [
