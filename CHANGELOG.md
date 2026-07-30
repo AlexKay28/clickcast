@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Post-tour advisories** (closes [#138] — Track A). New
+  `clickcast.feedback.advisories` module scores a completed `clickcast auto`
+  tour against four known anti-patterns and prints each finding to stderr
+  with a `⚠ ` marker + deep-link to
+  `docs/ONE_PAGE_NAVIGATION_ORDER_TIPS.md`. Every advisory carries a stable
+  kebab-case `id` so downstream agents / CI can match, dedupe, or gate.
+  Shipped ids: `nav-heavy-tour` (>50% of clicks caused a navigation —
+  suggests `clickcast run` with a scripted scenario), `click-no-dom-reaction`
+  (a click whose `page_state` URL + title match the prior step — the click
+  may have been a no-op), `very-short-reel` (encoded reel < 20 frames —
+  suggests more steps or higher `--dwell`), and `cross-origin-bounce`
+  (an `auto` `go_back` after a cross-origin nav — reads as a jump cut).
+  Pure function, no I/O, hand-fixture-testable — no Playwright required.
+  Hooked into `auto.run_tour` at the tail of the summary print with a
+  single ~7-line block; no schema change, no CLI change, no behaviour
+  change for reels that don't trip a rule. Tracks B-G from #138 (sidecar
+  `quality` block, `clickcast lint`, skill `pitfalls`, inline error hints,
+  post-run summary integration, `doctor --for-agent`) deferred to
+  follow-ups; Track A alone delivers the observable "AI running clickcast
+  is told the reel is bad" signal.
+
 ### Changed
 - **Narrowed Session→Page seam** (closes [#98]). `Session` gains a
   small set of methods that hide Playwright's Page under a stable
@@ -484,3 +506,4 @@ Initial public release.
 [#96]: https://github.com/AlexKay28/clickcast/issues/96
 [#97]: https://github.com/AlexKay28/clickcast/issues/97
 [#98]: https://github.com/AlexKay28/clickcast/issues/98
+[#138]: https://github.com/AlexKay28/clickcast/issues/138
