@@ -138,7 +138,7 @@ class TestReelAgainstFixture:
         assert sidecar.exists()
         payload = json.loads(sidecar.read_text())
         # This is the exact contract downstream AI reads:
-        assert payload["schema_version"] == 1
+        assert payload["schema_version"] == 2
         assert payload["media"]["format"] == "gif"
         # Two steps ran (goto + click)
         assert len(payload["steps"]) == 2

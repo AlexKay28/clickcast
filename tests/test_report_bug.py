@@ -10,7 +10,7 @@ import pytest
 from typer.testing import CliRunner
 
 from clickcast.cli import app
-from clickcast.feedback import Media, Report, StepReport, write
+from clickcast.feedback import Edge, Graph, Media, PageNode, Report, StepReport, write
 from clickcast.feedback.report_bug import (
     build_agent_report,
     prefilled_issue_url,
@@ -134,6 +134,38 @@ class TestDiagnostics:
         text = render_diagnostics(build_agent_report(_report(steps=[failed])))
         assert "failed step #1" in text
         assert "oops" in text
+
+
+class TestGraphBlockInExcerpt:
+    """#107 acceptance: report-bug renders the v2 graph block when present."""
+
+    def _graph(self) -> Graph:
+        return Graph(
+            nodes=[
+                PageNode(id="n1", url="https://a", first_seen_step=0, last_seen_step=0),
+                PageNode(id="n2", url="https://b", first_seen_step=1, last_seen_step=1),
+            ],
+            edges=[Edge.model_validate({"from": "n1", "to": "n2", "via_step": 1})],
+        )
+
+    def test_excerpt_carries_graph_summary_when_present(self) -> None:
+        payload = build_agent_report(_report(graph=self._graph()))
+        assert payload["sidecar_excerpt"]["graph"] == "2 pages, 0 components, 1 navigation edges"
+
+    def test_diagnostics_prints_graph_line_when_present(self) -> None:
+        text = render_diagnostics(build_agent_report(_report(graph=self._graph())))
+        assert "graph:" in text
+        assert "2 pages" in text
+
+    def test_excerpt_omits_graph_when_absent(self) -> None:
+        # v1 sidecars and empty tours produce no `graph` key.
+        payload = build_agent_report(_report())
+        assert "graph" not in payload["sidecar_excerpt"]
+
+    def test_excerpt_omits_graph_when_nodes_empty(self) -> None:
+        empty = Graph(nodes=[], edges=[])
+        payload = build_agent_report(_report(graph=empty))
+        assert "graph" not in payload["sidecar_excerpt"]
 
 
 class TestCLI:
