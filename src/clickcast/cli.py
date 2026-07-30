@@ -22,7 +22,7 @@ import typer
 from platformdirs import user_config_dir
 
 from clickcast import __version__
-from clickcast.annotate import StepAnnotation, annotate_frames_dir
+from clickcast.annotate import AnnotateConfig, StepAnnotation, annotate_frames_dir
 from clickcast.auto import AutoConfig, run_tour
 from clickcast.capture import Recorder
 from clickcast.config import (
@@ -451,6 +451,53 @@ def auto(
             ),
         ),
     ] = 0.0,
+    for_humans: Annotated[
+        bool,
+        typer.Option(
+            "--for-humans",
+            help=(
+                "Composite flag: flip several sub-flags to human-friendly "
+                "defaults (--pace onboarding, --zoom-on-click 2.5, "
+                "--highlight-target, --title-card, --summary-card) so the "
+                "reel is legible to a person watching without the sidecar. "
+                "Explicit flags always win. See #129."
+            ),
+        ),
+    ] = False,
+    highlight_target: Annotated[
+        bool,
+        typer.Option(
+            "--highlight-target",
+            help=(
+                "Draw a soft pulsing ring around each click target on the "
+                "pre-click hold-frames, so a human eye locks on before the "
+                "ripple fires. Off by default; on when --for-humans is set. "
+                "See #129 Track A."
+            ),
+        ),
+    ] = False,
+    title_card: Annotated[
+        bool,
+        typer.Option(
+            "--title-card",
+            help=(
+                "Prepend a title card ('clickcast tour · <host>') to the "
+                "reel — masks any pre-first-paint white flash and gives "
+                "human viewers a labelled entry beat. See #129 Track E."
+            ),
+        ),
+    ] = False,
+    summary_card: Annotated[
+        bool,
+        typer.Option(
+            "--summary-card",
+            help=(
+                "Append a summary card (pages · clicks · duration) to the "
+                "end of the reel — a stats-summary tail so human viewers "
+                "know the tour concluded. See #129 Track E."
+            ),
+        ),
+    ] = False,
     dwell: Annotated[
         float, typer.Option("--dwell", help="Seconds to hold after each action.")
     ] = 1.0,
@@ -486,6 +533,22 @@ def auto(
         _die(f"--pace must be one of {sorted(_PACE_TABLE)}, got {pace!r}")
     compiled_redacts = _compile_redact_patterns(redact_pattern)
 
+    # --for-humans composite: flip the sub-flags to human defaults, but ONLY
+    # for sub-flags the user did not explicitly type on the command line.
+    # Same precedence pattern as --pace: explicit CLI flag always wins over
+    # the preset, config-driven / default values are treated as overridable.
+    if for_humans:
+        if not _is_explicit(ctx, "pace"):
+            pace = "onboarding"
+        if not _is_explicit(ctx, "zoom_on_click"):
+            zoom_on_click = 2.5
+        if not _is_explicit(ctx, "highlight_target"):
+            highlight_target = True
+        if not _is_explicit(ctx, "title_card"):
+            title_card = True
+        if not _is_explicit(ctx, "summary_card"):
+            summary_card = True
+
     # Pace presets set fps + dwell defaults; explicit CLI flags still win.
     # `_is_explicit` returns True only when the user typed --fps / --dwell —
     # config-driven or default values are treated as overridable by the preset.
@@ -494,7 +557,13 @@ def auto(
         fps = preset_fps
     if not _is_explicit(ctx, "dwell"):
         dwell = preset_dwell
-    log.info("resolved pace=%s → fps=%d dwell=%.2fs", pace, fps, dwell)
+    log.info(
+        "resolved pace=%s → fps=%d dwell=%.2fs for_humans=%s",
+        pace,
+        fps,
+        dwell,
+        for_humans,
+    )
 
     asyncio.run(
         _do_auto(
@@ -518,6 +587,9 @@ def auto(
             redact_patterns=compiled_redacts,
             strip_query_strings=strip_query_strings,
             zoom_on_click_factor=(zoom_on_click if zoom_on_click > 1.0 else None),
+            target_highlight=highlight_target,
+            title_card=title_card,
+            summary_card=summary_card,
         )
     )
 
@@ -547,7 +619,15 @@ async def _do_auto(
     redact_patterns: list[re.Pattern[str]] | None = None,
     strip_query_strings: bool = False,
     zoom_on_click_factor: float | None = None,
+    target_highlight: bool = False,
+    title_card: bool = False,
+    summary_card: bool = False,
 ) -> None:
+    # The AutoConfig.target_highlight flag drives recorder-side padding +
+    # bbox lookup; the annotator itself needs its own toggle so the layer
+    # actually renders. Keep the two in lockstep here so a shipped caller
+    # that flips one always gets the other.
+    annotate = AnnotateConfig(target_highlight=target_highlight)
     await run_tour(
         AutoConfig(
             url=url,
@@ -570,6 +650,10 @@ async def _do_auto(
             redact_patterns=list(redact_patterns or []),
             strip_query_strings=strip_query_strings,
             zoom_on_click_factor=zoom_on_click_factor,
+            annotate=annotate,
+            target_highlight=target_highlight,
+            title_card=title_card,
+            summary_card=summary_card,
         )
     )
 

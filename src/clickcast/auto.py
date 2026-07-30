@@ -35,10 +35,14 @@ import typer
 
 from clickcast.annotate import (
     AnnotateConfig,
+    CardStyle,
     StepAnnotation,
+    SummaryStats,
     annotate_frames_dir,
     apply_zoom_on_click,
     interpolate_cursor_motion,
+    render_summary_card,
+    render_title_card,
 )
 from clickcast.capture import Recorder
 from clickcast.core.actions import ClickStep, GotoStep, ScrollStep, execute
@@ -136,6 +140,26 @@ class AutoConfig:
     # drops the query string from URL fields entirely. Both no-op when unset.
     redact_patterns: list[re.Pattern[str]] = field(default_factory=list)
     strip_query_strings: bool = False
+    # Human-observable demo mode (#129). Each flag stands alone; the CLI's
+    # ``--for-humans`` composite flag flips several of them at once.
+    #   ``target_highlight`` — resolve each click's bbox pre-action, hold
+    #   the frame for ``pre_click_highlight_frames`` extra copies, and draw
+    #   a pulsing ring on those pre-click frames via the annotator. Also
+    #   requires ``annotate.target_highlight=True`` (which the CLI flips
+    #   in tandem — direct callers construct both explicitly).
+    #   ``title_card`` / ``summary_card`` — prepend N frames of a title
+    #   card / append N frames of a summary card to the reel. Both are
+    #   inserted into ``frames.json`` after the annotator pass so the
+    #   encoder picks them up transparently.
+    target_highlight: bool = False
+    pre_click_highlight_frames: int = 4
+    title_card: bool = False
+    title_card_text: str | None = None
+    title_card_frames: int = 12
+    summary_card: bool = False
+    summary_card_frames: int = 16
+    summary_card_watermark: str = ""
+    card_style: CardStyle = field(default_factory=CardStyle)
 
 
 # ---------------------------------------------------------------------------
@@ -157,6 +181,8 @@ async def explore_page(
     step_index: int,
     step_annotations: dict[int, StepAnnotation],
     page_label: str,
+    target_highlight: bool = False,
+    pre_click_highlight_frames: int = 0,
 ) -> tuple[int, int, list[str]]:
     """Goto ``url``, discover, click up to ``click_budget`` elements, scroll.
 
@@ -215,11 +241,33 @@ async def explore_page(
             (element.text[:40] or "").strip() or element.selector,
         )
         await rec.pre_action(sess)
+        # Pre-click target-highlight: resolve bbox now (before the click
+        # potentially navigates away), then pad the pre-click frame N times
+        # so the highlight ring gets hold time. Bbox resolution is best-
+        # effort — a missing/hidden target just means no ring. See #129 A.
+        target_bbox: tuple[int, int, int, int] | None = None
+        if target_highlight:
+            try:
+                target_bbox = await sess.bbox(element.selector)
+            except Exception as exc:
+                # Best-effort bbox lookup — post-hydration DOM drift, cross-
+                # origin frames, timeout, or "0 elements" all mean "no ring
+                # this step". Downgrade to a debug log rather than surfacing
+                # as an error — the click itself will still be attempted.
+                log.debug(
+                    "%s · target bbox lookup failed for %s: %s",
+                    page_label,
+                    element.selector,
+                    exc,
+                )
+            if pre_click_highlight_frames > 0:
+                await rec.pre_action_pad(pre_click_highlight_frames)
         r = await execute(step, sess)
         frames_step = await rec.post_action(sess, r, step)
         step_annotations[step_index] = StepAnnotation(
             label=f"{page_label} · click · {step.label}" if step.label else f"{page_label} · click",
             click_at=r.cursor_xy if r.status == "ok" else None,
+            target_bbox=target_bbox if r.status == "ok" else None,
         )
         if r.status == "ok":
             clicked += 1
@@ -391,6 +439,10 @@ async def run_tour(cfg: AutoConfig) -> None:
                     step_index=step_index,
                     step_annotations=step_annotations,
                     page_label=page_label,
+                    target_highlight=cfg.target_highlight,
+                    pre_click_highlight_frames=(
+                        cfg.pre_click_highlight_frames if cfg.target_highlight else 0
+                    ),
                 )
                 clicks_remaining -= clicks_used
 
@@ -443,6 +495,25 @@ async def run_tour(cfg: AutoConfig) -> None:
                 )
             log.info("annotating frames...")
             annotate_frames_dir(rec.frames_dir, steps=step_annotations, config=cfg.annotate)
+            # Bookend the annotated frames with title / summary cards so a
+            # human viewer sees a titled entry beat and a stats-summary
+            # tail. Cards render at the browser's viewport size so they
+            # match the surrounding frames exactly. The prepend also masks
+            # any pre-first-paint white flash (#68/#129 Track G). Deferred
+            # bookend-only tour totals go in the summary card. See #129 E.
+            if cfg.title_card or cfg.summary_card:
+                card_size = _card_size_for(cfg, rec.frames_dir)
+                if cfg.title_card:
+                    _prepend_title_card(rec.frames_dir, cfg, card_size)
+                if cfg.summary_card:
+                    _append_summary_card(
+                        rec.frames_dir,
+                        cfg,
+                        card_size,
+                        pages_visited=pages_visited,
+                        clicks=cfg.max_steps - clicks_remaining,
+                        tour_elapsed_s=time.monotonic() - tour_started,
+                    )
             log.info("encoding %s...", cfg.out)
             out_path = Path(cfg.out)
             enc = encode(
@@ -517,3 +588,137 @@ def _write_sidecar(
         strip_query_strings=strip_query_strings,
     )
     return sidecar
+
+
+# ---------------------------------------------------------------------------
+# Cards helpers (Track E of #129).
+#
+# Cards are inserted AFTER the annotator pass so they don't gain progress
+# bars, cursor trails, or action-panel overlays — they're standalone frames
+# that bookend the reel. Insertion is a two-step edit to frames.json:
+# prepend / append the card frame entries in the manifest, and the encoder
+# picks them up on its next pass.
+# ---------------------------------------------------------------------------
+
+
+def _card_size_for(cfg: AutoConfig, frames_dir: Path) -> tuple[int, int]:
+    """Pick a card size that matches the surrounding frames.
+
+    Prefer the recorded frames' actual pixel size (accounts for zoom, DPR
+    tweaks, and post-capture resizes). Fall back to the browser viewport
+    if the frames-dir is unexpectedly empty.
+    """
+    from PIL import Image
+
+    for f in sorted(frames_dir.glob("frame-*.png")):
+        try:
+            with Image.open(f) as img:
+                return img.size
+        except OSError:
+            continue
+    vp = cfg.session_kwargs.get("viewport")
+    if isinstance(vp, tuple) and len(vp) == 2:
+        return (int(vp[0]), int(vp[1]))
+    return (1280, 800)
+
+
+def _prepend_title_card(frames_dir: Path, cfg: AutoConfig, size: tuple[int, int]) -> None:
+    title = cfg.title_card_text or _default_title_for(cfg.url)
+    paths = render_title_card(
+        frames_dir,
+        title=title,
+        subtitle=cfg.url,
+        size=size,
+        frame_count=cfg.title_card_frames,
+        style=cfg.card_style,
+    )
+    _splice_manifest(frames_dir, [p.name for p in paths], where="prepend")
+    log.info("prepended title card: %d frames", len(paths))
+
+
+def _append_summary_card(
+    frames_dir: Path,
+    cfg: AutoConfig,
+    size: tuple[int, int],
+    *,
+    pages_visited: int,
+    clicks: int,
+    tour_elapsed_s: float,
+) -> None:
+    stats = SummaryStats(
+        pages=pages_visited,
+        clicks=clicks,
+        duration_s=tour_elapsed_s,
+        watermark=cfg.summary_card_watermark,
+    )
+    paths = render_summary_card(
+        frames_dir,
+        stats=stats,
+        size=size,
+        frame_count=cfg.summary_card_frames,
+        style=cfg.card_style,
+    )
+    _splice_manifest(frames_dir, [p.name for p in paths], where="append")
+    log.info("appended summary card: %d frames", len(paths))
+
+
+def _default_title_for(url: str) -> str:
+    """Extract a friendly hostname-based title from a URL."""
+    from urllib.parse import urlparse
+
+    host = urlparse(url).hostname or url
+    return f"clickcast tour · {host}"
+
+
+def _splice_manifest(frames_dir: Path, filenames: list[str], *, where: str) -> None:
+    """Prepend or append a list of frame filenames to ``frames.json``.
+
+    Card frames carry synthetic step_index values that sit outside the
+    range the annotator saw — either negative-adjacent (prepended) or one
+    past the last real step (appended). ``cursor_xy`` is ``None`` so the
+    cursor overlay never re-runs against them (the annotator won't be
+    called on cards anyway, but keeping the field clean means the
+    manifest is safe to re-annotate).
+    """
+    import json
+
+    manifest_path = frames_dir / "frames.json"
+    if not manifest_path.exists():
+        return
+    manifest = json.loads(manifest_path.read_text())
+    existing = manifest.get("frames", [])
+    real_max = max((f["step_index"] for f in existing), default=-1)
+    if where == "prepend":
+        # Card frames get a single dedicated step_index that sits BEFORE
+        # every real step. Shift real step indices up by one so the
+        # progress bar's fraction (step_index+1 / total_steps) starts at
+        # exactly the first real step, not partway through.
+        shift = 1
+        new_entries = [
+            {
+                "path": name,
+                "step_index": 0,
+                "sub_index": i,
+                "cursor_xy": None,
+            }
+            for i, name in enumerate(filenames)
+        ]
+        shifted = [{**f, "step_index": f["step_index"] + shift} for f in existing]
+        manifest["frames"] = new_entries + shifted
+    elif where == "append":
+        # Card sits at real_max + 1 — one past the last real step.
+        step_idx = real_max + 1
+        new_entries = [
+            {
+                "path": name,
+                "step_index": step_idx,
+                "sub_index": i,
+                "cursor_xy": None,
+            }
+            for i, name in enumerate(filenames)
+        ]
+        manifest["frames"] = existing + new_entries
+    else:
+        raise ValueError(f"where must be 'prepend' or 'append', got {where!r}")
+    manifest["count"] = len(manifest["frames"])
+    manifest_path.write_text(json.dumps(manifest, indent=2))

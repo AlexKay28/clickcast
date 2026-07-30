@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`clickcast auto --for-humans` composite flag** (closes [#129] —
+  partial; Tracks A/E/F, follow-ups filed for B/C/D). One flag flips
+  five sub-flags to human-friendly defaults (`--pace onboarding`,
+  `--zoom-on-click 2.5`, `--highlight-target`, `--title-card`,
+  `--summary-card`) so the reel is legible to a person watching without
+  the sidecar — the first-run README-hero pain point the issue was
+  filed against. Each sub-flag also stands alone; explicit flags always
+  win over the composite (same `_is_explicit` precedence used by
+  `--pace`), so `--for-humans --pace fast` gives a fast-paced human
+  tour instead of the default onboarding pace.
+- **Pre-click target-highlight ring** (Track A). New
+  `AnnotateConfig.target_highlight` + `TargetHighlightStyle`
+  sub-dataclass draws a soft, pulsing rounded rectangle around the
+  resolved click bbox on the pre-click sub-frame(s), so a human eye
+  locks onto the target BEFORE the ripple fires. `AutoConfig`
+  gains a matching `target_highlight` toggle plus
+  `pre_click_highlight_frames` (default 4) — when on, `explore_page`
+  resolves the click bbox via `Session.bbox()`, pads the pre-click
+  frame that many extra times, and forwards the bbox on
+  `StepAnnotation.target_bbox`. The annotator pipeline routes the
+  ring onto pre-click sub-frames (identified by `cursor_xy=None` in
+  the manifest) and offsets ripple stages by the pre-click count so
+  the two never fight for the same frames. Bbox lookup is best-
+  effort — a missing/hidden target just means "no ring this step",
+  the click still fires.
+- **Title + summary card renderers** (Track E). New
+  `clickcast.annotate.cards` module with `render_title_card` and
+  `render_summary_card`, plus `CardStyle` and `SummaryStats` value
+  types. `AutoConfig` gains `title_card` / `summary_card` toggles
+  (plus per-card frame counts, watermark, style) which
+  `run_tour` picks up AFTER the annotator pass to prepend/append
+  N identical card frames to the reel via a small `frames.json`
+  splice — the encoder picks them up transparently, and cards
+  don't gain progress bars / cursor trails / action-panel overlays.
+  Card size auto-matches the recorded frames' pixel dims so zoomed
+  tours still line up. The dark-bg title card also masks any
+  pre-first-paint white frame (Track G interaction; #68 still open
+  as the root fix).
+- **`Recorder.pre_action_pad(count)`** — new helper that duplicates
+  the most-recent pre-action frame N extra times at the current
+  `step_index`, before any `post_action` runs. Backs the pre-click
+  hold time the highlight ring needs. Fails loudly (not silently)
+  if called out of order.
+- **`clickcast skill` brief mentions `--for-humans`, `--highlight-target`,
+  and `--title-card` / `--summary-card`** on the `auto` command so
+  agents discovering clickcast for the first time see the human-demo
+  path from message one. The drift-guard test in `tests/test_skill.py`
+  catches new subcommands missing from the brief; the new
+  `TestSkillMentionsForHumans` test locks the specific composite-flag
+  callout.
+
+### Deferred
+- **#129 Tracks B/C/D** land in follow-ups so this PR stays
+  observationally scoped. B (signal-aware post-click dwell) and C
+  (symmetric close) form a chain — C needs B's "expanded step"
+  signal. D (pending-state actions-panel row) depends on Track A
+  landing (this PR). Track G (pre-first-paint white frame) is #68,
+  which the title card partially masks in the meantime.
+
 ### Changed
 - **Narrowed Session→Page seam** (closes [#98]). `Session` gains a
   small set of methods that hide Playwright's Page under a stable
