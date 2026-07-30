@@ -16,7 +16,7 @@ import socket
 import threading
 import time
 from collections.abc import Generator
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -62,7 +62,13 @@ class _QuietHandler(SimpleHTTPRequestHandler):
 def fixture_site_url() -> Generator[str, None, None]:
     """Base URL of the local fixture site — served once per test run."""
     port = _pick_port()
-    server = HTTPServer(("127.0.0.1", port), _QuietHandler)
+    # ThreadingHTTPServer (not HTTPServer): Chromium fires many parallel
+    # requests per page (favicon, subresources, HMR probes); a single-
+    # threaded server queues them and produces intermittent 30s Playwright
+    # timeouts under load. daemon_threads lets the process shut down cleanly
+    # if a test fails mid-request.
+    server = ThreadingHTTPServer(("127.0.0.1", port), _QuietHandler)
+    server.daemon_threads = True
     thread = threading.Thread(target=server.serve_forever, daemon=True, name="fixture-http")
     thread.start()
     _wait_until_ready("127.0.0.1", port)

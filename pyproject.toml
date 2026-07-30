@@ -40,15 +40,29 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = [
+# `test` is the minimal set every test-matrix job needs. Kept lean so
+# CI test shards don't pay for mypy / pre-commit / build on every run.
+test = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "pytest-cov>=5.0",
+]
+# `dev` is a superset: `test` plus lint, type-check, hooks, and local
+# build tooling. Contributors doing pytest work can install `.[test]`;
+# `.[dev]` remains the one-stop install for maintainers.
+dev = [
+    "clickcast[test]",
     "ruff>=0.5",
     "mypy>=1.10",
     "pre-commit>=3.7",
     "types-PyYAML",
     "build>=1.0",
+]
+# `publish` is release-only: what the release workflow needs to build
+# and upload a wheel, without pulling in test or lint tooling.
+publish = [
+    "build>=1.0",
+    "twine>=5",
 ]
 
 [project.scripts]

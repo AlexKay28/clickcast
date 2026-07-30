@@ -91,12 +91,21 @@ jobs:
 
       - run: pip install -e ".[dev]"
 
+      # Cache key includes the resolved playwright version so a resolver bump
+      # (e.g. 1.44.0 -> 1.44.1) invalidates the stale browser bundle. Matches
+      # the pattern in ci.yml. See #43 item 3.
+      - name: Resolve Playwright version
+        id: pw-version
+        run: |
+          v=$(python -c "from importlib.metadata import version; print(version('playwright'))")
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
       - name: Cache Playwright browsers
         id: pw-cache
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-Linux-${{ hashFiles('pyproject.toml') }}
+          key: playwright-Linux-${{ steps.pw-version.outputs.version }}
 
       - name: Install Playwright chromium
         run: playwright install --with-deps chromium
