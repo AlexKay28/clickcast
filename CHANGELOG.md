@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`tests/test_read_sidecar_e2e.py`: real-pipeline coverage for the
+  AI-consumer script** (closes [#99]). Two integration tests drive the
+  fluent `Reel(...).goto().click().save()` API against the shared fixture
+  site, then invoke `tests/consumer/read_sidecar.py` as a subprocess to
+  prove the sidecar shape the pipeline writes is exactly what a
+  downstream agent parses. Happy path asserts clean exit + empty stderr;
+  the failed-selector variant asserts the sidecar carries a
+  `status != "ok"` step and that the consumer surfaces it on stdout.
+  Closes the two residual gaps from #45's audit: schema validation
+  (`test_fixture_site.py`) never chained through `read_sidecar.py`, and
+  the consumer contract (`test_feedback.py::TestConsumerExample`) only
+  ran against a hand-built `Report`. A silent drift between the writer
+  and the consumer now fails these tests instead of shipping.
 - **Sidecar schema v2 — additive `graph` block** (partial closes [#107] —
   Track C of the [#29] roadmap; Tracks A + B shipped previously). The
   sidecar records what happened during a tour, not what shape the app
@@ -736,6 +749,7 @@ Initial public release.
 [#96]: https://github.com/AlexKay28/clickcast/issues/96
 [#97]: https://github.com/AlexKay28/clickcast/issues/97
 [#98]: https://github.com/AlexKay28/clickcast/issues/98
+[#99]: https://github.com/AlexKay28/clickcast/issues/99
 [#138]: https://github.com/AlexKay28/clickcast/issues/138
 [#124]: https://github.com/AlexKay28/clickcast/issues/124
 [#43]: https://github.com/AlexKay28/clickcast/issues/43
