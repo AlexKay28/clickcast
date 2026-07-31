@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4] — 2026-07-31
+
+CI hygiene + additive sidecar-schema-v2 release. Backwards-compatible
+with 0.2.3. No user-visible behaviour change for shipped API callers;
+the schema-v2 `graph` block is additive (v1 sidecars validate
+unchanged under the v2 model). Test suite grew 707 → 730 across the
+five closed issues (#43, #46, #99, #100, and #107 partial).
+
 ### Added
 - **`tests/test_read_sidecar_e2e.py`: real-pipeline coverage for the
   AI-consumer script** (closes [#99]). Two integration tests drive the
