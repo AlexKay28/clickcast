@@ -204,16 +204,24 @@ class TestCursor:
         assert bbox[1] <= 100 <= bbox[3]
 
     def test_trail_length_bounded_by_config(self, tmp_path: Path) -> None:
+        # Exercise the REAL eviction path in Annotator.annotate(): feed 10
+        # distinct cursor positions and assert the history is bounded by the
+        # configured cap (trail_length + 1 for the current-position slot).
+        # This test must fail if the eviction while-loop in annotate() is
+        # removed — no manual pop() here.
         cfg = AnnotateConfig(cursor_style=CursorStyle(trail_length=3))
         ann = Annotator(cfg)
+        src = _make_frame(tmp_path / "frame.png")
         for i in range(10):
-            ann._cursor_history.append((i * 10, 100))
-            # Simulate annotate() eviction:
-            history_cap = max(cfg.cursor_style.trail_length + 1, 1)
-            while len(ann._cursor_history) > history_cap:
-                ann._cursor_history.pop(0)
-        # Cap = trail_length + 1 (current position slot)
-        assert len(ann._cursor_history) == 4
+            ann.annotate(
+                src,
+                out_path=tmp_path / f"out_{i}.png",
+                step_index=0,
+                total_steps=1,
+                cursor_xy=(i * 10, 100),
+            )
+        history_cap = cfg.cursor_style.trail_length + 1
+        assert len(ann._cursor_history) == history_cap
 
     def test_reset_cursor_clears_history(self, tmp_path: Path) -> None:
         src = _make_frame(tmp_path / "frame.png")
