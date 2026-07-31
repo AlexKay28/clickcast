@@ -10,8 +10,10 @@ from typing import TYPE_CHECKING
 
 from clickcast.core.actions import ActionResult, BaseStep
 from clickcast.feedback.collector import PageStateCollector
+from clickcast.feedback.graph import build_graph
 from clickcast.feedback.models import (
     DiscoveredElement,
+    Graph,
     Media,
     Report,
     StepReport,
@@ -124,6 +126,15 @@ class ReportBuilder:
         self._errors.append(msg)
 
     def build(self, media: Media) -> Report:
+        graph: Graph | None = None
+        # #107 Track C: attach the v2 graph block best-effort. A malformed
+        # graph must NEVER prevent the sidecar from being written — the
+        # sidecar is the primary contract; the graph is an additive.
+        try:
+            graph = build_graph(self._steps)
+        except Exception as exc:  # pragma: no cover — defensive
+            self._warnings.append(f"graph build failed: {exc!r}")
+
         report = Report(
             clickcast_version=_package_version(),
             url=self._url,
@@ -136,6 +147,7 @@ class ReportBuilder:
             steps=self._steps,
             warnings=self._warnings,
             errors=self._errors,
+            graph=graph,
         )
         # Detach page listeners so the collector doesn't outlive the builder.
         # Idempotent — safe to call even if we were never attached.

@@ -21,6 +21,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the consumer contract (`test_feedback.py::TestConsumerExample`) only
   ran against a hand-built `Report`. A silent drift between the writer
   and the consumer now fails these tests instead of shipping.
+- **Sidecar schema v2 — additive `graph` block** (partial closes [#107] —
+  Track C of the [#29] roadmap; Tracks A + B shipped previously). The
+  sidecar records what happened during a tour, not what shape the app
+  has. LLMs consuming the sidecar could reason about "this specific
+  action sequence" but not "the shape of this app" — a much richer
+  planning surface. Bumps `Report.schema_version` default 1 → 2 and
+  adds an optional top-level `graph: Graph | None` field. New pydantic
+  models: `PageNode` (kind `page`, url/title/first_seen_step/
+  last_seen_step/components), `ComponentNode` (kind `component`,
+  role/selector/bbox/dom_signature/seen_on_nodes), `Edge`
+  (from/to/via_step/selector/transition_kind), `Graph`. New
+  `clickcast.feedback.graph.build_graph(steps)` extracts `PageNode`
+  entries from distinct `page_state.url_after` values in step order
+  and emits one `transition_kind: "navigation"` `Edge` per URL change,
+  returning `None` for empty tours to keep sidecars small. Wired into
+  `ReportBuilder.build` best-effort — a bad graph never blocks the
+  sidecar from writing. `dom_signature(role, aria_label, bbox)`
+  helper computes a 16-char hex fingerprint with a 64px bbox bucket so
+  same-position-across-pages nav dedupes and a genuinely relocated
+  sidebar doesn't. `clickcast report-bug` renders a
+  `graph: N pages, M components, K edges` line in the excerpt when
+  present; skill brief for `report-bug` notes the v2 block for LLM
+  planning. Schema regenerated to
+  `src/clickcast/feedback/schema/v2.json`; `v1.json` preserved verbatim
+  for downstream consumers that bookmarked it (v2 is strictly additive
+  — old sidecars validate cleanly with `graph == None`). Deferred to
+  follow-ups: `transition_kind: reveal` / `dismiss` (requires DOM
+  diffing across step boundaries), `ComponentNode` extraction (needs
+  a landmark-detection pass on `discovery/` output — dedup helper
+  already exported so the follow-up plugs straight in), image /
+  interactive graph rendering (non-goal), cross-tour graph
+  persistence (non-goal).
 
 ### Changed
 - **CI + release workflow hardening** (workflow-YAML slice of [#46] +

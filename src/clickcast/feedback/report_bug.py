@@ -104,6 +104,8 @@ def render_diagnostics(payload: dict[str, Any]) -> str:
         lines.append(f"warnings: {len(warns)}")
     if errs := excerpt.get("errors"):
         lines.append(f"errors: {len(errs)}")
+    if graph := excerpt.get("graph"):
+        lines.append(f"graph: {graph}")
     lines.append(f"redacted: {payload['redacted']}")
     return "\n".join(lines)
 
@@ -131,7 +133,25 @@ def _build_excerpt(report: Report, failed: StepReport | None) -> dict[str, Any]:
         excerpt["warnings"] = list(report.warnings)
     if report.errors:
         excerpt["errors"] = list(report.errors)
+    if summary := _graph_summary(report):
+        excerpt["graph"] = summary
     return excerpt
+
+
+def _graph_summary(report: Report) -> str | None:
+    """One-line ``N pages, M components, K navigation edges`` — v2 additive.
+
+    Rendered into the excerpt AND the human-readable diagnostics when the
+    sidecar carries a graph with at least one node. Absent for v1 sidecars
+    and for tours that produced no ``page_state.url_after`` values.
+    """
+    graph = report.graph
+    if graph is None or not graph.nodes:
+        return None
+    pages = sum(1 for n in graph.nodes if getattr(n, "kind", None) == "page")
+    components = sum(1 for n in graph.nodes if getattr(n, "kind", None) == "component")
+    edges = len(graph.edges)
+    return f"{pages} pages, {components} components, {edges} navigation edges"
 
 
 def _infer_command(report: Report) -> str:

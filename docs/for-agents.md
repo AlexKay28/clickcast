@@ -8,7 +8,7 @@ You (an AI agent) are a first-class user of clickcast. This page tells you (a) h
 clickcast auto https://example.com --out tour.gif --with-feedback
 ```
 
-Produces `tour.gif` + `tour.gif.json`. The sidecar is the machine contract: schema at [`src/clickcast/feedback/schema/v1.json`](../src/clickcast/feedback/schema/v1.json). With `--with-feedback`, the sidecar also carries a `feedback` block with pointers back here.
+Produces `tour.gif` + `tour.gif.json`. The sidecar is the machine contract: schema at [`src/clickcast/feedback/schema/v2.json`](../src/clickcast/feedback/schema/v2.json). With `--with-feedback`, the sidecar also carries a `feedback` block with pointers back here.
 
 ## Report bugs
 
