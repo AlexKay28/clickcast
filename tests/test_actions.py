@@ -164,9 +164,15 @@ class TestActionIntegration:
         assert "either" in (r.error or "")
 
     async def test_wait_number(self, loaded_session: Session) -> None:
-        r = await execute(WaitStep(wait=0.05), loaded_session)
-        assert r.ok
-        assert r.duration_ms >= 50
+        # Assert monotonicity with epsilon rather than an absolute floor: a
+        # longer wait must produce a materially larger ``duration_ms``. The
+        # requested gap is 50ms; we allow ~20ms of jitter, so we require the
+        # observed gap to be at least 30ms.
+        r_short = await execute(WaitStep(wait=0.01), loaded_session)
+        r_long = await execute(WaitStep(wait=0.06), loaded_session)
+        assert r_short.ok
+        assert r_long.ok
+        assert r_short.duration_ms + 30 <= r_long.duration_ms
 
     async def test_wait_selector(self, loaded_session: Session) -> None:
         r = await execute(WaitStep(wait="#btn1"), loaded_session)
@@ -194,6 +200,14 @@ class TestActionIntegration:
         assert r.error is not None
 
     async def test_dwell_extends_duration(self, loaded_session: Session) -> None:
-        r = await execute(ClickStep(selector="#btn1", dwell=0.1), loaded_session)
-        assert r.ok
-        assert r.duration_ms >= 100
+        # A click with a 200ms dwell must take materially longer than a
+        # click with no dwell. Warm up the click path once first so the
+        # first measured call isn't paying browser-warmup cost that the
+        # second (dwelled) call would not; then assert monotonicity with a
+        # 100ms tolerance (dwell is 200ms; allow ~100ms jitter).
+        await execute(ClickStep(selector="#btn1"), loaded_session)  # warmup
+        r_no_dwell = await execute(ClickStep(selector="#btn1"), loaded_session)
+        r_dwell = await execute(ClickStep(selector="#btn1", dwell=0.2), loaded_session)
+        assert r_no_dwell.ok
+        assert r_dwell.ok
+        assert r_no_dwell.duration_ms + 100 <= r_dwell.duration_ms

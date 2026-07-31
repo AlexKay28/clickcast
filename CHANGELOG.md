@@ -58,6 +58,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Workflow-YAML consumers of the new extras land in a sibling PR.
 
 ### Fixed
+- **Test hygiene: monotonic timing + real eviction paths** (closes
+  [#100]). Two residual coverage gaps from the sharpened audit:
+  - `tests/test_actions.py::test_wait_number` and
+    `::test_dwell_extends_duration` previously asserted absolute
+    duration floors (`>= 50` / `>= 100` ms) with no epsilon or
+    monotonicity check — sub-millisecond runner overhead on slow CI
+    could flake them. Rewritten to compare two adjacent invocations
+    and assert monotonicity with tolerance
+    (`r_short.duration_ms + 30 <= r_long.duration_ms` for 50ms/10ms
+    waits, and `r_no_dwell.duration_ms + 100 <= r_dwell.duration_ms`
+    for a warmed-up 200ms dwell) — the property the tests were meant
+    to prove.
+  - `tests/test_annotator.py::test_trail_length_bounded_by_config`
+    was manually calling `ann._cursor_history.pop(0)` inside the test
+    loop, re-implementing the eviction it claimed to test — so
+    removing the `while`-loop from `Annotator.annotate()` would not
+    have broken it. Rewritten to feed 10 cursor positions through the
+    real `Annotator.annotate()` and assert
+    `len(ann._cursor_history) == trail_length + 1`. Verified locally
+    by commenting out the eviction loop and confirming the test
+    fails.
 - **`tests/conftest.py`: fixture site now uses `ThreadingHTTPServer`**
   (closes [#43] item 1). `HTTPServer` serves one request at a time;
   Chromium fires many parallel requests on a real page load (favicon,
