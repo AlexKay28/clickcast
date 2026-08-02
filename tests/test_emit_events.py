@@ -160,9 +160,7 @@ class TestAutoEmitsEventsFlag:
         stdout = capsys.readouterr().out
         # Find the last JSON line (JSONL-friendly — future event types
         # may add more, we assert on the tour_complete terminator).
-        json_lines = [
-            line for line in stdout.splitlines() if line.strip().startswith("{")
-        ]
+        json_lines = [line for line in stdout.splitlines() if line.strip().startswith("{")]
         assert json_lines, f"no JSON line in stdout:\n{stdout}"
         payload = json.loads(json_lines[-1])
         # Every documented key must appear.
