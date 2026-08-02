@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -210,9 +211,158 @@ def _substitute_vars(obj: Any, variables: dict[str, str]) -> Any:
     return obj
 
 
+# --- Per-action normalizers -------------------------------------------------
+#
+# Each normalizer takes the fully-formed ``canonical`` dict (already carrying
+# ``action`` + any common keys) plus the raw step mapping and the raw action
+# value, and mutates ``canonical`` in place with the action-specific fields.
+# ``index`` is threaded purely so ``ScenarioError`` messages keep the
+# ``step N: ...`` prefix an AI agent (see #151) relies on verbatim.
+#
+# Registered in ``_NORMALIZERS`` below; ``_normalize_step`` becomes a thin
+# dispatch on ``action`` so adding a new action verb is one function + one
+# dict entry, and each shape coercion is unit-testable in isolation.
+
+
+def _normalize_goto(canonical: dict[str, Any], raw: dict[str, Any], value: Any, index: int) -> None:
+    if isinstance(value, str):
+        canonical["url"] = value
+    elif isinstance(value, dict):
+        canonical.update(value)
+    else:
+        raise ScenarioError(f"step {index}: goto value must be a URL or mapping")
+    # `wait` may appear either as a top-level step field or inside the goto value
+    if "wait" in raw:
+        canonical["wait"] = raw["wait"]
+
+
+def _normalize_click_like(
+    canonical: dict[str, Any], raw: dict[str, Any], value: Any, index: int
+) -> None:
+    # Shared by click/dblclick/hover — the action verb is on ``canonical``.
+    if not isinstance(value, str):
+        raise ScenarioError(f"step {index}: {canonical['action']} value must be a selector string")
+    canonical["selector"] = value
+
+
+def _normalize_type(canonical: dict[str, Any], raw: dict[str, Any], value: Any, index: int) -> None:
+    if not isinstance(value, dict):
+        raise ScenarioError(f"step {index}: type value must be a mapping (into/text/delay)")
+    canonical.update(value)
+
+
+def _normalize_press(
+    canonical: dict[str, Any], raw: dict[str, Any], value: Any, index: int
+) -> None:
+    if isinstance(value, str):
+        canonical["key"] = value
+    elif isinstance(value, dict):
+        canonical.update(value)
+    else:
+        raise ScenarioError(f"step {index}: press value must be a key string or mapping")
+
+
+def _normalize_select(
+    canonical: dict[str, Any], raw: dict[str, Any], value: Any, index: int
+) -> None:
+    if not isinstance(value, dict):
+        raise ScenarioError(f"step {index}: select value must be a mapping (in/value)")
+    v = dict(value)
+    # Convention: YAML uses `in:`, canonical is `into`
+    if "in" in v:
+        v["into"] = v.pop("in")
+    canonical.update(v)
+
+
+def _normalize_scroll(
+    canonical: dict[str, Any], raw: dict[str, Any], value: Any, index: int
+) -> None:
+    if not isinstance(value, dict):
+        raise ScenarioError(f"step {index}: scroll value must be a mapping (to/by)")
+    canonical.update(value)
+
+
+def _normalize_wait(canonical: dict[str, Any], raw: dict[str, Any], value: Any, index: int) -> None:
+    canonical["wait"] = value
+
+
+def _normalize_wait_for(
+    canonical: dict[str, Any], raw: dict[str, Any], value: Any, index: int
+) -> None:
+    if isinstance(value, str):
+        canonical["selector"] = value
+    elif isinstance(value, dict):
+        canonical.update(value)
+    else:
+        raise ScenarioError(f"step {index}: wait_for value must be a selector string or mapping")
+
+
+def _normalize_screenshot(
+    canonical: dict[str, Any], raw: dict[str, Any], value: Any, index: int
+) -> None:
+    if isinstance(value, dict):
+        canonical.update(value)
+    elif not isinstance(value, bool | int | str | type(None)):
+        raise ScenarioError(f"step {index}: screenshot value must be a mapping or scalar")
+    # bare `screenshot:` (with no options) is fine — nothing to merge
+
+
+def _normalize_evaluate(
+    canonical: dict[str, Any], raw: dict[str, Any], value: Any, index: int
+) -> None:
+    if isinstance(value, str):
+        canonical["expression"] = value
+    elif isinstance(value, dict):
+        canonical.update(value)
+    else:
+        raise ScenarioError(
+            f"step {index}: evaluate value must be a JS expression string or mapping"
+        )
+
+
+def _normalize_wheel(
+    canonical: dict[str, Any], raw: dict[str, Any], value: Any, index: int
+) -> None:
+    if isinstance(value, int):
+        # Bare `wheel: 120` — vertical delta only.
+        canonical["dy"] = value
+    elif isinstance(value, dict):
+        canonical.update(value)
+    else:
+        raise ScenarioError(f"step {index}: wheel value must be an int (dy) or mapping")
+
+
+# Dispatch table: action verb -> in-place normalizer. Every verb in
+# ``_ACTION_KEYS`` must have an entry; ``click``/``dblclick``/``hover`` share
+# one implementation.
+_Normalizer = Callable[[dict[str, Any], dict[str, Any], Any, int], None]
+
+_NORMALIZERS: dict[str, _Normalizer] = {
+    "goto": _normalize_goto,
+    "click": _normalize_click_like,
+    "dblclick": _normalize_click_like,
+    "hover": _normalize_click_like,
+    "type": _normalize_type,
+    "press": _normalize_press,
+    "select": _normalize_select,
+    "scroll": _normalize_scroll,
+    "wait": _normalize_wait,
+    "wait_for": _normalize_wait_for,
+    "screenshot": _normalize_screenshot,
+    "evaluate": _normalize_evaluate,
+    "wheel": _normalize_wheel,
+}
+
+
 def _normalize_step(raw: Any, index: int) -> dict[str, Any]:
     """Turn the YAML shape `{action_verb: value, ...common}` into the canonical
-    `{"action": verb, <primary>: value, ...common}` accepted by pydantic."""
+    `{"action": verb, <primary>: value, ...common}` accepted by pydantic.
+
+    Per #151 (REF-3): action-specific shape coercion lives in per-action
+    factory functions dispatched via ``_NORMALIZERS``; this function only
+    handles the shared plumbing (action-key resolution, common-key copy,
+    dispatch) so each shape is unit-testable in isolation.
+    """
 
     if not isinstance(raw, dict):
         raise ScenarioError(f"step {index}: expected a mapping, got {type(raw).__name__}")
@@ -235,87 +385,13 @@ def _normalize_step(raw: Any, index: int) -> dict[str, Any]:
         if key in raw:
             canonical[key] = raw[key]
 
-    if action == "goto":
-        if isinstance(value, str):
-            canonical["url"] = value
-        elif isinstance(value, dict):
-            canonical.update(value)
-        else:
-            raise ScenarioError(f"step {index}: goto value must be a URL or mapping")
-        # `wait` may appear either as a top-level step field or inside the goto value
-        if "wait" in raw:
-            canonical["wait"] = raw["wait"]
-
-    elif action in {"click", "dblclick", "hover"}:
-        if not isinstance(value, str):
-            raise ScenarioError(f"step {index}: {action} value must be a selector string")
-        canonical["selector"] = value
-
-    elif action == "type":
-        if not isinstance(value, dict):
-            raise ScenarioError(f"step {index}: type value must be a mapping (into/text/delay)")
-        canonical.update(value)
-
-    elif action == "press":
-        if isinstance(value, str):
-            canonical["key"] = value
-        elif isinstance(value, dict):
-            canonical.update(value)
-        else:
-            raise ScenarioError(f"step {index}: press value must be a key string or mapping")
-
-    elif action == "select":
-        if not isinstance(value, dict):
-            raise ScenarioError(f"step {index}: select value must be a mapping (in/value)")
-        v = dict(value)
-        # Convention: YAML uses `in:`, canonical is `into`
-        if "in" in v:
-            v["into"] = v.pop("in")
-        canonical.update(v)
-
-    elif action == "scroll":
-        if not isinstance(value, dict):
-            raise ScenarioError(f"step {index}: scroll value must be a mapping (to/by)")
-        canonical.update(value)
-
-    elif action == "wait":
-        canonical["wait"] = value
-
-    elif action == "wait_for":
-        if isinstance(value, str):
-            canonical["selector"] = value
-        elif isinstance(value, dict):
-            canonical.update(value)
-        else:
-            raise ScenarioError(
-                f"step {index}: wait_for value must be a selector string or mapping"
-            )
-
-    elif action == "screenshot":
-        if isinstance(value, dict):
-            canonical.update(value)
-        elif not isinstance(value, bool | int | str | type(None)):
-            raise ScenarioError(f"step {index}: screenshot value must be a mapping or scalar")
-        # bare `screenshot:` (with no options) is fine — nothing to merge
-
-    elif action == "evaluate":
-        if isinstance(value, str):
-            canonical["expression"] = value
-        elif isinstance(value, dict):
-            canonical.update(value)
-        else:
-            raise ScenarioError(
-                f"step {index}: evaluate value must be a JS expression string or mapping"
-            )
-
-    elif action == "wheel":
-        if isinstance(value, int):
-            # Bare `wheel: 120` — vertical delta only.
-            canonical["dy"] = value
-        elif isinstance(value, dict):
-            canonical.update(value)
-        else:
-            raise ScenarioError(f"step {index}: wheel value must be an int (dy) or mapping")
+    normalizer = _NORMALIZERS.get(action)
+    if normalizer is None:
+        # Defensive — every ``_ACTION_KEYS`` entry has a registered
+        # normalizer; if this ever fires, a new verb was added to
+        # ``_ACTION_KEYS`` without a matching ``_NORMALIZERS`` entry.
+        raise ScenarioError(f"step {index}: no normalizer registered for action '{action}'")
+    normalizer(canonical, raw, value, index)
 
     return canonical
 
