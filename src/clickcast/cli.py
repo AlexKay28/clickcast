@@ -19,6 +19,11 @@ import time
 from pathlib import Path
 from typing import Annotated, Any
 
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
+
 import typer
 from platformdirs import user_config_dir
 
@@ -305,8 +310,25 @@ def _config_default_map() -> dict[str, dict[str, Any]]:
     other non-Config params are naturally excluded because they don't appear
     as keys in ``cfg.model_dump()``.
     """
+    # See #151 (PERF-3): the old broad `except Exception: return {}` swallowed
+    # TOML parse errors silently, leaving users mystified about why their
+    # config was ignored. Surface TOML parse errors on stderr with the same
+    # ⚠ marker as feedback/advisories.py — _read_toml prepends the file
+    # path to the error message so the warning identifies which file.
+    # OSError stays silent because a missing config file is the normal
+    # "no config yet" case; any other unexpected exception still falls
+    # through to defaults so `--help` and friends never brick.
     try:
         cfg = load_config()
+    except tomllib.TOMLDecodeError as e:
+        typer.secho(
+            f"⚠ clickcast.toml: TOML parse error — using defaults ({e})",
+            fg=typer.colors.YELLOW,
+            err=True,
+        )
+        return {}
+    except OSError:
+        return {}
     except Exception:
         return {}
     fields = cfg.model_dump()

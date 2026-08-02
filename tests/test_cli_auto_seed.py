@@ -24,7 +24,7 @@ class TestSeededTours:
         fake_sess = stub_environment
         gotos: list[str] = []
 
-        async def _fake_execute(step: Any, _sess: Any) -> Any:
+        async def _fake_execute(step: Any, _sess: Any, **_kw: Any) -> Any:
             if step.__class__.__name__ == "GotoStep":
                 gotos.append(step.url)
                 fake_sess.page.url = step.url
@@ -69,7 +69,7 @@ class TestSeededTours:
         gotos: list[str] = []
         click_counter = {"n": 0}
 
-        async def _fake_execute(step: Any, _sess: Any) -> Any:
+        async def _fake_execute(step: Any, _sess: Any, **_kw: Any) -> Any:
             cls = step.__class__.__name__
             if cls == "GotoStep":
                 gotos.append(step.url)
@@ -125,7 +125,7 @@ class TestSeededTours:
         gotos: list[str] = []
         click_counter = {"n": 0}
 
-        async def _fake_execute(step: Any, _sess: Any) -> Any:
+        async def _fake_execute(step: Any, _sess: Any, **_kw: Any) -> Any:
             cls = step.__class__.__name__
             if cls == "GotoStep":
                 gotos.append(step.url)
@@ -180,7 +180,7 @@ class TestSeededTours:
         gotos: list[str] = []
         click_counter = {"n": 0}
 
-        async def _fake_execute(step: Any, _sess: Any) -> Any:
+        async def _fake_execute(step: Any, _sess: Any, **_kw: Any) -> Any:
             cls = step.__class__.__name__
             if cls == "GotoStep":
                 gotos.append(step.url)

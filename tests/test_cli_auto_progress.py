@@ -27,7 +27,7 @@ class TestAutoProgressLogging:
         fake_sess = stub_environment
         click_counter = {"n": 0}
 
-        async def _fake_execute(step: Any, _sess: Any) -> Any:
+        async def _fake_execute(step: Any, _sess: Any, **_kw: Any) -> Any:
             cls = step.__class__.__name__
             if cls == "GotoStep":
                 fake_sess.page.url = step.url
@@ -76,7 +76,7 @@ class TestAutoProgressLogging:
         fake_sess = stub_environment
         click_counter = {"n": 0}
 
-        async def _fake_execute(step: Any, _sess: Any) -> Any:
+        async def _fake_execute(step: Any, _sess: Any, **_kw: Any) -> Any:
             cls = step.__class__.__name__
             if cls == "GotoStep":
                 fake_sess.page.url = step.url
@@ -128,7 +128,7 @@ class TestAutoProgressLogging:
         the summary that used to be missing between pages."""
         fake_sess = stub_environment
 
-        async def _fake_execute(step: Any, _sess: Any) -> Any:
+        async def _fake_execute(step: Any, _sess: Any, **_kw: Any) -> Any:
             if step.__class__.__name__ == "GotoStep":
                 fake_sess.page.url = step.url
             return make_result()
@@ -180,7 +180,7 @@ class TestAutoProgressLogging:
             r.cursor_xy = None
             return r
 
-        async def _fake_execute(step: Any, _sess: Any) -> Any:
+        async def _fake_execute(step: Any, _sess: Any, **_kw: Any) -> Any:
             cls = step.__class__.__name__
             if cls == "GotoStep":
                 fake_sess.page.url = step.url
@@ -250,7 +250,7 @@ class TestAutoProgressLogging:
             r.cursor_xy = None
             return r
 
-        async def _fake_execute(step: Any, _sess: Any) -> Any:
+        async def _fake_execute(step: Any, _sess: Any, **_kw: Any) -> Any:
             cls = step.__class__.__name__
             if cls == "GotoStep":
                 fake_sess.page.url = step.url

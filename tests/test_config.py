@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 from clickcast.cli import app
 from clickcast.config import (
@@ -101,13 +107,16 @@ class TestTomlShapes:
         assert cfg.engine == "webkit"
         assert cfg.fps == 24
 
-    def test_malformed_toml_ignored(self, tmp_path: Path) -> None:
+    def test_malformed_toml_raises(self, tmp_path: Path) -> None:
+        # Per #151 (PERF-3): _read_toml now propagates decode errors so the
+        # CLI can render a visible ⚠ line. `warnings.warn` was silent by
+        # default and hid user-typo bugs. The CLI catches this at the
+        # `_config_default_map` boundary; direct API callers of `load()`
+        # get an actionable exception instead of silent default-fallback.
         f = tmp_path / "clickcast.toml"
         f.write_text('engine = "webkit\n')  # missing closing quote
-        with pytest.warns(UserWarning, match="could not parse"):
-            cfg = load(project_toml=f, user_toml=tmp_path / "u.toml")
-        # Falls back to defaults rather than blowing up.
-        assert cfg.engine == "chromium"
+        with pytest.raises(tomllib.TOMLDecodeError):
+            load(project_toml=f, user_toml=tmp_path / "u.toml")
 
 
 # ------------------------------------------------------------------
@@ -191,21 +200,27 @@ class TestSetUserValue:
         assert cfg.engine == "webkit"
 
 
-class TestMalformedTomlWarns:
-    def test_read_toml_emits_warning_on_decode_error(self, tmp_path: Path) -> None:
+class TestMalformedTomlRaises:
+    """Per #151 (PERF-3): a malformed TOML file must not fall back silently.
+
+    The old behaviour warned via :func:`warnings.warn` (silent unless the
+    user ran with ``-W all``), leaving typos invisible. Now the CLI layer
+    turns the raised :class:`tomllib.TOMLDecodeError` into a visible ⚠
+    line with the file path (see ``clickcast.cli._config_default_map``);
+    direct API callers of ``load()`` get an actionable exception.
+    """
+
+    def test_read_toml_raises_on_decode_error(self, tmp_path: Path) -> None:
         bad = tmp_path / "bad.toml"
         bad.write_text('engine = "unterminated\n')  # missing closing quote
-        with pytest.warns(UserWarning, match="could not parse"):
-            data = _read_toml(bad)
-        # Still falls back to defaults so the CLI keeps working.
-        assert data == {}
+        with pytest.raises(tomllib.TOMLDecodeError):
+            _read_toml(bad)
 
-    def test_load_still_uses_defaults_when_toml_broken(self, tmp_path: Path) -> None:
+    def test_load_raises_when_toml_broken(self, tmp_path: Path) -> None:
         user = tmp_path / "user.toml"
         user.write_text('engine = "unterminated\n')
-        with pytest.warns(UserWarning, match="could not parse"):
-            cfg = load(project_toml=tmp_path / "p.toml", user_toml=user)
-        assert cfg.engine == "chromium"  # default
+        with pytest.raises(tomllib.TOMLDecodeError):
+            load(project_toml=tmp_path / "p.toml", user_toml=user)
 
 
 # ------------------------------------------------------------------

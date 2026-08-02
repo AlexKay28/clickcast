@@ -24,7 +24,7 @@ class TestBfsQueue:
 
         gotos: list[str] = []
 
-        async def _fake_execute(step: Any, _sess: Any) -> Any:
+        async def _fake_execute(step: Any, _sess: Any, **_kw: Any) -> Any:
             if step.__class__.__name__ == "GotoStep":
                 gotos.append(step.url)
                 fake_sess.page.url = step.url
@@ -67,7 +67,7 @@ class TestBfsQueue:
         # First click on start → navigate to /about; then start-page discovery
         # is done. On the /about page the same-shape click is a no-op so the
         # click loop finishes without a further nav.
-        async def _fake_execute(step: Any, _sess: Any) -> Any:
+        async def _fake_execute(step: Any, _sess: Any, **_kw: Any) -> Any:
             cls = step.__class__.__name__
             if cls == "GotoStep":
                 gotos.append(step.url)
@@ -115,7 +115,7 @@ class TestBfsQueue:
         gotos: list[str] = []
         first_click = {"done": False}
 
-        async def _fake_execute(step: Any, _sess: Any) -> Any:
+        async def _fake_execute(step: Any, _sess: Any, **_kw: Any) -> Any:
             cls = step.__class__.__name__
             if cls == "GotoStep":
                 gotos.append(step.url)
@@ -160,7 +160,7 @@ class TestBfsQueue:
 
         # Every click navigates back to a page we've already visited (/about);
         # dedup must prevent the second goto.
-        async def _fake_execute(step: Any, _sess: Any) -> Any:
+        async def _fake_execute(step: Any, _sess: Any, **_kw: Any) -> Any:
             cls = step.__class__.__name__
             if cls == "GotoStep":
                 gotos.append(step.url)
@@ -217,7 +217,7 @@ class TestBfsQueue:
         gotos: list[str] = []
         click_counter = {"n": 0}
 
-        async def _fake_execute(step: Any, _sess: Any) -> Any:
+        async def _fake_execute(step: Any, _sess: Any, **_kw: Any) -> Any:
             cls = step.__class__.__name__
             if cls == "GotoStep":
                 gotos.append(step.url)
@@ -275,7 +275,7 @@ class TestBfsQueue:
         fake_sess = stub_environment
         clicked = {"n": 0}
 
-        async def _fake_execute(step: Any, _sess: Any) -> Any:
+        async def _fake_execute(step: Any, _sess: Any, **_kw: Any) -> Any:
             cls = step.__class__.__name__
             if cls == "GotoStep":
                 fake_sess.page.url = step.url
@@ -324,7 +324,7 @@ class TestBfsQueue:
         fake_sess = stub_environment
         click_counter = {"n": 0}
 
-        async def _fake_execute(step: Any, _sess: Any) -> Any:
+        async def _fake_execute(step: Any, _sess: Any, **_kw: Any) -> Any:
             cls = step.__class__.__name__
             if cls == "GotoStep":
                 fake_sess.page.url = step.url
@@ -377,7 +377,7 @@ class TestBfsQueue:
         fake_sess = stub_environment
         click_counter = {"n": 0}
 
-        async def _fake_execute(step: Any, _sess: Any) -> Any:
+        async def _fake_execute(step: Any, _sess: Any, **_kw: Any) -> Any:
             cls = step.__class__.__name__
             if cls == "GotoStep":
                 fake_sess.page.url = step.url

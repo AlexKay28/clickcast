@@ -298,8 +298,19 @@ class TestVariableSubstitution:
         assert out == {"a": "X", "b": ["Y", {"c": "Z"}]}
 
     def test_undefined_variable_raises(self) -> None:
-        with pytest.raises(ScenarioError, match="undefined variable"):
+        with pytest.raises(ScenarioError, match="undefined scenario variable"):
             _substitute_vars("{{ missing }}", {})
+
+    def test_undefined_variable_message_includes_fix_hint(self) -> None:
+        """Per #151 (AI-6): the message must spell out both remediation paths
+        (CLI --var flag and YAML `variables:` block) so an AI agent can
+        self-repair without reading the source."""
+        with pytest.raises(ScenarioError) as exc_info:
+            _substitute_vars("{{ URL }}", {})
+        msg = str(exc_info.value)
+        assert "'URL'" in msg
+        assert "--var URL=" in msg
+        assert "variables:" in msg
 
     def test_load_with_vars(self) -> None:
         s = loads(

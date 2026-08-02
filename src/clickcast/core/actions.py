@@ -315,8 +315,32 @@ async def _wait_for_stable(
         await asyncio.sleep(min(poll_seconds, remaining))
 
 
-async def execute(step: BaseStep, session: Session) -> ActionResult:
-    """Run one step. Honors `dwell` and `optional`; caller loops for `repeat`."""
+def _step_context(step: BaseStep, index: int | None) -> str:
+    """Human-readable prefix for step failures.
+
+    Every raise inside :func:`execute` (and its callees) surfaces via
+    :class:`ActionResult.error`. Prefixing that message with the step's
+    index and label lets an AI agent reading a sidecar correlate the
+    failure to a scenario line without regex-scraping the message body.
+
+    See #151 (AI-1). ``index`` is optional because ``execute()`` accepts
+    ``step_index=None`` for legacy callers that don't track an index —
+    those get ``step ? (<label-or-action>): …`` instead.
+    """
+    idx = index if index is not None else "?"
+    return f"step {idx} ({step.label or step.action})"
+
+
+async def execute(
+    step: BaseStep, session: Session, *, step_index: int | None = None
+) -> ActionResult:
+    """Run one step. Honors `dwell` and `optional`; caller loops for `repeat`.
+
+    ``step_index`` is threaded through so error messages can carry a
+    ``step N (<label-or-action>): …`` prefix (see #151 AI-1). Defaults
+    to ``None`` for backward compatibility with older callers that
+    don't track a per-scenario index.
+    """
     start = time.monotonic()
     selector: str | None = None
     cursor_xy: tuple[int, int] | None = None
@@ -467,7 +491,11 @@ async def execute(step: BaseStep, session: Session) -> ActionResult:
         )
     except Exception as e:
         duration_ms = (time.monotonic() - start) * 1000.0
-        message = f"{type(e).__name__}: {e}"
+        # See #151 (AI-1): every failure carries a `step N (<label>):` prefix
+        # so an agent reading the sidecar can correlate the message to a
+        # scenario line without regex-scraping. _augment_with_hints appends
+        # its block AFTER the prefix, preserving the shipped layout.
+        message = f"{_step_context(step, step_index)}: {type(e).__name__}: {e}"
         message = await _augment_with_hints(message, step, session, selector, e)
         if step.optional:
             return ActionResult(
