@@ -173,6 +173,36 @@ class AutoConfig:
 # ---------------------------------------------------------------------------
 
 
+async def _ensure_discovered(
+    *,
+    sess: Session,
+    url: str,
+    click_budget: int,
+    cache: dict[str, list[Element]],
+) -> list[Element]:
+    """Return the discovered elements for ``url``, hitting ``cache`` first.
+
+    See #151 (PERF-1). Discovery is the only per-page work whose cost
+    scales with the pool size (``limit=_discovery_limit(budget)``); on a
+    slow site each fresh ``discover()`` re-walks the DOM and re-scores
+    every candidate. Cache keyed by page URL so a re-entry to the same
+    page (e.g. a click-retry-loop re-fetch, or a future orchestrator that
+    revisits a URL for a second pass) reuses the pool.
+
+    Invalidation is trivial: the cache is passed in by scope and lives
+    only as long as the caller wants it to. :func:`explore_page` creates
+    a fresh one per page iteration, so a genuine navigation always sees
+    a cold cache; the URL key guards against the same cache ever
+    returning stale results for a different page.
+    """
+    hit = cache.get(url)
+    if hit is not None:
+        return hit
+    elements = await discover(sess, limit=_discovery_limit(click_budget))
+    cache[url] = elements
+    return elements
+
+
 async def _goto_and_discover(
     *,
     sess: Session,
@@ -185,6 +215,7 @@ async def _goto_and_discover(
     step_index: int,
     step_annotations: dict[int, StepAnnotation],
     page_label: str,
+    discovery_cache: dict[str, list[Element]] | None = None,
 ) -> tuple[int, bool, list[Element]]:
     """Goto ``url``, record the open frame, then discover clickable elements.
 
@@ -192,6 +223,13 @@ async def _goto_and_discover(
     goto itself failed (caller should bail on the page); ``elements`` is
     the empty list in that case. Callers advance ``step_index`` past both
     the goto step and any subsequent per-click work.
+
+    ``discovery_cache`` (see #151 PERF-1) is an optional page-scope cache
+    keyed by URL. When provided, discovery goes through
+    :func:`_ensure_discovered` so a re-entry to the same URL reuses the
+    already-computed element pool instead of paying the full walk again.
+    Defaults to ``None`` for direct callers / tests — behaviour is
+    identical to the pre-cache path (a fresh ``discover()`` per call).
 
     Behaviour preserved from the pre-split ``explore_page``:
 
@@ -219,7 +257,12 @@ async def _goto_and_discover(
         await builder.record_step(index=step_index, step=goto, result=result, frames=frames_goto)
     step_index += 1
 
-    elements = await discover(sess, limit=_discovery_limit(click_budget))
+    if discovery_cache is None:
+        elements = await discover(sess, limit=_discovery_limit(click_budget))
+    else:
+        elements = await _ensure_discovered(
+            sess=sess, url=url, click_budget=click_budget, cache=discovery_cache
+        )
     log.info(
         "%s · discovered %d elements, click budget: %d", page_label, len(elements), click_budget
     )
@@ -243,6 +286,7 @@ async def _click_loop(
     page_label: str,
     target_highlight: bool = False,
     pre_click_highlight_frames: int = 0,
+    discovery_cache: dict[str, list[Element]] | None = None,
 ) -> tuple[int, int, list[str]]:
     """Click up to ``click_budget`` of the discovered ``elements``, restoring
     the page after every same-origin nav so subsequent clicks still land.
@@ -251,6 +295,14 @@ async def _click_loop(
     click-retry policy (consecutive-failure bail, deadline early-exit,
     cross-origin bail, ``go_back`` restore) lives here — the orchestrator
     just threads state in and out.
+
+    ``discovery_cache`` (see #151 PERF-1) is the page-scope memo dict
+    threaded from :func:`explore_page`. The loop iterates the passed
+    ``elements`` list directly (already the cached pool for
+    ``sess.page.url`` at entry), so a timing-out click never triggers a
+    fresh ``discover()``; if a future refactor lifts re-discovery into
+    this loop, it should route through :func:`_ensure_discovered` with
+    this cache so same-URL re-entries stay O(1).
 
     Behaviour preserved from the pre-split ``explore_page``:
 
@@ -265,6 +317,7 @@ async def _click_loop(
       cross-origin breaks; same-origin triggers ``go_back`` with the
       shipped timeout, and a landing-URL mismatch stops the page.
     """
+    del discovery_cache  # accepted for orchestrator symmetry; unused in-loop today
     discovered_urls: list[str] = []
     clicked = 0
     consecutive_failures = 0
@@ -406,10 +459,19 @@ async def explore_page(
     per-page scroll step so subsequent pages capture below-the-fold content.
 
     Returns ``(next_step_index, clicks_used, discovered_urls)``.
+
+    A page-scope ``discovery_cache`` (see #151 PERF-1) is created here and
+    threaded through both helpers so a click-retry-loop re-entry to the
+    same URL reuses the discovered element pool instead of paying the
+    full DOM walk again. Cache lives only for this call — the natural
+    invalidation boundary is between page iterations in :func:`run_tour`,
+    which starts a fresh ``explore_page`` (and therefore a cold cache)
+    for every new URL.
     """
     page_started = time.monotonic()
     log.info("%s → open %s", page_label, url)
 
+    discovery_cache: dict[str, list[Element]] = {}
     step_index, ok, elements = await _goto_and_discover(
         sess=sess,
         rec=rec,
@@ -421,6 +483,7 @@ async def explore_page(
         step_index=step_index,
         step_annotations=step_annotations,
         page_label=page_label,
+        discovery_cache=discovery_cache,
     )
     if not ok:
         return step_index, 0, []
@@ -439,6 +502,7 @@ async def explore_page(
         page_label=page_label,
         target_highlight=target_highlight,
         pre_click_highlight_frames=pre_click_highlight_frames,
+        discovery_cache=discovery_cache,
     )
     step_index = await _scroll_page(
         sess=sess,
