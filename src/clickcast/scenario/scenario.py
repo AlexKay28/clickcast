@@ -185,8 +185,14 @@ _COMMON_KEYS = {"label", "dwell", "optional", "repeat"}
 _VAR_RE = re.compile(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")
 
 
-def _substitute_vars(obj: Any, variables: dict[str, str]) -> Any:
-    """Recursively replace `{{ name }}` placeholders. Raises on undefined names."""
+def _make_repl(variables: dict[str, str]) -> Callable[[re.Match[str]], str]:
+    """Build the ``re.sub`` replacement closure for ``variables``.
+
+    Single source of truth for the substitution mapping + undefined-name
+    error text so the raw-dict walker (:func:`_substitute_vars`, still
+    exported for existing tests / callers) and the post-parse typed-model
+    walker (:func:`_substitute_in_scenario`) can't drift.
+    """
 
     def repl(match: re.Match[str]) -> str:
         name = match.group(1)
@@ -202,13 +208,103 @@ def _substitute_vars(obj: Any, variables: dict[str, str]) -> Any:
             )
         return str(variables[name])
 
+    return repl
+
+
+def _substitute_vars(obj: Any, variables: dict[str, str]) -> Any:
+    """Recursively replace `{{ name }}` placeholders. Raises on undefined names.
+
+    Preserved for external callers (tests import this directly). Since
+    #151 (PERF-2) the scenario parser no longer calls this to walk the
+    raw YAML dict — substitution runs post-parse against the typed model
+    via :func:`_substitute_in_scenario`, which skips whole subtrees of
+    non-string fields (int/float/bool/enum). This helper stays as-is for
+    ad-hoc raw-dict substitution and back-compat.
+    """
+    repl = _make_repl(variables)
+    return _apply_repl_to_raw(obj, repl)
+
+
+def _apply_repl_to_raw(obj: Any, repl: Callable[[re.Match[str]], str]) -> Any:
+    """The recursive raw-dict/list walker previously inlined in
+    :func:`_substitute_vars`. Extracted so both public and internal
+    entry points share exactly one traversal implementation."""
     if isinstance(obj, str):
         return _VAR_RE.sub(repl, obj)
     if isinstance(obj, dict):
-        return {k: _substitute_vars(v, variables) for k, v in obj.items()}
+        return {k: _apply_repl_to_raw(v, repl) for k, v in obj.items()}
     if isinstance(obj, list):
-        return [_substitute_vars(v, variables) for v in obj]
+        return [_apply_repl_to_raw(v, repl) for v in obj]
     return obj
+
+
+def _substitute_in_scenario(scenario: Scenario, variables: dict[str, str]) -> None:
+    """Post-parse variable substitution on the typed :class:`Scenario`.
+
+    Per #151 (PERF-2): the raw-dict pre-walk visited every value in the
+    parsed YAML (dict/list/scalar) whether or not any ``{{ }}`` reference
+    existed and whether or not the field could hold a substitutable
+    string. This pass walks only the typed models' string-carrying fields
+    (``str``, ``list[str]``, ``dict[str, Any]``) and mutates them in
+    place. For steps like ``ScrollStep`` / ``WheelStep`` / ``WaitForStep``
+    whose payload is mostly ``int`` / ``float``, we skip those fields
+    entirely instead of visiting each numeric node.
+
+    Byte-identical output invariant: every substitution site the previous
+    raw walker would have hit on today's scenarios is still hit here,
+    because every ``str`` / ``list[str]`` / ``dict[str, Any]`` field on
+    :class:`Meta` (incl. its nested :class:`BrowserOpts` / :class:`RenderOpts`
+    dataclasses) and every :class:`Step` subclass is enumerated by
+    pydantic / dataclass field introspection.
+    """
+    repl = _make_repl(variables)
+    _apply_repl_to_typed(scenario, repl)
+
+
+def _apply_repl_to_typed(obj: Any, repl: Callable[[re.Match[str]], str]) -> None:
+    """Recursively mutate string fields on pydantic models / dataclasses.
+
+    Dispatch by shape:
+
+    - ``BaseModel``: iterate declared ``model_fields`` and recurse.
+    - ``@dataclass`` instance (``BrowserOpts`` / ``RenderOpts``): iterate
+      ``__dataclass_fields__`` and recurse.
+    - ``str``: not handled here — the caller reads/writes via the parent
+      via :func:`setattr` (we only descend structurally).
+
+    ``list`` / ``dict`` values on typed models get walked in place: lists
+    of strings are rewritten element-wise; free-form dicts (e.g.
+    ``Meta.annotate``) get the same recursive treatment as the legacy
+    raw walker so free-form structured payloads keep working.
+    """
+    if isinstance(obj, BaseModel):
+        for name in type(obj).model_fields:
+            val = getattr(obj, name)
+            new_val = _substitute_field_value(val, repl)
+            if new_val is not val:
+                setattr(obj, name, new_val)
+    elif hasattr(obj, "__dataclass_fields__"):
+        for name in obj.__dataclass_fields__:
+            val = getattr(obj, name)
+            new_val = _substitute_field_value(val, repl)
+            if new_val is not val:
+                setattr(obj, name, new_val)
+
+
+def _substitute_field_value(val: Any, repl: Callable[[re.Match[str]], str]) -> Any:
+    """Substitute inside a single field value, returning the (possibly
+    new) value. Non-string leaves are returned unchanged (identity), so
+    the caller can cheaply detect no-op via ``new is not val``."""
+    if isinstance(val, str):
+        return _VAR_RE.sub(repl, val)
+    if isinstance(val, list):
+        return [_substitute_field_value(v, repl) for v in val]
+    if isinstance(val, dict):
+        return {k: _substitute_field_value(v, repl) for k, v in val.items()}
+    if isinstance(val, BaseModel) or hasattr(val, "__dataclass_fields__"):
+        _apply_repl_to_typed(val, repl)
+        return val
+    return val
 
 
 # --- Per-action normalizers -------------------------------------------------
@@ -448,9 +544,6 @@ def loads(
     if not isinstance(raw, dict):
         raise ScenarioError("Scenario must be a mapping at the top level")
 
-    if variables:
-        raw = _substitute_vars(raw, variables)
-
     meta_raw = raw.get("meta") or {}
     steps_raw = raw.get("steps") or []
     if not isinstance(meta_raw, dict):
@@ -466,7 +559,18 @@ def loads(
     canonical = [_normalize_step(s, i) for i, s in enumerate(steps_raw)]
     steps = _validate_steps(canonical, source)
 
-    return Scenario(meta=meta, steps=steps)
+    scenario = Scenario(meta=meta, steps=steps)
+
+    # Per #151 (PERF-2): substitute after parse. Skip the walk entirely
+    # when the caller passed no variables — the raw pre-walk used to run
+    # a full-tree traversal even for scenarios that don't reference any
+    # ``{{ }}``. This branch also skips the typed walk when ``variables``
+    # is empty / None so back-compat matches the previous behaviour
+    # (no substitution attempted, no undefined-var errors raised).
+    if variables:
+        _substitute_in_scenario(scenario, variables)
+
+    return scenario
 
 
 # ------- Public: run ---------------------------------------------------------
