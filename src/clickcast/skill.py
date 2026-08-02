@@ -198,8 +198,7 @@ COMMAND_BRIEFS: tuple[CommandBrief, ...] = (
         ),
         when_to_use=(
             "Something in a reel or sidecar looks wrong. Produces diagnostics "
-            "plus a prefilled GitHub issue URL. Gate on `error_code` / "
-            "`skip_reason` (schema v3)."
+            "plus a prefilled GitHub URL. Gate on `error_code`/`skip_reason` (v3)."
         ),
         key_flags=(
             FlagBrief("--json", "emit the Track-C payload verbatim (see schema below)"),
