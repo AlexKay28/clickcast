@@ -195,7 +195,7 @@ EmitEvents = Annotated[
         "--emit-events",
         help=(
             "After the human-readable tail line, print one JSON object on "
-            "its own line to stdout ({\"event\": \"tour_complete\", ...}). "
+            'its own line to stdout ({"event": "tour_complete", ...}). '
             "JSONL-friendly for agents that regex-scrape the shipped prose. "
             "Off by default."
         ),
