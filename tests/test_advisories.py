@@ -7,6 +7,7 @@ recorder, no file I/O.
 
 from __future__ import annotations
 
+from clickcast.annotate import AnnotateConfig, CursorStyle
 from clickcast.feedback import Advisory, Media, PageState, StepReport, build_advisories
 
 
@@ -169,6 +170,85 @@ class TestCrossOriginBounce:
         ]
         advs = build_advisories(steps, _media(), total_clicks=2, nav_clicks=2)
         assert "cross-origin-bounce" not in _ids(advs)
+
+
+class TestInterpolateSingleArrowConflict:
+    def test_both_enabled_triggers(self) -> None:
+        cfg = AnnotateConfig(
+            cursor_style=CursorStyle(interpolate=True, single_arrow=True),
+        )
+        advs = build_advisories([], _media(), total_clicks=0, nav_clicks=0, annotate_cfg=cfg)
+        assert "interpolate-single-arrow-conflict" in _ids(advs)
+        msg = next(a for a in advs if a.id == "interpolate-single-arrow-conflict").message
+        assert "interpolation" in msg
+        assert "single_arrow" in msg
+
+    def test_interpolate_alone_does_not_trigger(self) -> None:
+        cfg = AnnotateConfig(
+            cursor_style=CursorStyle(interpolate=True, single_arrow=False),
+        )
+        advs = build_advisories([], _media(), total_clicks=0, nav_clicks=0, annotate_cfg=cfg)
+        assert "interpolate-single-arrow-conflict" not in _ids(advs)
+
+    def test_single_arrow_alone_does_not_trigger(self) -> None:
+        cfg = AnnotateConfig(
+            cursor_style=CursorStyle(interpolate=False, single_arrow=True),
+        )
+        advs = build_advisories([], _media(), total_clicks=0, nav_clicks=0, annotate_cfg=cfg)
+        assert "interpolate-single-arrow-conflict" not in _ids(advs)
+
+    def test_no_cfg_does_not_trigger(self) -> None:
+        # Backward compat: callers that don't pass annotate_cfg skip both new checks.
+        advs = build_advisories([], _media(), total_clicks=0, nav_clicks=0)
+        assert "interpolate-single-arrow-conflict" not in _ids(advs)
+
+
+class TestArrowDistanceVsCrossNav:
+    def test_default_distance_plus_cross_origin_edge_triggers(self) -> None:
+        steps = [
+            _goto(0, url="https://example.com/", title="Home"),
+            _click(1, url="https://external.com/page", title="External"),
+        ]
+        cfg = AnnotateConfig()  # arrow_max_distance defaults to 600
+        advs = build_advisories(steps, _media(), total_clicks=1, nav_clicks=1, annotate_cfg=cfg)
+        assert "arrow-distance-vs-cross-nav" in _ids(advs)
+        msg = next(a for a in advs if a.id == "arrow-distance-vs-cross-nav").message
+        assert "arrow_max_distance" in msg
+
+    def test_non_default_distance_does_not_trigger(self) -> None:
+        steps = [
+            _goto(0, url="https://example.com/", title="Home"),
+            _click(1, url="https://external.com/page", title="External"),
+        ]
+        cfg = AnnotateConfig(cursor_style=CursorStyle(arrow_max_distance=2000))
+        advs = build_advisories(steps, _media(), total_clicks=1, nav_clicks=1, annotate_cfg=cfg)
+        assert "arrow-distance-vs-cross-nav" not in _ids(advs)
+
+    def test_single_page_tour_does_not_trigger(self) -> None:
+        steps = [
+            _goto(0, url="https://example.com/", title="Home"),
+            _click(1, url="https://example.com/", title="Home - menu"),
+        ]
+        cfg = AnnotateConfig()
+        advs = build_advisories(steps, _media(), total_clicks=1, nav_clicks=0, annotate_cfg=cfg)
+        assert "arrow-distance-vs-cross-nav" not in _ids(advs)
+
+    def test_no_cfg_does_not_trigger(self) -> None:
+        steps = [
+            _goto(0, url="https://example.com/", title="Home"),
+            _click(1, url="https://external.com/page", title="External"),
+        ]
+        advs = build_advisories(steps, _media(), total_clicks=1, nav_clicks=1)
+        assert "arrow-distance-vs-cross-nav" not in _ids(advs)
+
+
+class TestDefaultArrowMaxDistanceStaysInSync:
+    """Regression: the advisory's hard-coded default must match CursorStyle's."""
+
+    def test_advisory_default_matches_cursor_style_default(self) -> None:
+        from clickcast.feedback.advisories import _DEFAULT_ARROW_MAX_DISTANCE
+
+        assert CursorStyle().arrow_max_distance == _DEFAULT_ARROW_MAX_DISTANCE
 
 
 class TestAdvisoryShape:

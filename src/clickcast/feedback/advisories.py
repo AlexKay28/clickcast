@@ -34,6 +34,12 @@ trigger rules):
 - ``very-short-reel`` — encoded reel is < 20 frames.
 - ``cross-origin-bounce`` — a step navigated cross-origin and the tour
   returned to the previous origin (an ``auto`` ``go_back``).
+- ``interpolate-single-arrow-conflict`` — ``CursorStyle.interpolate=True``
+  and ``single_arrow=True`` are both set; the sticky arrow smears through
+  the interpolated cursor path (visually incoherent).
+- ``arrow-distance-vs-cross-nav`` — a tour with ≥1 cross-origin edge and
+  ``CursorStyle.arrow_max_distance`` at its shipped default silently
+  suppresses the closing arrow of the previous scene.
 
 Explicit follow-ups (out of scope for this PR, tracked on #138):
 
@@ -49,9 +55,13 @@ Explicit follow-ups (out of scope for this PR, tracked on #138):
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 from clickcast.feedback.models import Media, StepReport
+
+if TYPE_CHECKING:
+    from clickcast.annotate import AnnotateConfig
 
 __all__ = ["Advisory", "build_advisories"]
 
@@ -71,6 +81,13 @@ _NAV_HEAVY_RATIO = 0.5
 # Matches the "5-8 steps x ~1.2s dwell x 8 fps ~= 50-80 frames" heuristic from
 # TIPS section 6; 20 frames is the floor below which "advisory" is uncontroversial.
 _SHORT_REEL_FRAME_FLOOR = 20
+
+# The shipped default for :attr:`CursorStyle.arrow_max_distance`. Hard-coded
+# here (rather than imported from ``clickcast.annotate``) so this module stays
+# import-free of the annotate package — advisories are pure heuristic code,
+# usable from tests that don't need Pillow/font machinery on the path. Kept in
+# sync by the dedicated regression test in ``tests/test_advisories.py``.
+_DEFAULT_ARROW_MAX_DISTANCE = 600
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +110,7 @@ def build_advisories(
     *,
     total_clicks: int,
     nav_clicks: int,
+    annotate_cfg: AnnotateConfig | None = None,
 ) -> list[Advisory]:
     """Score a completed tour against known anti-patterns.
 
@@ -101,7 +119,10 @@ def build_advisories(
     and ``nav_clicks`` are tour-level totals the orchestrator already tracks
     (passing them in rather than re-deriving keeps this function honest about
     what it consumes and lets the orchestrator use the same counts it prints
-    in the summary line).
+    in the summary line). ``annotate_cfg`` — when supplied — enables the
+    cursor-style anti-pattern checks (``interpolate-single-arrow-conflict``
+    and ``arrow-distance-vs-cross-nav``). Optional so hand-fixtured tests
+    that don't care about the annotate layer keep working unchanged.
 
     Returns a list of :class:`Advisory` — empty for a well-formed tour.
     Order matches the order the checks run, which is roughly "biggest
@@ -115,6 +136,11 @@ def build_advisories(
         advisories.append(short)
     advisories.extend(_check_click_no_dom_reaction(steps))
     advisories.extend(_check_cross_origin_bounce(steps))
+    if annotate_cfg is not None:
+        if conflict := _check_interpolate_single_arrow_conflict(annotate_cfg):
+            advisories.append(conflict)
+        if arrow_dist := _check_arrow_distance_vs_cross_nav(steps, annotate_cfg):
+            advisories.append(arrow_dist)
     return advisories
 
 
@@ -247,3 +273,69 @@ def _next_url_state(steps: list[StepReport], i: int) -> str | None:
 def _same_origin(a: str, b: str) -> bool:
     pa, pb = urlparse(a), urlparse(b)
     return (pa.scheme, pa.hostname, pa.port) == (pb.scheme, pb.hostname, pb.port)
+
+
+def _check_interpolate_single_arrow_conflict(cfg: AnnotateConfig) -> Advisory | None:
+    """Flag ``interpolate=True`` + ``single_arrow=True`` on the cursor style.
+
+    Interpolation inserts intermediate cursor frames along the path between
+    two recorded positions; ``single_arrow`` holds one A→B arrow across the
+    step's dwell. Combined, the sticky arrow's endpoints track along the
+    interpolated path — the sticky arrow "smears" as it walks. Anti-pattern
+    4 in :file:`docs/ONE_PAGE_NAVIGATION_ORDER_TIPS.md`.
+    """
+    style = cfg.cursor_style
+    if not (style.interpolate and style.single_arrow):
+        return None
+    return Advisory(
+        id="interpolate-single-arrow-conflict",
+        message=(
+            "cursor interpolation + single_arrow both enabled — the sticky "
+            "arrow smears through the interpolated cursor path (visually "
+            "incoherent). Pick one."
+        ),
+        doc_url=_TIPS_URL,
+    )
+
+
+def _check_arrow_distance_vs_cross_nav(
+    steps: list[StepReport], cfg: AnnotateConfig
+) -> Advisory | None:
+    """Flag default ``arrow_max_distance`` on a tour with cross-origin edges.
+
+    The shipped default (600 px) filters "teleports" — cursor jumps between
+    unrelated positions across a page navigation, which read as misleading
+    long arrows. On a tour that DOES cross origins, though, the closing
+    arrow of the previous scene is exactly what threads the two scenes
+    together visually — suppressing it cuts the tour's through-line.
+    Anti-pattern 5 in :file:`docs/ONE_PAGE_NAVIGATION_ORDER_TIPS.md`.
+    """
+    if cfg.cursor_style.arrow_max_distance != _DEFAULT_ARROW_MAX_DISTANCE:
+        return None
+    if not _has_cross_origin_edge(steps):
+        return None
+    return Advisory(
+        id="arrow-distance-vs-cross-nav",
+        message=(
+            "cross-origin edges + default arrow_max_distance hide the closing "
+            "arrow of the previous scene, cutting the visual thread."
+        ),
+        doc_url=_TIPS_URL,
+    )
+
+
+def _has_cross_origin_edge(steps: list[StepReport]) -> bool:
+    """True iff any consecutive pair of URL-carrying steps crosses origins.
+
+    Mirrors the walk in :func:`_check_cross_origin_bounce` but only cares
+    about the first cross-origin edge — no return-bounce requirement.
+    """
+    prev_url: str | None = None
+    for step in steps:
+        state = step.page_state
+        if state is None or not state.url_after:
+            continue
+        if prev_url is not None and not _same_origin(state.url_after, prev_url):
+            return True
+        prev_url = state.url_after
+    return False
