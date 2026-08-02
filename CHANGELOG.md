@@ -65,6 +65,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in ``tests/test_skill.py`` unchanged at 900 (897 after additions).
 
 ### Changed
+- **Per-page discovery cache in `auto.explore_page`** (part of [#151] —
+  PERF-1 of the 15-finding audit; zero-behaviour-change). ``discover()``
+  used to run exactly once per page in ``_goto_and_discover``, but the
+  architecture had no defence against a click-retry-loop re-fetch: any
+  future path that re-asked for the element pool would pay the full DOM
+  walk again (100 ms+ on slow sites, dominated by the score-and-dedup
+  step). Fixed by introducing a URL-keyed page-scope cache dict in
+  ``explore_page``, threaded through ``_goto_and_discover`` (via a new
+  ``_ensure_discovered(sess, url, click_budget, cache)`` helper) and
+  ``_click_loop`` (accepted for orchestrator symmetry; unused today, but
+  documented as the route any future in-loop re-discovery should take).
+  Invalidation is trivial — the cache lives only for one ``explore_page``
+  call, so every new page starts cold; the URL key guards against ever
+  returning stale results for a different page. Verified via the full
+  774-test suite unchanged + three new ``test_auto_discovery_cache.py``
+  cases that lock the cold-fetch / cache-hit / URL-key behaviours.
 - **Scenario variable substitution deferred to post-parse** (part of
   [#151] — PERF-2 of the 15-finding audit). ``scenario/scenario.py::loads``
   used to run ``_substitute_vars`` on the raw YAML dict/list tree BEFORE
