@@ -150,6 +150,28 @@ class TestPayload:
             "run command should mention `optional: true` step support"
         )
 
+    def test_auto_and_run_document_emit_events_flag(self) -> None:
+        # See #151 (AI-4): `--emit-events` is the JSONL-friendly summary
+        # gate. Both surfaces (auto + run) must advertise it or agents
+        # scraping shipped prose won't discover the machine-readable line.
+        payload = build_payload()
+        for cmd_name in ("auto", "run"):
+            entry = next(c for c in payload["commands"] if c["name"] == cmd_name)
+            flags = [f["flag"] for f in entry["key_flags"]]
+            assert any("--emit-events" in f for f in flags), (
+                f"{cmd_name} command should surface --emit-events"
+            )
+
+    def test_report_bug_mentions_v3_gates(self) -> None:
+        # See #151 (AI-2, AI-5): sidecar consumers should know `error_code`
+        # and `skip_reason` (schema v3) exist so they can gate on them.
+        payload = build_payload()
+        report_bug = next(c for c in payload["commands"] if c["name"] == "report-bug")
+        text = report_bug["when_to_use"] + " " + report_bug["summary"]
+        assert "error_code" in text or "skip_reason" in text, (
+            "report-bug brief should mention the v3 gate fields"
+        )
+
 
 class TestMarkdown:
     def test_contains_every_command(self) -> None:

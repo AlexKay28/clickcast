@@ -18,10 +18,11 @@ from clickcast.core.actions import (
     Step,
     TypeStep,
     WaitStep,
+    _classify_error,
     _step_context,
     execute,
 )
-from clickcast.core.session import Session
+from clickcast.core.session import PlaywrightTimeoutError, Session
 
 
 class TestStepModels:
@@ -64,6 +65,49 @@ class TestStepModels:
         s = ScreenshotStep()
         assert s.full_page is False
         assert s.path is None
+
+
+class TestClassifyError:
+    """`_classify_error` is the single source of the sidecar's ``error_code``
+    (see #151 AI-5). Kept as its own helper so the classification table
+    lives in one place, not sprinkled across every step-handler branch.
+
+    Each test exercises one branch of the taxonomy. New branches added to
+    :func:`_classify_error` should land with a matching test here so the
+    ``ErrorCode`` enum in :mod:`clickcast.feedback.models` stays in sync
+    with what the classifier actually returns.
+    """
+
+    def test_playwright_timeout_maps_to_timeout(self) -> None:
+        assert _classify_error(PlaywrightTimeoutError("waiting for locator")) == "timeout"
+
+    def test_locator_missing_marker_maps_to_locator_missing(self) -> None:
+        # The shipped Playwright error text on a click that resolves to no
+        # elements — canonical "the selector parsed but nothing matches".
+        exc = RuntimeError("locator resolved to 0 elements")
+        assert _classify_error(exc) == "locator_missing"
+
+    def test_cross_origin_error_maps_to_cross_origin(self) -> None:
+        # Any of the shipped Playwright cross-origin phrasings work — pick
+        # the "target closed" variant that fires on cross-origin bounces.
+        exc = RuntimeError("Target closed while waiting for click")
+        assert _classify_error(exc) == "cross_origin"
+
+    def test_navigation_error_maps_to_navigation_error(self) -> None:
+        exc = RuntimeError("net::ERR_NAME_NOT_RESOLVED at https://nope.example")
+        assert _classify_error(exc) == "navigation_error"
+
+    def test_ambiguous_selector_maps_to_selector_ambiguous(self) -> None:
+        # `hints.py` raises the ambiguous-selector error when >1 candidate
+        # ties for the top score — the classifier picks it up by phrase.
+        exc = RuntimeError("ambiguous selector: 3 candidates tied for top rank")
+        assert _classify_error(exc) == "selector_ambiguous"
+
+    def test_generic_exception_maps_to_other(self) -> None:
+        # A ScenarioError, a JS `evaluate()` throw, a step-type dispatch
+        # bug — anything not covered above lands in the `other` bucket
+        # so the sidecar's error_code is never absent for a failed step.
+        assert _classify_error(ValueError("bogus scenario shape")) == "other"
 
 
 class TestStepContext:
@@ -186,6 +230,26 @@ class TestActionIntegration:
         assert not r.ok
         assert r.status == "failed"
         assert "either" in (r.error or "")
+        # See #151 (AI-5): a ValueError from step shape validation lands in
+        # the `other` bucket — nothing more specific matches.
+        assert r.error_code == "other"
+
+    async def test_failed_click_carries_error_code(self, loaded_session: Session) -> None:
+        # See #151 (AI-5): a missing-selector click surfaces as a Playwright
+        # timeout under the shipped 3s default; classifier returns "timeout".
+        r = await execute(ClickStep(selector="#nope"), loaded_session)
+        assert r.status == "failed"
+        assert r.error_code == "timeout"
+
+    async def test_optional_missing_selector_skip_reason_is_pre_action_failed(
+        self, loaded_session: Session
+    ) -> None:
+        # See #151 (AI-2): a Playwright timeout on an optional step is a
+        # pre-action failure (the click never got the chance to run).
+        r = await execute(ClickStep(selector="#nope", optional=True), loaded_session)
+        assert r.status == "skipped"
+        assert r.skip_reason == "pre_action_failed"
+        assert r.error_code == "timeout"
 
     async def test_error_carries_step_context_prefix(self, loaded_session: Session) -> None:
         # Per #151 (AI-1): failure messages must begin with

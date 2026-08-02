@@ -46,7 +46,7 @@ SKILL_SCHEMA_VERSION = 1
 
 SIDECAR_SCHEMA_URL = (
     "https://raw.githubusercontent.com/AlexKay28/clickcast/main/"
-    "src/clickcast/feedback/schema/v2.json"
+    "src/clickcast/feedback/schema/v3.json"
 )
 
 SUMMARY = (
@@ -111,7 +111,11 @@ COMMAND_BRIEFS: tuple[CommandBrief, ...] = (
             FlagBrief("--seed-url URL", "extra URLs to visit in a fixed order"),
             FlagBrief(
                 "--dump-elements",
-                "on selector failure, append the full discovered-elements list to the error for debugging",
+                "append full discover() list to selector-failure errors for debugging",
+            ),
+            FlagBrief(
+                "--emit-events",
+                "print JSON tour_complete line after tour (JSONL-friendly)",
             ),
         ),
         example="clickcast auto https://example.com --for-humans",
@@ -133,6 +137,10 @@ COMMAND_BRIEFS: tuple[CommandBrief, ...] = (
             ),
             FlagBrief("--var key=value", "inject a scenario variable"),
             FlagBrief("--with-feedback", "attach the AI-agent feedback pointer block"),
+            FlagBrief(
+                "--emit-events",
+                "print JSON tour_complete line after tour (JSONL-friendly)",
+            ),
         ),
         example="clickcast run tour.yml --url https://staging.example.com",
     ),
@@ -170,10 +178,9 @@ COMMAND_BRIEFS: tuple[CommandBrief, ...] = (
         name="assertions",
         summary="Distill a sidecar to its CI-stable assertion set (optionally diff a baseline).",
         when_to_use=(
-            "You want a two-line CI regression gate: distill a fresh sidecar "
-            "and compare it to a committed baseline. Byte-identical across "
-            "runs — timestamps, frame paths, and URL query strings are "
-            "excluded. See docs/assertions-schema/v1.json."
+            "Two-line CI regression gate: distill a sidecar and diff a "
+            "committed baseline. Byte-identical across runs. See "
+            "docs/assertions-schema/v1.json."
         ),
         key_flags=(
             FlagBrief(
@@ -191,7 +198,8 @@ COMMAND_BRIEFS: tuple[CommandBrief, ...] = (
         ),
         when_to_use=(
             "Something in a reel or sidecar looks wrong. Produces diagnostics "
-            "plus a prefilled GitHub issue URL. See docs/for-agents.md."
+            "plus a prefilled GitHub issue URL. Gate on `error_code` / "
+            "`skip_reason` (schema v3)."
         ),
         key_flags=(
             FlagBrief("--json", "emit the Track-C payload verbatim (see schema below)"),

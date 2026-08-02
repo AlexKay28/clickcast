@@ -4,15 +4,16 @@ Run:
 
     python scripts/gen_feedback_schema.py
 
-Emits ``src/clickcast/feedback/schema/v2.json`` from the current
+Emits ``src/clickcast/feedback/schema/v3.json`` from the current
 :class:`~clickcast.feedback.models.Report`. The test suite compares the
 emitted schema to the committed one — a mismatch means the model
 changed. Bump ``schema_version`` and update the file.
 
-The legacy ``v1.json`` file is preserved verbatim as an immutable
-snapshot of the schema before the #107 graph block landed — downstream
-consumers that bookmarked that URL keep working. New consumers should
-target ``v2.json``.
+The legacy ``v1.json`` and ``v2.json`` files are preserved verbatim as
+immutable snapshots of the schema before the #107 graph block landed
+(v1) and before the #151 ``skip_reason`` / ``error_code`` gates landed
+(v2). Downstream consumers that bookmarked those URLs keep working.
+New consumers should target ``v3.json``.
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ from pathlib import Path
 from clickcast.feedback.models import Report
 
 SCHEMA_DIR = Path(__file__).parent.parent / "src" / "clickcast" / "feedback" / "schema"
-SCHEMA_PATH = SCHEMA_DIR / "v2.json"
+SCHEMA_PATH = SCHEMA_DIR / "v3.json"
 
 
 def main() -> None:

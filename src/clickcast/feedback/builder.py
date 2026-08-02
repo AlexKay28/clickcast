@@ -6,16 +6,18 @@ import time
 from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from clickcast.core.actions import ActionResult, BaseStep
 from clickcast.feedback.collector import PageStateCollector
 from clickcast.feedback.graph import build_graph
 from clickcast.feedback.models import (
     DiscoveredElement,
+    ErrorCode,
     Graph,
     Media,
     Report,
+    SkipReason,
     StepReport,
 )
 
@@ -105,6 +107,13 @@ class ReportBuilder:
                 cursor_xy=list(result.cursor_xy) if result.cursor_xy else None,
                 page_state=page_state,
                 error=result.error,
+                # See #151 (AI-2, AI-5): schema-v3 gate fields; the action
+                # engine populates them on failed / skipped steps and leaves
+                # them ``None`` on successful ones. Cast because ActionResult
+                # types the fields as ``str | None`` (the enum lives in the
+                # feedback layer, not the action engine).
+                error_code=cast("ErrorCode | None", result.error_code),
+                skip_reason=cast("SkipReason | None", result.skip_reason),
             )
         )
 

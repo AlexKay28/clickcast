@@ -2,7 +2,7 @@
 
 Each scenario is loaded via the CLI (`clickcast run`), pointed at the
 fixture-site URL via ``--var base_url=...``, and asserted to produce a
-valid GIF + a `schema_version: 2` sidecar. This gives us:
+valid GIF + a `schema_version: 3` sidecar. This gives us:
 
 - A regression against the roadmap acceptance for #15: every example
   scenario executes end-to-end.
@@ -66,7 +66,7 @@ def test_docs_scenario_runs_end_to_end(
     # Sidecar validates against the schema #12 promises to downstream AI.
     sidecar = out.with_suffix(out.suffix + ".json")
     payload = json.loads(sidecar.read_text())
-    assert payload["schema_version"] == 2
+    assert payload["schema_version"] == 3
     assert payload["media"]["format"] == "gif"
     assert payload["media"]["frame_count"] >= 2
     assert len(payload["steps"]) >= 1

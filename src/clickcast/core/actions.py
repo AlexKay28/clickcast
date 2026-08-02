@@ -65,6 +65,7 @@ __all__ = [
     "WaitForStep",
     "WaitStep",
     "WheelStep",
+    "_classify_error",
     "execute",
     "set_dump_elements",
 ]
@@ -216,6 +217,60 @@ class ActionResult:
     duration_ms: float = 0.0
     screenshot_path: Path | None = None
     cursor_xy: tuple[int, int] | None = None
+    # See #151 (AI-5): stable, enumerated categorisation of the failure so
+    # sidecar consumers can gate on error KIND without regex-matching
+    # drifting Playwright message text. Populated at the exception-catch
+    # site in :func:`execute`; ``None`` on ``status="ok"`` results.
+    error_code: str | None = None
+    # See #151 (AI-2): stable categorisation for optional/skipped steps so
+    # consumers can distinguish "click ran but nothing reacted" from "the
+    # target no longer exists on the page" without regex-scraping.
+    # ``None`` unless ``status="skipped"``.
+    skip_reason: str | None = None
+
+
+def _classify_error(exc: BaseException) -> str:
+    """Map a raised exception to the enumerated :data:`ErrorCode` value.
+
+    Every failure inside :func:`execute` lands here so the sidecar's
+    ``StepReport.error_code`` gates on KIND (timeout / locator_missing /
+    cross_origin / navigation_error / selector_ambiguous / other) rather
+    than the exception's drifting message text.
+
+    See #151 (AI-5). Kept in one place so the classification table is
+    auditable and easy to extend when a new step type surfaces a new
+    canonical error shape.
+    """
+    if isinstance(exc, PlaywrightTimeoutError):
+        return "timeout"
+    text = str(exc)
+    # Playwright surfaces the "0 elements" text on click / hover / type when
+    # the selector parses but nothing matches — distinct from a Timeout
+    # (which fires on wait-for-visible drift after resolution). Keep both
+    # markers in sync with :data:`_LOCATOR_MISSING_MARKERS` above.
+    if any(m in text for m in _LOCATOR_MISSING_MARKERS):
+        return "locator_missing"
+    # Playwright's cross-origin errors surface a few different phrasings
+    # depending on the engine and the failure mode; match the substrings
+    # that all shipped variants share.
+    lower = text.lower()
+    if (
+        "cross-origin" in lower
+        or "target closed" in lower
+        or "frame was detached" in lower
+        or "execution context was destroyed" in lower
+    ):
+        return "cross_origin"
+    # `net::` prefixes are the shipped Chromium navigation-failure family
+    # (net::ERR_NAME_NOT_RESOLVED, net::ERR_CONNECTION_REFUSED, …).
+    if "net::" in text or "navigation" in lower or "err_" in lower:
+        return "navigation_error"
+    # `hints.py` may raise its own ambiguity error on selectors that resolve
+    # to >1 candidate (see :mod:`clickcast.discovery.hints`). Match by the
+    # phrase it uses so we don't take a hard import dependency here.
+    if "ambiguous" in lower and "selector" in lower:
+        return "selector_ambiguous"
+    return "other"
 
 
 async def _center_of(locator: Locator, timeout_ms: int | None = None) -> tuple[int, int] | None:
@@ -497,7 +552,21 @@ async def execute(
         # its block AFTER the prefix, preserving the shipped layout.
         message = f"{_step_context(step, step_index)}: {type(e).__name__}: {e}"
         message = await _augment_with_hints(message, step, session, selector, e)
+        # See #151 (AI-5): enumerated error kind for the sidecar's
+        # ``StepReport.error_code`` — auditable in one place.
+        error_code = _classify_error(e)
         if step.optional:
+            # See #151 (AI-2): map the classified error kind onto a skip
+            # reason so a sidecar consumer can distinguish "the target no
+            # longer exists on the page" (``element_vanished``) from "the
+            # tour bounced cross-origin mid-action" from any other pre-
+            # action failure — each needs a different agent response.
+            if error_code == "locator_missing":
+                skip_reason = "element_vanished"
+            elif error_code == "cross_origin":
+                skip_reason = "cross_origin_bounce"
+            else:
+                skip_reason = "pre_action_failed"
             return ActionResult(
                 ok=True,
                 status="skipped",
@@ -505,6 +574,8 @@ async def execute(
                 selector=selector,
                 error=message,
                 duration_ms=duration_ms,
+                error_code=error_code,
+                skip_reason=skip_reason,
             )
         return ActionResult(
             ok=False,
@@ -513,6 +584,7 @@ async def execute(
             selector=selector,
             error=message,
             duration_ms=duration_ms,
+            error_code=error_code,
         )
 
 

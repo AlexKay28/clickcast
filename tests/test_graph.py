@@ -242,7 +242,10 @@ class TestV1Backcompat:
         )
         path = write(report, tmp_path / "v2.gif.json")
         loaded = load(path)
-        assert loaded.schema_version == 2
+        # Shipped default bumped to v3 in #151 (AI-2, AI-5). v2 fixtures with
+        # an explicit ``schema_version: 2`` still round-trip; this fixture
+        # constructs a fresh Report so it picks up the current default.
+        assert loaded.schema_version == 3
         assert loaded.graph is not None
         assert len(loaded.graph.nodes) == 2
         assert len(loaded.graph.edges) == 1

@@ -141,6 +141,11 @@ class AutoConfig:
     # drops the query string from URL fields entirely. Both no-op when unset.
     redact_patterns: list[re.Pattern[str]] = field(default_factory=list)
     strip_query_strings: bool = False
+    # Machine-readable summary line for JSONL-friendly downstream parsers.
+    # See #151 (AI-4). Off by default; when True, ``run_tour`` prints one
+    # JSON object on its own line to stdout right after the prose summary
+    # ("event": "tour_complete", with frames/duration/clicks/etc.).
+    emit_events: bool = False
     # Human-observable demo mode (#129). Each flag stands alone; the CLI's
     # ``--for-humans`` composite flag flips several of them at once.
     #   ``target_highlight`` — resolve each click's bbox pre-action, hold
@@ -545,6 +550,20 @@ async def run_tour(cfg: AutoConfig) -> None:
     )
     if sidecar:
         typer.echo(f"  sidecar: {sidecar}")
+    # See #151 (AI-4): optional machine-readable summary for JSONL parsers.
+    # Off by default — no-op emit, no extra blank line. On by --emit-events,
+    # exactly one JSON object per tour, keyed by ``event`` so future event
+    # types (per-step or advisory streams) can share the same channel.
+    if cfg.emit_events:
+        _emit_tour_complete(
+            gif_path=str(enc.path),
+            frames=enc.frame_count,
+            duration_s=enc.duration_s,
+            pages=pages_visited,
+            clicks=total_clicks,
+            wall_s=tour_elapsed,
+            sidecar_path=str(sidecar) if sidecar else None,
+        )
     # Track A of #138: heuristic advisories on the completed tour. Prints to
     # stderr with a ⚠ marker so an AI parsing the run's output can act on
     # them; each carries a stable id + doc URL for programmatic follow-up.
@@ -568,6 +587,38 @@ async def run_tour(cfg: AutoConfig) -> None:
 def _die(msg: str, code: int = 1) -> None:
     typer.secho(msg, fg=typer.colors.RED, err=True)
     raise typer.Exit(code)
+
+
+def _emit_tour_complete(
+    *,
+    gif_path: str,
+    frames: int,
+    duration_s: float,
+    pages: int,
+    clicks: int,
+    wall_s: float,
+    sidecar_path: str | None,
+) -> None:
+    """Print one JSON object on its own line to stdout (see #151 AI-4).
+
+    Keyed by ``event`` so future event types (per-step, advisories) can
+    share the same channel without breaking downstream JSONL parsers.
+    Rounding matches the prose summary's precision (1 decimal on seconds)
+    so a human diff'ing the two lines sees consistent numbers.
+    """
+    import json as _json
+
+    payload: dict[str, Any] = {
+        "event": "tour_complete",
+        "gif_path": gif_path,
+        "frames": frames,
+        "duration_s": round(duration_s, 1),
+        "pages": pages,
+        "clicks": clicks,
+        "wall_s": round(wall_s, 1),
+        "sidecar_path": sidecar_path,
+    }
+    typer.echo(_json.dumps(payload))
 
 
 def _count_nav_clicks(steps: list[StepReport]) -> int:

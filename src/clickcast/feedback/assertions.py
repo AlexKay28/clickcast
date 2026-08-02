@@ -69,6 +69,12 @@ def build_assertions(report: Report) -> dict[str, Any]:
                 "network_failed_count": (
                     len(page_state.network_failed) if page_state is not None else 0
                 ),
+                # See #151 (AI-2, AI-5): CI baselines can pin the KIND of
+                # skip / failure, not just the ``status`` verb — a step
+                # going from ``skipped(optional_no_reaction)`` to
+                # ``skipped(element_vanished)`` is real behavioural drift.
+                "skip_reason": s.skip_reason,
+                "error_code": s.error_code,
             }
         )
     payload: dict[str, Any] = {
@@ -155,6 +161,8 @@ _STEP_FIELDS: tuple[str, ...] = (
     "console_error_count",
     "page_error_count",
     "network_failed_count",
+    "skip_reason",
+    "error_code",
 )
 
 
