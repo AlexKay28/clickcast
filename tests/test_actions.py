@@ -18,6 +18,7 @@ from clickcast.core.actions import (
     Step,
     TypeStep,
     WaitStep,
+    _step_context,
     execute,
 )
 from clickcast.core.session import Session
@@ -63,6 +64,29 @@ class TestStepModels:
         s = ScreenshotStep()
         assert s.full_page is False
         assert s.path is None
+
+
+class TestStepContext:
+    """`_step_context` is the single source of the failure-message prefix
+    added in #151 (AI-1). Kept as its own helper so the format lives in
+    one place, not sprinkled across the ~12 `raise` branches inside
+    execute().
+    """
+
+    def test_uses_action_when_no_label(self) -> None:
+        assert _step_context(ClickStep(selector="#x"), 4) == "step 4 (click)"
+
+    def test_label_wins_over_action(self) -> None:
+        assert _step_context(ClickStep(selector="#x", label="open-menu"), 4) == "step 4 (open-menu)"
+
+    def test_none_index_falls_back_to_question_mark(self) -> None:
+        # Legacy callers that don't track a per-scenario index still get a
+        # well-formed prefix instead of a stray `None` in the error string.
+        assert _step_context(GotoStep(url="https://x"), None) == "step ? (goto)"
+
+    def test_zero_index_is_preserved(self) -> None:
+        # Guard against `if index:` truthiness bugs — step 0 is a real step.
+        assert _step_context(GotoStep(url="https://x"), 0) == "step 0 (goto)"
 
 
 FIXTURE_HTML = """<!DOCTYPE html>
@@ -162,6 +186,45 @@ class TestActionIntegration:
         assert not r.ok
         assert r.status == "failed"
         assert "either" in (r.error or "")
+
+    async def test_error_carries_step_context_prefix(self, loaded_session: Session) -> None:
+        # Per #151 (AI-1): failure messages must begin with
+        # `step N (<label-or-action>): …` so an agent reading a sidecar can
+        # correlate the message to a scenario line without regex-scraping.
+        r = await execute(ScrollStep(), loaded_session, step_index=7)
+        assert r.status == "failed"
+        assert (r.error or "").startswith("step 7 (scroll): ")
+
+    async def test_error_uses_label_when_present(self, loaded_session: Session) -> None:
+        # `label` wins over `action` in the prefix — labels are the user-
+        # authored handle the agent recognises.
+        r = await execute(
+            ClickStep(selector="#nope", label="open-menu"),
+            loaded_session,
+            step_index=3,
+        )
+        assert r.status == "failed"
+        assert (r.error or "").startswith("step 3 (open-menu): ")
+
+    async def test_error_prefix_defaults_to_question_mark(self, loaded_session: Session) -> None:
+        # Callers that don't pass step_index still get a prefix — this
+        # keeps the sidecar shape uniform across execute()'s callers.
+        r = await execute(ScrollStep(), loaded_session)
+        assert (r.error or "").startswith("step ? (scroll): ")
+
+    async def test_optional_skipped_error_also_carries_prefix(
+        self, loaded_session: Session
+    ) -> None:
+        # optional=True absorbs the failure into status="skipped" but the
+        # `error` field is still populated — that message must carry the
+        # prefix too so agents can still map skip-reasons to steps.
+        r = await execute(
+            ClickStep(selector="#nope", optional=True),
+            loaded_session,
+            step_index=2,
+        )
+        assert r.status == "skipped"
+        assert (r.error or "").startswith("step 2 (click): ")
 
     async def test_wait_number(self, loaded_session: Session) -> None:
         # Assert monotonicity with epsilon rather than an absolute floor: a

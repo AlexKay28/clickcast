@@ -27,6 +27,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   closing the two undiscoverability gaps AI-7 called out. Word-count cap
   in ``tests/test_skill.py`` unchanged at 900 (897 after additions).
 
+### Changed
+- **Error-message clarity: step context + friendlier scenario-var + visible
+  TOML-parse warning** (partial closes [#151] — AI-1, AI-6, PERF-3 from
+  the 15-finding audit; other findings ship in follow-up PRs). Three
+  string-only improvements targeted at agents parsing sidecars and
+  stderr:
+  - **AI-1** `execute()` failures now carry a `step N (<label-or-action>): `
+    prefix on `StepReport.error`, sourced from a new `_step_context()`
+    helper in `core/actions.py`. Callers (`scenario/scenario.py`,
+    `auto.py`) thread their loop index via a new
+    `execute(..., step_index=int)` kwarg. Preserves the shipped
+    `_augment_with_hints` block, which now appends after the prefix.
+    Agents reading a sidecar can correlate a failure to a scenario line
+    without regex-scraping.
+  - **AI-6** The undefined-variable message in `scenario/scenario.py`
+    was rewritten from `"undefined variable {{ foo }}"` (leaked
+    template-syntax jargon, no fix hint) to
+    `"undefined scenario variable 'foo' — pass '--var foo=<value>' on
+    the CLI or declare it under 'variables:' in the scenario YAML"` —
+    both remediation paths are now spelled out.
+  - **PERF-3** A broken `clickcast.toml` used to fall back silently
+    (`warnings.warn` is off by default; users had no idea their config
+    was ignored). `config/_read_toml` now propagates
+    `tomllib.TOMLDecodeError` with the file path prepended; the CLI's
+    `_config_default_map` catches it and prints a single-line
+    `⚠ clickcast.toml: TOML parse error — using defaults (…)`
+    warning to stderr, matching the shipped `⚠` prefix from
+    `feedback/advisories.py`. Missing config files stay silent
+    (that's the normal "no config yet" case).
+  - **Test suite: 730 → 741.** Eleven new tests (`TestStepContext` +
+    four AI-1 integration cases in `test_actions.py`,
+    `test_undefined_variable_message_includes_fix_hint` in
+    `test_scenario.py`, two `TestConfigTomlParseErrorSurfaces` cases
+    in `test_cli_config_wiring.py`, and reworked `TestMalformedTomlRaises`
+    in `test_config.py`).
+
 ## [0.2.4] — 2026-07-31
 
 CI hygiene + additive sidecar-schema-v2 release. Backwards-compatible

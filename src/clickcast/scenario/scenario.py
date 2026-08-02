@@ -190,7 +190,15 @@ def _substitute_vars(obj: Any, variables: dict[str, str]) -> Any:
     def repl(match: re.Match[str]) -> str:
         name = match.group(1)
         if name not in variables:
-            raise ScenarioError(f"undefined variable {{{{ {name} }}}}")
+            # See #151 (AI-6): the old message ("undefined variable {{ foo }}")
+            # leaked template-syntax jargon and gave no fix hint. Spell out
+            # both remediation paths so an AI agent hitting this can self-
+            # repair without reading the source.
+            raise ScenarioError(
+                f"undefined scenario variable '{name}' — pass "
+                f"'--var {name}=<value>' on the CLI or declare it under "
+                f"'variables:' in the scenario YAML"
+            )
         return str(variables[name])
 
     if isinstance(obj, str):
@@ -441,7 +449,7 @@ async def _run_with(
             frames_this_step: list[Any] = []
             if recorder is not None:
                 await recorder.pre_action(session)
-            result = await execute(step, session)
+            result = await execute(step, session, step_index=i)
             if recorder is not None:
                 frames_this_step = await recorder.post_action(session, result, step)
             results.append(result)

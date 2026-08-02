@@ -209,6 +209,52 @@ class TestConfigDoesNotBreakOnMissing:
         assert "clickcast" in r.stdout.lower()
 
 
+class TestConfigTomlParseErrorSurfaces:
+    """Per #151 (PERF-3): a broken `clickcast.toml` must produce a visible
+    ⚠ line on stderr, not silently fall back to defaults. A missing config
+    file, on the other hand, stays silent — that's the normal case for a
+    user who's never run `clickcast config set`.
+    """
+
+    def test_bad_project_toml_prints_stderr_warning(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        bad = tmp_path / "clickcast.toml"
+        bad.write_text('engine = "unterminated\n')  # missing closing quote
+        monkeypatch.setattr(
+            "clickcast.cli.load_config",
+            lambda **kw: __import__("clickcast.config", fromlist=["load"]).load(
+                project_toml=bad,
+                user_toml=tmp_path / "u.toml",
+                **kw,
+            ),
+        )
+        # `--help` short-circuits before the root callback (is_eager). Use
+        # a real subcommand so `_config_default_map()` actually runs.
+        r = runner.invoke(app, ["config", "path"])
+        assert r.exit_code == 0, r.output
+        assert "⚠" in r.stderr
+        assert "TOML parse error" in r.stderr
+        assert "clickcast.toml" in r.stderr
+
+    def test_missing_project_toml_is_silent(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # No files written under tmp_path — every layer resolves to missing.
+        monkeypatch.setattr(
+            "clickcast.cli.load_config",
+            lambda **kw: __import__("clickcast.config", fromlist=["load"]).load(
+                project_toml=tmp_path / "clickcast.toml",
+                user_toml=tmp_path / "u.toml",
+                **kw,
+            ),
+        )
+        r = runner.invoke(app, ["config", "path"])
+        assert r.exit_code == 0, r.output
+        assert "⚠" not in r.stderr
+        assert "TOML parse error" not in r.stderr
+
+
 class TestConfigDefaultMapIsAutoDerived:
     """`_config_default_map()` must be derived from Typer command signatures.
 

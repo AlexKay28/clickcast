@@ -195,7 +195,7 @@ async def explore_page(
 
     goto = GotoStep(url=url, wait="networkidle", dwell=dwell)
     await rec.pre_action(sess)
-    result = await execute(goto, sess)
+    result = await execute(goto, sess, step_index=step_index)
     if not result.ok:
         typer.secho(f"  skipped {url}: {result.error}", fg=typer.colors.YELLOW, err=True)
         log.warning("%s · skipped: %s", page_label, result.error)
@@ -263,7 +263,7 @@ async def explore_page(
                 )
             if pre_click_highlight_frames > 0:
                 await rec.pre_action_pad(pre_click_highlight_frames)
-        r = await execute(step, sess)
+        r = await execute(step, sess, step_index=step_index)
         frames_step = await rec.post_action(sess, r, step)
         step_annotations[step_index] = StepAnnotation(
             label=f"{page_label} · click · {step.label}" if step.label else f"{page_label} · click",
@@ -332,7 +332,7 @@ async def explore_page(
     scroll = ScrollStep(by=_SCROLL_DISTANCE_PX, dwell=dwell)
     log.info("%s · scroll +%dpx", page_label, _SCROLL_DISTANCE_PX)
     await rec.pre_action(sess)
-    r = await execute(scroll, sess)
+    r = await execute(scroll, sess, step_index=step_index)
     frames_scroll = await rec.post_action(sess, r, scroll)
     step_annotations[step_index] = StepAnnotation(label=f"{page_label} · scroll")
     if builder:

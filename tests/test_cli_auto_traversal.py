@@ -22,7 +22,7 @@ class TestTraversalOrdering:
         gotos: list[str] = []
         counters: dict[str, int] = {}
 
-        async def _fake_execute(step: Any, _sess: Any) -> Any:
+        async def _fake_execute(step: Any, _sess: Any, **_kw: Any) -> Any:
             cls = step.__class__.__name__
             if cls == "GotoStep":
                 gotos.append(step.url)
@@ -76,7 +76,7 @@ class TestTraversalOrdering:
         gotos: list[str] = []
         counters: dict[str, int] = {}
 
-        async def _fake_execute(step: Any, _sess: Any) -> Any:
+        async def _fake_execute(step: Any, _sess: Any, **_kw: Any) -> Any:
             cls = step.__class__.__name__
             if cls == "GotoStep":
                 gotos.append(step.url)

@@ -21,7 +21,7 @@ class TestClickTimeoutPropagates:
         fake_sess = stub_environment
         seen_steps: list[Any] = []
 
-        async def _fake_execute(step: Any, _sess: Any) -> Any:
+        async def _fake_execute(step: Any, _sess: Any, **_kw: Any) -> Any:
             if step.__class__.__name__ == "GotoStep":
                 fake_sess.page.url = step.url
             elif step.__class__.__name__ == "ClickStep":
@@ -68,7 +68,7 @@ class TestMaxDurationCap:
         gotos: list[str] = []
         click_counter = {"n": 0}
 
-        async def _fake_execute(step: Any, _sess: Any) -> Any:
+        async def _fake_execute(step: Any, _sess: Any, **_kw: Any) -> Any:
             cls = step.__class__.__name__
             if cls == "GotoStep":
                 gotos.append(step.url)

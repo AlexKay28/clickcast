@@ -59,19 +59,26 @@ def project_config_path(root: Path | None = None) -> Path:
 
 
 def _read_toml(path: Path) -> dict[str, Any]:
+    """Return the flat dict shape of a clickcast TOML file (or ``{}`` if missing).
+
+    A missing file is normal — every user starts with no config. A malformed
+    TOML file, on the other hand, is a user typo we must not swallow: it
+    used to emit a :func:`warnings.warn` (silent by default, so users saw
+    zero indication that their settings were being ignored). Now we re-raise
+    :class:`tomllib.TOMLDecodeError` with the file path prepended to the
+    message so the CLI layer can print a visible ``⚠`` line pointing at
+    the offending file — see #151 (PERF-3).
+    """
     if not path.exists():
         return {}
     try:
         with path.open("rb") as f:
             data = tomllib.load(f)
     except tomllib.TOMLDecodeError as e:
-        # Falling back silently was surprising — a user's typo in
-        # config.toml silently reverted their settings. Surface it.
-        warnings.warn(
-            f"clickcast: could not parse {path}: {e}. Using defaults.",
-            stacklevel=2,
-        )
-        return {}
+        # Preserve the exception type so callers can `except TOMLDecodeError`;
+        # prepend the file path so the message identifies the source. The
+        # `from e` chain keeps the original position info for developers.
+        raise tomllib.TOMLDecodeError(f"{path}: {e}") from e
     # Accept both flat and `[defaults]`-wrapped TOML files.
     if isinstance(data.get("defaults"), dict):
         return dict(data["defaults"])
