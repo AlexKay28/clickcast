@@ -65,6 +65,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in ``tests/test_skill.py`` unchanged at 900 (897 after additions).
 
 ### Changed
+- **CLI: cache command → Config-key introspection at import time**
+  (part of [#151] — REF-4 of the 15-finding audit; zero-behaviour-change).
+  ``cli._config_default_map`` used to walk ``app.registered_commands``
+  and call ``inspect.signature`` on every subcommand callback on every
+  CLI invocation, even though the {command → Config-relevant param
+  names} table never changes at runtime (commands are registered via
+  decorators before ``main()`` runs). The introspection now happens
+  exactly once at module load in a new ``_build_cli_command_params``
+  helper, populating a module-level ``_CLI_COMMAND_PARAMS: dict[str,
+  frozenset[str]]`` after every ``@app.command`` and ``app.add_typer``
+  has run. ``_config_default_map`` shrinks to a per-invocation
+  ``Config`` load + a dict-comprehension projection onto the frozen
+  table — no signature walk, no command-registry iteration. Preserves
+  every observable behaviour: ``clickcast --help`` output is
+  byte-identical, every default value is unchanged, AI-6's TOML-parse
+  ⚠ warning still fires, PERF-3's config-load fallback still returns
+  ``{}`` on any other exception. All 774 tests pass unchanged.
 - **Scenario normalizer: per-action factory dispatch** (part of [#151] —
   REF-3 of the 15-finding audit). `scenario/scenario.py::_normalize_step`
   was a ~108-line nested if/elif chain that mixed dispatch, common-key
