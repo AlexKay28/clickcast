@@ -65,6 +65,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in ``tests/test_skill.py`` unchanged at 900 (897 after additions).
 
 ### Changed
+- **Scenario variable substitution deferred to post-parse** (part of
+  [#151] — PERF-2 of the 15-finding audit). ``scenario/scenario.py::loads``
+  used to run ``_substitute_vars`` on the raw YAML dict/list tree BEFORE
+  pydantic constructed typed models — a full-tree traversal that visited
+  every dict/list/scalar node even for scenarios that don't reference
+  any ``{{ }}`` placeholder. Substitution now runs post-parse via
+  ``_substitute_in_scenario(scenario, variables)``, which walks only
+  string-carrying fields on the typed :class:`Scenario` (``str``,
+  ``list[str]``, free-form ``dict[str, Any]``) using pydantic's
+  ``model_fields`` and dataclass ``__dataclass_fields__`` for
+  introspection. For steps like ``ScrollStep`` / ``WheelStep`` /
+  ``WaitForStep`` whose payload is mostly ``int`` / ``float``, non-string
+  fields are skipped entirely instead of visiting each numeric leaf.
+  The raw-dict walker (:func:`_substitute_vars`) stays exported so
+  existing test imports and any ad-hoc callers keep working; the AI-6
+  undefined-variable error text (PR #153) is preserved verbatim via a
+  shared ``_make_repl`` closure so the raw and typed walkers can't
+  drift. Zero behaviour change: byte-identical typed output on every
+  scenario shape currently in the test suite, same
+  ``ScenarioError`` messages, same public ``load`` / ``loads``
+  signatures. All 774 tests pass unchanged.
 - **`auto.explore_page` split into orchestrator + helpers** (part of
   [#151] — REF-1 of the 15-finding audit). The 179-line function that
   fused (a) goto + discover, (b) click-retry with backoff, and
