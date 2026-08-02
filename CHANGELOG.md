@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Two new post-tour advisories + two missing skill-brief entries**
+  (partial closes [#151] — AI-3 and AI-7 of the 15-finding audit).
+  ``clickcast.feedback.advisories.build_advisories`` grows two ids that
+  cover the last two anti-patterns documented in
+  ``docs/ONE_PAGE_NAVIGATION_ORDER_TIPS.md`` but previously unwarned:
+  ``interpolate-single-arrow-conflict`` (``CursorStyle.interpolate=True`` +
+  ``single_arrow=True`` smears the sticky arrow through the interpolated
+  path) and ``arrow-distance-vs-cross-nav`` (a cross-origin edge with
+  ``arrow_max_distance`` at its shipped default 600 px silently
+  suppresses the closing arrow of the previous scene). ``build_advisories``
+  gains a backward-compatible ``annotate_cfg: AnnotateConfig | None = None``
+  kwarg — hand-fixtured callers that don't pass one skip both new checks;
+  ``auto.py::run_tour`` wires ``cfg.annotate`` through. On the skill-brief
+  side, ``clickcast skill``'s ``auto`` command now surfaces
+  ``--dump-elements`` (the primary agent debugging aid for selector
+  failures) and ``run``'s brief mentions ``optional: true`` step support,
+  closing the two undiscoverability gaps AI-7 called out. Word-count cap
+  in ``tests/test_skill.py`` unchanged at 900 (897 after additions).
+
 ### Changed
 - **Error-message clarity: step context + friendlier scenario-var + visible
   TOML-parse warning** (partial closes [#151] — AI-1, AI-6, PERF-3 from

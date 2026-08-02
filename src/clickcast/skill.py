@@ -109,6 +109,10 @@ COMMAND_BRIEFS: tuple[CommandBrief, ...] = (
                 "crop-and-scale post-click frames around the click point",
             ),
             FlagBrief("--seed-url URL", "extra URLs to visit in a fixed order"),
+            FlagBrief(
+                "--dump-elements",
+                "on selector failure, append the full discovered-elements list to the error for debugging",
+            ),
         ),
         example="clickcast auto https://example.com --for-humans",
     ),
@@ -118,7 +122,8 @@ COMMAND_BRIEFS: tuple[CommandBrief, ...] = (
         when_to_use=(
             "You have (or generate) a precise step list and want repeatable "
             "output. Preferred over `auto` when you know exactly which "
-            "selectors to click."
+            "selectors to click. Steps support `optional: true` to skip "
+            "cleanly when the target isn't present."
         ),
         key_flags=(
             FlagBrief("--out PATH", "override the scenario's `meta.out`"),
