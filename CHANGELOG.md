@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.5] — 2026-08-02
+
+AI-agent ergonomics + refactor release — closes all 15 findings from the
+[#151] audit bundle. Backwards-compatible with 0.2.4. Sidecar bumps
+v2 → v3 (strictly additive: `skip_reason`, `error_code`; old v2 sidecars
+validate unchanged). Three internal refactors (`explore_page`,
+`execute`, `_normalize_step`) landed as zero-behaviour-change splits;
+three perf/QoL cleanups (CLI defaults caching, collector logging,
+discover cache, deferred var-substitution) tighten hot paths without
+touching the public API. Two new advisories catch UI-legibility
+anti-patterns the guide documented but the tool didn't emit. Test suite
+grew 730 → 777 (+47 across all 15 findings and their coverage).
+
 ### Added
 - **Sidecar schema v3: `skip_reason` + `error_code` + `--emit-events`**
   (partial closes [#151] — AI-2, AI-4, AI-5 of the 15-finding audit).
