@@ -311,18 +311,53 @@ def _compile_redact_patterns(raw: list[str] | None) -> list[re.Pattern[str]]:
 # ==========================================================================
 
 
+def _build_cli_command_params() -> dict[str, frozenset[str]]:
+    """Introspect ``app.registered_commands`` once and cache the {command → Config-relevant param names} table.
+
+    Shipped separately from :func:`_config_default_map` so the expensive
+    ``inspect.signature`` + ``app.registered_commands`` walk only runs at
+    import time (see #151 REF-4). Per-invocation, ``_config_default_map``
+    just projects the current :class:`Config` values onto this frozen table
+    — no signature introspection, no command-registry walk. ``ctx:
+    typer.Context`` and other non-Config params fall out naturally because
+    they aren't in :attr:`Config.model_fields`.
+    """
+    field_names = frozenset(ConfigModel.model_fields)
+    out: dict[str, frozenset[str]] = {}
+    for cmd_info in app.registered_commands:
+        callback = cmd_info.callback
+        if callback is None:
+            # `@app.command` without a body — nothing to introspect. Typer
+            # itself would never register such a command, but the type says
+            # Optional so guard it.
+            continue
+        # Typer defers name derivation until CLI-registration time, so
+        # ``cmd_info.name`` is often ``None``; fall back to the callback name
+        # (which is what Typer itself does under the hood).
+        cmd_name = cmd_info.name or callback.__name__
+        param_names = {p.name for p in inspect.signature(callback).parameters.values()}
+        out[cmd_name] = frozenset(param_names & field_names)
+    return out
+
+
+# Cached at import time — see #151 REF-4. The set of {command → Config-keys}
+# never changes at runtime (commands are registered via decorators before
+# `main()` runs), so redoing `inspect.signature` on every invocation was
+# pure waste. Populated at module load, right after every `@app.command`
+# has run.
+_CLI_COMMAND_PARAMS: dict[str, frozenset[str]] = {}
+
+
 def _config_default_map() -> dict[str, dict[str, Any]]:
     """Build Click's per-command `default_map` from the layered Config.
 
     Load-once per invocation: env vars + project TOML + user TOML resolved
     now, then Click uses these as fallbacks unless an explicit CLI flag wins.
 
-    Rather than maintain a hand-written map of {command: (config_key, ...)}
-    (which silently drifted every time a new Config field landed — see #84),
-    introspect each registered command's callback signature and intersect its
-    parameter names with the Config field set. ``ctx: typer.Context`` and
-    other non-Config params are naturally excluded because they don't appear
-    as keys in ``cfg.model_dump()``.
+    Since #151 (REF-4), the {command → Config-relevant param names} table is
+    cached at import time in ``_CLI_COMMAND_PARAMS``. This function only
+    projects the freshly-loaded Config values onto that frozen table — no
+    ``inspect.signature`` or ``app.registered_commands`` walk per call.
     """
     # See #151 (PERF-3): the old broad `except Exception: return {}` swallowed
     # TOML parse errors silently, leaving users mystified about why their
@@ -346,21 +381,10 @@ def _config_default_map() -> dict[str, dict[str, Any]]:
     except Exception:
         return {}
     fields = cfg.model_dump()
-    out: dict[str, dict[str, Any]] = {}
-    for cmd_info in app.registered_commands:
-        callback = cmd_info.callback
-        if callback is None:
-            # `@app.command` without a body — nothing to introspect. Typer
-            # itself would never register such a command, but the type says
-            # Optional so guard it.
-            continue
-        # Typer defers name derivation until CLI-registration time, so
-        # ``cmd_info.name`` is often ``None``; fall back to the callback name
-        # (which is what Typer itself does under the hood).
-        cmd_name = cmd_info.name or callback.__name__
-        param_names = {p.name for p in inspect.signature(callback).parameters.values()}
-        out[cmd_name] = {k: fields[k] for k in param_names if k in fields}
-    return out
+    return {
+        cmd_name: {k: fields[k] for k in params if k in fields}
+        for cmd_name, params in _CLI_COMMAND_PARAMS.items()
+    }
 
 
 @app.callback()
@@ -1486,6 +1510,13 @@ def skill(
 # rather than flat so the noun/verb pairing reads naturally. See
 # `src/clickcast/feedback/session/cli.py` for the command bodies.
 app.add_typer(feedback_app, name="feedback")
+
+
+# #151 REF-4: freeze the command → Config-key introspection ONCE, now that
+# every `@app.command` decorator above has registered its callback with the
+# Typer app. `_config_default_map` reads this table on every invocation
+# instead of re-walking `app.registered_commands` + `inspect.signature`.
+_CLI_COMMAND_PARAMS.update(_build_cli_command_params())
 
 
 # ==========================================================================

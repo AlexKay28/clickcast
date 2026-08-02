@@ -9,6 +9,7 @@ the current title/URL into a :class:`~clickcast.feedback.models.PageState`.
 from __future__ import annotations
 
 import contextlib
+import logging
 from typing import TYPE_CHECKING, Any
 
 from clickcast.feedback.models import PageState
@@ -18,6 +19,8 @@ if TYPE_CHECKING:
 
 
 __all__ = ["PageStateCollector"]
+
+logger = logging.getLogger(__name__)
 
 
 class PageStateCollector:
@@ -39,12 +42,18 @@ class PageStateCollector:
         """Remove all listeners from the session's page. Idempotent."""
         if not self._attached:
             return
-        with contextlib.suppress(Exception):
+        try:
             self._session.off("console", self._on_console)
-        with contextlib.suppress(Exception):
+        except Exception as exc:
+            logger.debug("collector detach failed for %s: %r", "console", exc)
+        try:
             self._session.off("pageerror", self._on_pageerror)
-        with contextlib.suppress(Exception):
+        except Exception as exc:
+            logger.debug("collector detach failed for %s: %r", "pageerror", exc)
+        try:
             self._session.off("requestfailed", self._on_requestfailed)
+        except Exception as exc:
+            logger.debug("collector detach failed for %s: %r", "requestfailed", exc)
         self._attached = False
 
     def _on_console(self, msg: Any) -> None:

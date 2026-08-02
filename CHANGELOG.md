@@ -86,6 +86,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   scenario shape currently in the test suite, same
   ``ScenarioError`` messages, same public ``load`` / ``loads``
   signatures. All 774 tests pass unchanged.
+- **Log collector detach failures instead of silent suppress** (part of
+  [#151] — REF-5 of the 15-finding audit). The three
+  ``contextlib.suppress(Exception)`` blocks around
+  ``PageStateCollector.detach``'s ``session.off(...)`` calls in
+  ``src/clickcast/feedback/collector.py`` masked real lifecycle bugs
+  (listener never registered, page already closed, playwright version
+  mismatch). Each is now an explicit ``except Exception as exc`` that
+  emits ``logger.debug("collector detach failed for %s: %r", event, exc)``
+  against a new module-level ``logger = logging.getLogger(__name__)``.
+  Production behaviour is byte-identical (exceptions still swallowed at
+  INFO/WARNING and above); debug-level logs surface the failure when a
+  developer enables them. No public API change.
+- **CLI: cache command → Config-key introspection at import time**
+  (part of [#151] — REF-4 of the 15-finding audit; zero-behaviour-change).
+  ``cli._config_default_map`` used to walk ``app.registered_commands``
+  and call ``inspect.signature`` on every subcommand callback on every
+  CLI invocation, even though the {command → Config-relevant param
+  names} table never changes at runtime (commands are registered via
+  decorators before ``main()`` runs). The introspection now happens
+  exactly once at module load in a new ``_build_cli_command_params``
+  helper, populating a module-level ``_CLI_COMMAND_PARAMS: dict[str,
+  frozenset[str]]`` after every ``@app.command`` and ``app.add_typer``
+  has run. ``_config_default_map`` shrinks to a per-invocation
+  ``Config`` load + a dict-comprehension projection onto the frozen
+  table — no signature walk, no command-registry iteration. Preserves
+  every observable behaviour: ``clickcast --help`` output is
+  byte-identical, every default value is unchanged, AI-6's TOML-parse
+  ⚠ warning still fires, PERF-3's config-load fallback still returns
+  ``{}`` on any other exception. All 774 tests pass unchanged.
 - **`auto.explore_page` split into orchestrator + helpers** (part of
   [#151] — REF-1 of the 15-finding audit). The 179-line function that
   fused (a) goto + discover, (b) click-retry with backoff, and
