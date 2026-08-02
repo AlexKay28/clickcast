@@ -166,6 +166,10 @@ class TestBuildShape:
             "console_error_count",
             "page_error_count",
             "network_failed_count",
+            # See #151 (AI-2, AI-5): schema-v3 gate fields joined the
+            # assertion contract so CI baselines can pin skip / error KIND.
+            "skip_reason",
+            "error_code",
         }
 
     def test_excludes_timing_frames_cursor_from_step_rows(self) -> None:
@@ -212,6 +216,62 @@ class TestBuildShape:
         # shape has drifted from the schema without anyone noticing.
         out = build_assertions(_sample_report())
         Assertions.model_validate(out)  # no ValidationError
+
+    def test_skip_reason_and_error_code_flow_through(self) -> None:
+        # See #151 (AI-2, AI-5): the two schema-v3 gates must reach the
+        # assertion row so CI baselines can pin the KIND of skip / failure.
+        report = _sample_report()
+        report.steps[1] = StepReport(
+            index=1,
+            action="click",
+            args={"selector": "#gone"},
+            status="skipped",
+            duration_ms=8.0,
+            frames=[],
+            label="optional CTA",
+            page_state=PageState(),
+            skip_reason="element_vanished",
+            error_code="locator_missing",
+        )
+        out = build_assertions(report)
+        assert out["steps"][1]["skip_reason"] == "element_vanished"
+        assert out["steps"][1]["error_code"] == "locator_missing"
+        # Successful step 0 carries None for both.
+        assert out["steps"][0]["skip_reason"] is None
+        assert out["steps"][0]["error_code"] is None
+
+    def test_different_skip_reasons_produce_different_bytes(self) -> None:
+        # A step going from ``skipped(pre_action_failed)`` to
+        # ``skipped(element_vanished)`` is real behavioural drift — the
+        # distillation must reflect it. Guards against the shipped-v2
+        # regression where two very different skips were byte-identical.
+        report_a = _sample_report()
+        report_a.steps[1] = StepReport(
+            index=1,
+            action="click",
+            args={"selector": "#x"},
+            status="skipped",
+            duration_ms=1.0,
+            frames=[],
+            label="CTA",
+            page_state=PageState(),
+            skip_reason="pre_action_failed",
+        )
+        report_b = _sample_report()
+        report_b.steps[1] = StepReport(
+            index=1,
+            action="click",
+            args={"selector": "#x"},
+            status="skipped",
+            duration_ms=1.0,
+            frames=[],
+            label="CTA",
+            page_state=PageState(),
+            skip_reason="element_vanished",
+        )
+        a = json.dumps(build_assertions(report_a), sort_keys=True)
+        b = json.dumps(build_assertions(report_b), sort_keys=True)
+        assert a != b
 
 
 class TestByteIdenticalAcrossNoise:

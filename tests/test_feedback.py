@@ -20,7 +20,8 @@ from clickcast.feedback import (
 )
 
 REPO_ROOT = Path(__file__).parent.parent
-SCHEMA_PATH = REPO_ROOT / "src" / "clickcast" / "feedback" / "schema" / "v2.json"
+SCHEMA_PATH = REPO_ROOT / "src" / "clickcast" / "feedback" / "schema" / "v3.json"
+V2_SCHEMA_PATH = REPO_ROOT / "src" / "clickcast" / "feedback" / "schema" / "v2.json"
 
 
 # ------------------------------------------------------------------
@@ -75,12 +76,12 @@ class TestModels:
         with pytest.raises(ValidationError):
             StepReport(index=0, action="goto", duration_ms=1.0)  # type: ignore[call-arg]
 
-    def test_report_default_schema_version_is_2(self) -> None:
-        # Bumped to 2 in #107: the optional additive `graph` block ships.
-        # v1 sidecars still validate under this model (see the
-        # forward-compat test below and the v1-backcompat test in
-        # tests/test_graph.py).
-        assert _valid_report().schema_version == 2
+    def test_report_default_schema_version_is_3(self) -> None:
+        # Bumped to 3 in #151 (AI-2, AI-5): the optional `skip_reason` and
+        # `error_code` gates ship on `StepReport`. v1 and v2 sidecars still
+        # validate under this model (see the forward-compat test below and
+        # the v1/v2-backcompat tests further down).
+        assert _valid_report().schema_version == 3
 
     def test_report_defaults_are_forward_compatible(self) -> None:
         # Roadmap #29 Track C adds a top-level `graph` block. The base model
@@ -90,6 +91,49 @@ class TestModels:
         payload["graph"] = {"nodes": [], "edges": []}
         # Should NOT raise
         Report.model_validate(payload)
+
+    def test_v2_sidecar_validates_under_v3_model(self) -> None:
+        # See #151 (AI-2, AI-5): v2 sidecars (no `skip_reason`, no
+        # `error_code`, no `schema_version` bump) must round-trip cleanly
+        # through the v3 model — every added field is optional and defaults
+        # to `None`. Otherwise downstream consumers that hoard v2 baselines
+        # break on the model change.
+        v2_payload = {
+            "schema_version": 2,
+            "clickcast_version": "0.2.4",
+            "started_at": "2026-07-30T15:00:00+00:00",
+            "duration_s": 5.5,
+            "media": {
+                "path": "tour.gif",
+                "format": "gif",
+                "size_bytes": 1024,
+                "frame_count": 12,
+                "duration_s": 1.0,
+                "fps": 12,
+            },
+            "steps": [
+                {
+                    "index": 0,
+                    "action": "goto",
+                    "args": {"url": "https://x"},
+                    "status": "ok",
+                    "duration_ms": 1200.0,
+                    "frames": ["frame-0000-000.png"],
+                }
+            ],
+        }
+        # Should NOT raise — new gate fields default to None.
+        report = Report.model_validate(v2_payload)
+        assert report.schema_version == 2  # writer's value preserved
+        assert report.steps[0].skip_reason is None
+        assert report.steps[0].error_code is None
+
+    def test_v3_report_default_step_has_none_gates(self) -> None:
+        # A well-formed v3 report built from the model defaults carries
+        # `None` for both new gate fields — the shipped absence-signal.
+        report = _valid_report()
+        assert report.steps[0].skip_reason is None
+        assert report.steps[0].error_code is None
 
 
 # ------------------------------------------------------------------
@@ -109,10 +153,17 @@ class TestJsonSchema:
             "and commit the update"
         )
 
-    def test_schema_advertises_v2(self) -> None:
+    def test_schema_advertises_v3(self) -> None:
         schema = json.loads(SCHEMA_PATH.read_text())
-        # schema_version has default 2 in the model — check the default made it
-        assert schema["properties"]["schema_version"]["default"] == 2
+        # schema_version has default 3 in the model — check the default made it
+        assert schema["properties"]["schema_version"]["default"] == 3
+
+    def test_v2_and_v1_schemas_preserved(self) -> None:
+        # Both older snapshots stay on disk verbatim — downstream consumers
+        # that bookmarked those URLs must keep working. See #151.
+        v1_path = REPO_ROOT / "src" / "clickcast" / "feedback" / "schema" / "v1.json"
+        assert v1_path.exists(), "v1.json must never be deleted (historical contract)"
+        assert V2_SCHEMA_PATH.exists(), "v2.json must never be deleted (historical contract)"
 
 
 # ------------------------------------------------------------------
@@ -131,7 +182,7 @@ class TestRoundTrip:
         path = write(_valid_report(), tmp_path / "tour.gif.json")
         # Must be valid JSON with predictable indentation
         payload = json.loads(path.read_text())
-        assert payload["schema_version"] == 2
+        assert payload["schema_version"] == 3
         assert payload["media"]["format"] == "gif"
 
     def test_load_missing_file_raises(self, tmp_path: Path) -> None:

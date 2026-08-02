@@ -37,7 +37,9 @@
         "status",
         "console_error_count",
         "page_error_count",
-        "network_failed_count"
+        "network_failed_count",
+        "skip_reason",
+        "error_code"
       ],
       "properties": {
         "action": {
@@ -67,6 +69,30 @@
           "type": "integer",
           "minimum": 0,
           "description": "Count of failed network requests captured during this step."
+        },
+        "skip_reason": {
+          "type": ["string", "null"],
+          "enum": [
+            "optional_no_reaction",
+            "pre_action_failed",
+            "element_vanished",
+            "cross_origin_bounce",
+            null
+          ],
+          "description": "Enumerated skip reason (see StepReport.skip_reason) — CI baselines can pin the KIND of skip, not just the status verb. Null on non-skipped steps. Added in #151 (AI-2)."
+        },
+        "error_code": {
+          "type": ["string", "null"],
+          "enum": [
+            "timeout",
+            "locator_missing",
+            "cross_origin",
+            "navigation_error",
+            "selector_ambiguous",
+            "other",
+            null
+          ],
+          "description": "Enumerated error kind (see StepReport.error_code) — CI baselines can gate on error KIND, not drifting error MESSAGES. Null on successful steps. Added in #151 (AI-5)."
         }
       }
     }

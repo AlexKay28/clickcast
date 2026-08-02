@@ -8,6 +8,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Sidecar schema v3: `skip_reason` + `error_code` + `--emit-events`**
+  (partial closes [#151] — AI-2, AI-4, AI-5 of the 15-finding audit).
+  Three additive changes that lift agent gate-ability without breaking
+  the shipped v2 contract:
+  - **AI-2** `StepReport.skip_reason: SkipReason | None = None` — a
+    ``Literal["optional_no_reaction", "pre_action_failed",
+    "element_vanished", "cross_origin_bounce"]`` on skipped steps.
+    ``clickcast.core.actions.execute`` populates it from the classified
+    error kind on optional failures (locator_missing → element_vanished;
+    cross_origin → cross_origin_bounce; else → pre_action_failed).
+    ``optional_no_reaction`` is reserved for a follow-up that lifts the
+    advisories layer's DOM-non-reaction check into an in-tour skip signal
+    — enumerated now so downstream baselines pin the reason.
+  - **AI-5** `StepReport.error_code: ErrorCode | None = None` — a
+    ``Literal["timeout", "locator_missing", "cross_origin",
+    "navigation_error", "selector_ambiguous", "other"]`` on failed and
+    skipped steps. A new ``_classify_error(exc) -> str`` helper in
+    ``actions.py`` is the single source of truth for the mapping so the
+    enum and the classification table can't drift.
+    ``feedback/assertions.py::build_assertions`` grows both fields on
+    every ``StepAssertion`` row so a CI baseline pins the KIND of skip /
+    failure, not just the ``status`` verb — a step going from
+    ``skipped(pre_action_failed)`` to ``skipped(element_vanished)`` is
+    now real drift.
+  - **AI-4** `--emit-events` on `clickcast auto` and `clickcast run` —
+    off by default; on prints one
+    ``{"event": "tour_complete", "gif_path": ..., "frames": ...,
+    "duration_s": ..., "pages": ..., "clicks": ..., "wall_s": ...,
+    "sidecar_path": ...}`` JSON object on its own line to stdout after
+    the shipped prose summary. JSONL-friendly so future event types
+    (per-step, advisories) can share the channel.
+- **Schema bump: v2 → v3.** Additive. v1 and v2 sidecars validate
+  cleanly under the v3 model (both new fields default to ``None``).
+  ``src/clickcast/feedback/schema/v3.json`` is the new committed
+  snapshot; ``v2.json`` and ``v1.json`` stay verbatim for downstream
+  consumers that bookmarked those URLs. ``SIDECAR_SCHEMA_URL`` in
+  ``skill.py`` points at v3.
 - **Two new post-tour advisories + two missing skill-brief entries**
   (partial closes [#151] — AI-3 and AI-7 of the 15-finding audit).
   ``clickcast.feedback.advisories.build_advisories`` grows two ids that

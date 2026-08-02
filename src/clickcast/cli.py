@@ -187,6 +187,20 @@ DumpElements = Annotated[
         ),
     ),
 ]
+# #151 (AI-4) — machine-readable summary line after the shipped prose
+# summary. JSONL-friendly (one object per line, no trailing prose).
+EmitEvents = Annotated[
+    bool,
+    typer.Option(
+        "--emit-events",
+        help=(
+            "After the human-readable tail line, print one JSON object on "
+            "its own line to stdout ({\"event\": \"tour_complete\", ...}). "
+            "JSONL-friendly for agents that regex-scrape the shipped prose. "
+            "Off by default."
+        ),
+    ),
+]
 
 
 # ==========================================================================
@@ -549,6 +563,7 @@ def auto(
     strip_query_strings: StripQueryStrings = False,
     verbose: Verbose = 0,
     dump_elements: DumpElements = False,
+    emit_events: EmitEvents = False,
 ) -> None:
     _setup_logging(verbose)
     set_dump_elements(dump_elements)
@@ -615,6 +630,7 @@ def auto(
             target_highlight=highlight_target,
             title_card=title_card,
             summary_card=summary_card,
+            emit_events=emit_events,
         )
     )
 
@@ -647,6 +663,7 @@ async def _do_auto(
     target_highlight: bool = False,
     title_card: bool = False,
     summary_card: bool = False,
+    emit_events: bool = False,
 ) -> None:
     # The AutoConfig.target_highlight flag drives recorder-side padding +
     # bbox lookup; the annotator itself needs its own toggle so the layer
@@ -679,6 +696,7 @@ async def _do_auto(
             target_highlight=target_highlight,
             title_card=title_card,
             summary_card=summary_card,
+            emit_events=emit_events,
         )
     )
 
@@ -722,6 +740,7 @@ def run(
     strip_query_strings: StripQueryStrings = False,
     verbose: Verbose = 0,
     dump_elements: DumpElements = False,
+    emit_events: EmitEvents = False,
 ) -> None:
     set_dump_elements(dump_elements)
     compiled_redacts = _compile_redact_patterns(redact_pattern)
@@ -782,6 +801,7 @@ def run(
             with_feedback=with_feedback,
             redact_patterns=compiled_redacts,
             strip_query_strings=strip_query_strings,
+            emit_events=emit_events,
         )
     )
 
@@ -847,6 +867,7 @@ async def _do_run(
     with_feedback: bool = False,
     redact_patterns: list[re.Pattern[str]] | None = None,
     strip_query_strings: bool = False,
+    emit_events: bool = False,
 ) -> None:
     builder: ReportBuilder | None = None
     if not no_sidecar:
@@ -902,6 +923,25 @@ async def _do_run(
                 typer.secho(err_text, fg=typer.colors.RED, err=True)
     if sidecar:
         typer.echo(f"  sidecar: {sidecar}")
+    # See #151 (AI-4): machine-readable summary line for JSONL parsers.
+    # Off by default; on prints one JSON object after the prose summary
+    # with the same key set the ``auto`` engine emits. ``pages`` and
+    # ``clicks`` are counted from the scenario's completed step list —
+    # `goto` steps count as page loads; `click`/`dblclick` count as clicks.
+    if emit_events:
+        from clickcast.auto import _emit_tour_complete
+
+        pages = sum(1 for s in scenario.steps if s.action == "goto")
+        clicks = sum(1 for s in scenario.steps if s.action in ("click", "dblclick"))
+        _emit_tour_complete(
+            gif_path=str(enc.path),
+            frames=enc.frame_count,
+            duration_s=enc.duration_s,
+            pages=pages,
+            clicks=clicks,
+            wall_s=enc.duration_s,
+            sidecar_path=str(sidecar) if sidecar else None,
+        )
     if not result.ok:
         raise typer.Exit(code=1)
 

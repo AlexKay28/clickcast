@@ -1,10 +1,52 @@
-"""Pydantic models for the AI-feedback sidecar (schema v1 + v2 graph)."""
+"""Pydantic models for the AI-feedback sidecar (schema v1 + v2 graph + v3 gates)."""
 
 from __future__ import annotations
 
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_serializer
+
+# See #151 (AI-2): programmatic categorisation for `status="skipped"` so an
+# agent reading a sidecar can tell the four distinct causes apart without
+# regex-scraping the `error` message.
+#   optional_no_reaction   — click ran but produced no DOM reaction (optional=True).
+#   pre_action_failed      — the click/goto/etc. never executed cleanly (locator
+#                            missing, timeout, or any other execute() exception on
+#                            an optional step).
+#   element_vanished       — a pre-click bbox lookup or a mid-tour visibility
+#                            check reported the target no longer present.
+#   cross_origin_bounce    — the tour navigated off-origin and the engine bailed
+#                            on further clicks on that page.
+SkipReason = Literal[
+    "optional_no_reaction",
+    "pre_action_failed",
+    "element_vanished",
+    "cross_origin_bounce",
+]
+
+# See #151 (AI-5): stable categorisation for `error` so an agent can gate on
+# error KIND without regex-matching drifting Playwright message text.
+#   timeout              — Playwright's TimeoutError (waiting-for-selector,
+#                          waiting-for-load-state, wait_for stable, etc.).
+#   locator_missing      — the shipped "resolved to 0 elements" text — the
+#                          selector parsed but nothing on the page matches it.
+#   cross_origin         — Playwright / navigation error caused by a cross-
+#                          origin bounce (frames-detached, target closed, etc.).
+#   navigation_error     — goto/navigation failure not classified above (DNS,
+#                          connection refused, non-2xx that surfaces as an
+#                          exception).
+#   selector_ambiguous   — the hints.py path found >1 candidate and refused to
+#                          pick — see `hints.py` for the exact raise site.
+#   other                — anything else — a scenario shape error, a JS
+#                          `evaluate()` throw, a step-type dispatch bug, etc.
+ErrorCode = Literal[
+    "timeout",
+    "locator_missing",
+    "cross_origin",
+    "navigation_error",
+    "selector_ambiguous",
+    "other",
+]
 
 
 class Media(BaseModel):
@@ -46,7 +88,13 @@ class PageState(BaseModel):
 
 
 class StepReport(BaseModel):
-    """One step's outcome + metadata."""
+    """One step's outcome + metadata.
+
+    ``skip_reason`` (see #151 AI-2) and ``error_code`` (see #151 AI-5) are
+    the v3 additions. Both default ``None`` so v2 sidecars round-trip
+    through the v3 model unchanged; both populate at the corresponding
+    write sites in :mod:`clickcast.core.actions` and :mod:`clickcast.auto`.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -60,6 +108,10 @@ class StepReport(BaseModel):
     cursor_xy: list[int] | None = None
     page_state: PageState | None = None
     error: str | None = None
+    # See :data:`SkipReason` for the enumerated values and their meanings.
+    skip_reason: SkipReason | None = None
+    # See :data:`ErrorCode` for the enumerated values and their meanings.
+    error_code: ErrorCode | None = None
 
 
 class FeedbackTemplate(BaseModel):
@@ -195,14 +247,16 @@ class Report(BaseModel):
     C can add a ``graph`` block without a breaking schema change. The nested
     models above DO forbid extras — those shapes are stable.
 
-    v2 (this release) adds the optional ``graph`` block. v1 sidecars round-
-    trip through the v2 model unchanged: ``graph`` is optional and defaults
-    to ``None`` when absent.
+    v2 added the optional ``graph`` block. v3 (this release) adds two
+    optional per-step gates: :attr:`StepReport.skip_reason` (see #151 AI-2)
+    and :attr:`StepReport.error_code` (see #151 AI-5). Both default to
+    ``None`` so v1 / v2 sidecars round-trip through the v3 model
+    unchanged: every added field is optional, no shape was removed.
     """
 
     # No extra="forbid" here — see docstring above.
 
-    schema_version: int = 2
+    schema_version: int = 3
     clickcast_version: str
     url: str | None = None
     engine: str = "chromium"
@@ -224,6 +278,12 @@ class StepAssertion(BaseModel):
     Deliberately narrow: only fields that survive re-recording of the same
     scenario against the same URL. Timing, frame paths, cursor coordinates,
     and resolved URLs are excluded on purpose (they change every run).
+
+    ``skip_reason`` / ``error_code`` (see #151 AI-2, AI-5) join the row so a
+    CI baseline can pin the KIND of skip / failure, not just the status verb
+    — a step going from ``skipped(optional_no_reaction)`` to
+    ``skipped(element_vanished)`` is real behavioural drift even though
+    ``status`` is unchanged.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -234,6 +294,8 @@ class StepAssertion(BaseModel):
     console_error_count: int = Field(ge=0)
     page_error_count: int = Field(ge=0)
     network_failed_count: int = Field(ge=0)
+    skip_reason: SkipReason | None = None
+    error_code: ErrorCode | None = None
 
 
 class Assertions(BaseModel):

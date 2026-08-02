@@ -1,19 +1,20 @@
-# AI-feedback sidecar — schema v2
+# AI-feedback sidecar — schema v3
 
 Every non-`--no-sidecar` reel writes a sidecar JSON next to the media
 file (`tour.gif` → `tour.gif.json`). This is the primary contract an AI
 consumer reads. The canonical JSON Schema lives at
-[`src/clickcast/feedback/schema/v2.json`](../src/clickcast/feedback/schema/v2.json).
-The prior [`v1.json`](../src/clickcast/feedback/schema/v1.json) is
-preserved verbatim for downstream consumers that bookmarked it — v2 is
-strictly additive over v1 (see the "v1 → v2 additive contract" section
-below).
+[`src/clickcast/feedback/schema/v3.json`](../src/clickcast/feedback/schema/v3.json).
+The prior [`v2.json`](../src/clickcast/feedback/schema/v2.json) and
+[`v1.json`](../src/clickcast/feedback/schema/v1.json) are preserved
+verbatim for downstream consumers that bookmarked them — v3 is strictly
+additive over v2 (two new optional per-step fields: `skip_reason` and
+`error_code`; see the "v2 → v3 additive contract" section below).
 
 ## Top-level shape
 
 ```jsonc
 {
-  "schema_version": 2,          // this document's version
+  "schema_version": 3,          // this document's version
   "clickcast_version": "0.2.4", // the package version that wrote it
   "url": "https://example.com", // seed URL (nullable — YAML runs may not have one)
   "engine": "chromium",         // playwright engine
@@ -22,7 +23,8 @@ below).
   "duration_s": 12.4,
   "media": {...},               // encoded reel metadata
   "discovered_elements": [...], // ranked elements from discover()
-  "steps": [...],               // one entry per step iteration
+  "steps": [...],               // one entry per step iteration (v3 rows
+                                // carry optional `skip_reason` + `error_code`)
   "warnings": [],
   "errors": [],
   "graph": {...}                // v2 additive: app-shape summary (nullable)
@@ -156,6 +158,34 @@ Consequences:
   forbade unknown keys precisely so this works. A v1 parser that
   ignores unknown fields keeps working; a v1 parser that reads
   `schema_version` and refuses > 1 will (correctly) opt out.
+
+## v2 → v3 additive contract
+
+v3 is **strictly additive** over v2 (see #151 AI-2, AI-5):
+
+- All v2 fields are unchanged (same names, same types, same defaults).
+- `schema_version` default bumped from 2 → 3.
+- Two new optional per-step fields on `StepReport`:
+  - `skip_reason: "optional_no_reaction" | "pre_action_failed" |
+    "element_vanished" | "cross_origin_bounce" | null` — categorises
+    the four distinct causes that all currently render as
+    `status="skipped"`. Populated by the action engine when a step
+    optional-fails; a CI baseline can pin the exact reason.
+  - `error_code: "timeout" | "locator_missing" | "cross_origin" |
+    "navigation_error" | "selector_ambiguous" | "other" | null` —
+    stable categorisation of the exception kind on failed / skipped
+    steps. Consumers gate on error KIND, not drifting message text.
+
+Consequences:
+
+- **v2 files load through v3**: both new fields default to `null`, so
+  an old sidecar parses cleanly under the v3 model.
+- **v3 files parsed by v2 consumers**: `StepReport` DOES forbid extras
+  (`extra="forbid"`), so a strict v2 parser will REJECT a v3 sidecar
+  that carries a non-null `skip_reason` / `error_code`. A lenient v2
+  consumer that ignores unknown per-step keys keeps working; the
+  strict path is the reason v3 bumps `schema_version` rather than
+  silently landing.
 
 The nested sub-models (`Media`, `DiscoveredElement`, `StepReport`,
 `PageState`, `PageNode`, `ComponentNode`, `Edge`, `Graph`) DO forbid
