@@ -132,6 +132,24 @@ class TestPayload:
         flags = [f["flag"] for f in skill_entry["key_flags"]]
         assert any("--json" in f for f in flags)
 
+    def test_auto_command_documents_dump_elements_flag(self) -> None:
+        payload = build_payload()
+        auto_entry = next(c for c in payload["commands"] if c["name"] == "auto")
+        flags = [f["flag"] for f in auto_entry["key_flags"]]
+        assert any("--dump-elements" in f for f in flags), (
+            "auto command should surface --dump-elements as an agent debugging aid"
+        )
+
+    def test_run_command_mentions_optional_step_support(self) -> None:
+        payload = build_payload()
+        run_entry = next(c for c in payload["commands"] if c["name"] == "run")
+        brief_text = (
+            run_entry["when_to_use"] + " " + " ".join(f["why"] for f in run_entry["key_flags"])
+        )
+        assert "optional" in brief_text.lower(), (
+            "run command should mention `optional: true` step support"
+        )
+
 
 class TestMarkdown:
     def test_contains_every_command(self) -> None:

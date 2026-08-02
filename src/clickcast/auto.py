@@ -551,7 +551,11 @@ async def run_tour(cfg: AutoConfig) -> None:
     if builder is not None:
         nav_clicks = _count_nav_clicks(builder.steps)
         for adv in build_advisories(
-            builder.steps, media, total_clicks=total_clicks, nav_clicks=nav_clicks
+            builder.steps,
+            media,
+            total_clicks=total_clicks,
+            nav_clicks=nav_clicks,
+            annotate_cfg=cfg.annotate,
         ):
             print(f"⚠ {adv.message} — see {adv.doc_url}", file=sys.stderr)
 
