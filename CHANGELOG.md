@@ -65,6 +65,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in ``tests/test_skill.py`` unchanged at 900 (897 after additions).
 
 ### Changed
+- **Log collector detach failures instead of silent suppress** (part of
+  [#151] — REF-5 of the 15-finding audit). The three
+  ``contextlib.suppress(Exception)`` blocks around
+  ``PageStateCollector.detach``'s ``session.off(...)`` calls in
+  ``src/clickcast/feedback/collector.py`` masked real lifecycle bugs
+  (listener never registered, page already closed, playwright version
+  mismatch). Each is now an explicit ``except Exception as exc`` that
+  emits ``logger.debug("collector detach failed for %s: %r", event, exc)``
+  against a new module-level ``logger = logging.getLogger(__name__)``.
+  Production behaviour is byte-identical (exceptions still swallowed at
+  INFO/WARNING and above); debug-level logs surface the failure when a
+  developer enables them. No public API change.
 - **Scenario normalizer: per-action factory dispatch** (part of [#151] —
   REF-3 of the 15-finding audit). `scenario/scenario.py::_normalize_step`
   was a ~108-line nested if/elif chain that mixed dispatch, common-key
