@@ -48,7 +48,7 @@ from clickcast.annotate import (
 from clickcast.capture import Recorder
 from clickcast.core.actions import ClickStep, GotoStep, ScrollStep, execute
 from clickcast.core.session import Session
-from clickcast.discovery import discover
+from clickcast.discovery import Element, discover
 from clickcast.discovery.urlutil import is_same_origin, normalize_url
 from clickcast.encode import encode
 from clickcast.feedback import Media, ReportBuilder, StepReport, build_advisories
@@ -173,7 +173,7 @@ class AutoConfig:
 # ---------------------------------------------------------------------------
 
 
-async def explore_page(
+async def _goto_and_discover(
     *,
     sess: Session,
     rec: Recorder,
@@ -182,29 +182,34 @@ async def explore_page(
     dwell: float,
     initial_wait: float,
     click_budget: int,
-    click_timeout_ms: int,
-    deadline_monotonic: float | None,
     step_index: int,
     step_annotations: dict[int, StepAnnotation],
     page_label: str,
-    target_highlight: bool = False,
-    pre_click_highlight_frames: int = 0,
-) -> tuple[int, int, list[str]]:
-    """Goto ``url``, discover, click up to ``click_budget`` elements, scroll.
+) -> tuple[int, bool, list[Element]]:
+    """Goto ``url``, record the open frame, then discover clickable elements.
 
-    Returns ``(next_step_index, clicks_used, discovered_urls)``.
+    Returns ``(next_step_index, ok, elements)`` — ``ok`` is False when the
+    goto itself failed (caller should bail on the page); ``elements`` is
+    the empty list in that case. Callers advance ``step_index`` past both
+    the goto step and any subsequent per-click work.
+
+    Behaviour preserved from the pre-split ``explore_page``:
+
+    - Same stderr line (``  skipped {url}: {error}``) on goto failure.
+    - Same hydration hold via ``initial_wait`` before frame capture.
+    - Same ``builder.record_step`` + ``builder.set_discovered`` calls in
+      the same order (discovered pool is pinned only on the FIRST page,
+      i.e. when the caller passes ``step_index == 0`` and the goto
+      succeeds — matching the shipped ``if step_index == 1`` guard after
+      the increment).
     """
-    discovered_urls: list[str] = []
-    page_started = time.monotonic()
-    log.info("%s → open %s", page_label, url)
-
     goto = GotoStep(url=url, wait="networkidle", dwell=dwell)
     await rec.pre_action(sess)
     result = await execute(goto, sess, step_index=step_index)
     if not result.ok:
         typer.secho(f"  skipped {url}: {result.error}", fg=typer.colors.YELLOW, err=True)
         log.warning("%s · skipped: %s", page_label, result.error)
-        return step_index, 0, discovered_urls
+        return step_index, False, []
     if initial_wait > 0:
         log.debug("%s · held %.1fs after networkidle for hydration", page_label, initial_wait)
         await sess.wait(initial_wait)
@@ -220,7 +225,47 @@ async def explore_page(
     )
     if builder and step_index == 1:
         builder.set_discovered(elements[:click_budget])
+    return step_index, True, elements
 
+
+async def _click_loop(
+    *,
+    sess: Session,
+    rec: Recorder,
+    builder: ReportBuilder | None,
+    elements: list[Element],
+    dwell: float,
+    click_budget: int,
+    click_timeout_ms: int,
+    deadline_monotonic: float | None,
+    step_index: int,
+    step_annotations: dict[int, StepAnnotation],
+    page_label: str,
+    target_highlight: bool = False,
+    pre_click_highlight_frames: int = 0,
+) -> tuple[int, int, list[str]]:
+    """Click up to ``click_budget`` of the discovered ``elements``, restoring
+    the page after every same-origin nav so subsequent clicks still land.
+
+    Returns ``(next_step_index, clicks_used, discovered_urls)``. All
+    click-retry policy (consecutive-failure bail, deadline early-exit,
+    cross-origin bail, ``go_back`` restore) lives here — the orchestrator
+    just threads state in and out.
+
+    Behaviour preserved from the pre-split ``explore_page``:
+
+    - Same ``ClickStep`` construction (optional=True, label from element
+      text or role, timeout_ms passthrough).
+    - Same target-highlight bbox resolution + pre-action pad ordering.
+    - Same ``builder.record_step`` call order relative to the early-exit
+      break (consecutive-failures bail records the failing step BEFORE
+      incrementing ``step_index`` and breaking, matching the shipped
+      order so sidecar indices stay stable).
+    - Same nav-detection: URL delta appends to ``discovered_urls``;
+      cross-origin breaks; same-origin triggers ``go_back`` with the
+      shipped timeout, and a landing-URL mismatch stops the page.
+    """
+    discovered_urls: list[str] = []
     clicked = 0
     consecutive_failures = 0
     for attempt, element in enumerate(elements, start=1):
@@ -334,16 +379,76 @@ async def explore_page(
             log.debug("%s · go_back OK in %.2fs", page_label, time.monotonic() - back_started)
         await sess.wait(_INTER_CLICK_WAIT_S)
 
-    scroll = ScrollStep(by=_SCROLL_DISTANCE_PX, dwell=dwell)
-    log.info("%s · scroll +%dpx", page_label, _SCROLL_DISTANCE_PX)
-    await rec.pre_action(sess)
-    r = await execute(scroll, sess, step_index=step_index)
-    frames_scroll = await rec.post_action(sess, r, scroll)
-    step_annotations[step_index] = StepAnnotation(label=f"{page_label} · scroll")
-    if builder:
-        await builder.record_step(index=step_index, step=scroll, result=r, frames=frames_scroll)
-    step_index += 1
+    return step_index, clicked, discovered_urls
 
+
+async def explore_page(
+    *,
+    sess: Session,
+    rec: Recorder,
+    builder: ReportBuilder | None,
+    url: str,
+    dwell: float,
+    initial_wait: float,
+    click_budget: int,
+    click_timeout_ms: int,
+    deadline_monotonic: float | None,
+    step_index: int,
+    step_annotations: dict[int, StepAnnotation],
+    page_label: str,
+    target_highlight: bool = False,
+    pre_click_highlight_frames: int = 0,
+) -> tuple[int, int, list[str]]:
+    """Goto ``url``, discover, click up to ``click_budget`` elements, scroll.
+
+    Thin orchestrator: delegates goto+discover to :func:`_goto_and_discover`,
+    click-retry policy to :func:`_click_loop`, and finishes with the shipped
+    per-page scroll step so subsequent pages capture below-the-fold content.
+
+    Returns ``(next_step_index, clicks_used, discovered_urls)``.
+    """
+    page_started = time.monotonic()
+    log.info("%s → open %s", page_label, url)
+
+    step_index, ok, elements = await _goto_and_discover(
+        sess=sess,
+        rec=rec,
+        builder=builder,
+        url=url,
+        dwell=dwell,
+        initial_wait=initial_wait,
+        click_budget=click_budget,
+        step_index=step_index,
+        step_annotations=step_annotations,
+        page_label=page_label,
+    )
+    if not ok:
+        return step_index, 0, []
+
+    step_index, clicked, discovered_urls = await _click_loop(
+        sess=sess,
+        rec=rec,
+        builder=builder,
+        elements=elements,
+        dwell=dwell,
+        click_budget=click_budget,
+        click_timeout_ms=click_timeout_ms,
+        deadline_monotonic=deadline_monotonic,
+        step_index=step_index,
+        step_annotations=step_annotations,
+        page_label=page_label,
+        target_highlight=target_highlight,
+        pre_click_highlight_frames=pre_click_highlight_frames,
+    )
+    step_index = await _scroll_page(
+        sess=sess,
+        rec=rec,
+        builder=builder,
+        dwell=dwell,
+        step_index=step_index,
+        step_annotations=step_annotations,
+        page_label=page_label,
+    )
     log.info(
         "%s · done in %.1fs (%d clicks used, %d nav candidates)",
         page_label,
@@ -352,6 +457,33 @@ async def explore_page(
         len(discovered_urls),
     )
     return step_index, clicked, discovered_urls
+
+
+async def _scroll_page(
+    *,
+    sess: Session,
+    rec: Recorder,
+    builder: ReportBuilder | None,
+    dwell: float,
+    step_index: int,
+    step_annotations: dict[int, StepAnnotation],
+    page_label: str,
+) -> int:
+    """Record one per-page scroll so subsequent pages start below the fold.
+
+    Extracted for line-budget reasons (keeps :func:`explore_page` under 50
+    lines). Behaviour is identical to the pre-split tail of ``explore_page``:
+    same distance constant, same annotation label, same builder call site.
+    """
+    scroll = ScrollStep(by=_SCROLL_DISTANCE_PX, dwell=dwell)
+    log.info("%s · scroll +%dpx", page_label, _SCROLL_DISTANCE_PX)
+    await rec.pre_action(sess)
+    r = await execute(scroll, sess, step_index=step_index)
+    frames_scroll = await rec.post_action(sess, r, scroll)
+    step_annotations[step_index] = StepAnnotation(label=f"{page_label} · scroll")
+    if builder:
+        await builder.record_step(index=step_index, step=scroll, result=r, frames=frames_scroll)
+    return step_index + 1
 
 
 # ---------------------------------------------------------------------------
