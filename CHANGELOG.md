@@ -77,6 +77,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Production behaviour is byte-identical (exceptions still swallowed at
   INFO/WARNING and above); debug-level logs surface the failure when a
   developer enables them. No public API change.
+- **`auto.explore_page` split into orchestrator + helpers** (part of
+  [#151] — REF-1 of the 15-finding audit). The 179-line function that
+  fused (a) goto + discover, (b) click-retry with backoff, and
+  (c) frame-capture orchestration is now three focused units:
+  ``_goto_and_discover`` (goto + hydration hold + discover +
+  set_discovered on the first page), ``_click_loop`` (click-budget
+  loop, consecutive-failure bail, deadline early-exit, same-origin
+  ``go_back`` restore, cross-origin bail), and a thin
+  ``explore_page`` orchestrator that glues them together and finishes
+  with the per-page scroll (extracted as ``_scroll_page``). Zero
+  behaviour change: same signature, same ``StepReport`` shapes, same
+  stderr lines, same builder call order, same
+  ``skip_reason``/``error_code`` wiring from #154, same advisories
+  wiring from #152. Verified via the full 774-test suite unchanged.
 - **Scenario normalizer: per-action factory dispatch** (part of [#151] —
   REF-3 of the 15-finding audit). `scenario/scenario.py::_normalize_step`
   was a ~108-line nested if/elif chain that mixed dispatch, common-key
