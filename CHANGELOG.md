@@ -79,6 +79,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stderr lines, same builder call order, same
   ``skip_reason``/``error_code`` wiring from #154, same advisories
   wiring from #152. Verified via the full 774-test suite unchanged.
+- **Scenario normalizer: per-action factory dispatch** (part of [#151] —
+  REF-3 of the 15-finding audit). `scenario/scenario.py::_normalize_step`
+  was a ~108-line nested if/elif chain that mixed dispatch, common-key
+  copy, and per-action shape coercion — adding a new action verb meant
+  editing the same block for the third or fourth time. It is now a thin
+  dispatcher (~30 lines including docstring) that resolves the action
+  verb, copies common keys, and delegates to a per-action normalizer
+  from a module-level `_NORMALIZERS: dict[str, Callable[...]]` table.
+  Twelve per-action normalizer functions (`_normalize_goto`,
+  `_normalize_click_like` shared by click/dblclick/hover,
+  `_normalize_type`, `_normalize_press`, `_normalize_select`,
+  `_normalize_scroll`, `_normalize_wait`, `_normalize_wait_for`,
+  `_normalize_screenshot`, `_normalize_evaluate`, `_normalize_wheel`)
+  each own their shape and their `ScenarioError` message, and are
+  unit-testable in isolation without pydantic. Zero behaviour change:
+  every `ScenarioError` text is preserved verbatim (including AI-6's
+  improved undefined-variable message from PR #153), and the test
+  suite passes unchanged at 774.
 - **Refactor: `core/actions.py::execute` dispatch dict** (part of [#151]
   — REF-2 from the 15-finding audit; zero-behaviour-change). The 150-line
   ``isinstance`` chain that dispatched 13 step types inside a single
