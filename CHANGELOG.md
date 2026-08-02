@@ -79,6 +79,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stderr lines, same builder call order, same
   ``skip_reason``/``error_code`` wiring from #154, same advisories
   wiring from #152. Verified via the full 774-test suite unchanged.
+- **Refactor: `core/actions.py::execute` dispatch dict** (part of [#151]
+  — REF-2 from the 15-finding audit; zero-behaviour-change). The 150-line
+  ``isinstance`` chain that dispatched 13 step types inside a single
+  ``try`` block became a module-level ``_STEP_HANDLERS:
+  dict[type[BaseStep], StepHandler]`` mapping to 13 focused
+  ``_handle_<action>`` coroutines. The dispatcher body dropped to ~30
+  lines and now owns only the shared envelope: timing, dwell,
+  ``_step_context`` (AI-1), ``_classify_error`` (AI-5),
+  ``_augment_with_hints``, and ``ActionResult`` assembly (including the
+  ``skip_reason`` mapping from AI-2). Handlers exchange per-step
+  side-channel state (``selector``, ``cursor_xy``, ``screenshot_path``)
+  via a small ``_StepOutcome`` dataclass so the assembled
+  ``ActionResult`` is byte-identical to the pre-refactor output. Adding
+  a new step type is now one handler function + one dict entry rather
+  than an ``elif`` branch inside a 150-line ``try``. All 774 tests pass
+  unchanged; no public-signature changes; ``_augment_with_hints``,
+  ``_step_context``, and ``_classify_error`` are preserved verbatim.
 - **Error-message clarity: step context + friendlier scenario-var + visible
   TOML-parse warning** (partial closes [#151] — AI-1, AI-6, PERF-3 from
   the 15-finding audit; other findings ship in follow-up PRs). Three
