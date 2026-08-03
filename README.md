@@ -40,6 +40,68 @@ clickcast install --with-deps chromium
 
 ---
 
+## For AI agents — copy this prompt into your chat
+
+Paste the block below into your coding agent (Claude Code, Cursor, Copilot Chat, Codex, etc.) to teach it clickcast in one message. The agent will install the tool, verify the environment, generate a visual + machine-readable report for your project, and know how to gate CI on the results.
+
+```text
+You are going to use `clickcast` (https://pypi.org/project/clickcast/) to visually verify
+this project's frontend. It produces a watchable GIF reel + a JSON sidecar with
+per-step selectors, timings, page state, error codes, and a graph of the app's
+pages. Follow this exact sequence:
+
+1. INSTALL
+   pip install clickcast
+   clickcast install --with-deps chromium   # first time only, ~180 MB
+   clickcast doctor                          # bail out if this fails
+
+2. LOAD FULL CAPABILITIES
+   Run `clickcast skill --json` and read the output. It lists every subcommand,
+   flag, docs URL, and sidecar schema pointer. Prefer this over guessing.
+
+3. RUN A QUICK TOUR OF THE APP
+   If we have a running URL (dev server / staging / production):
+     clickcast auto <URL> --for-humans --emit-events --out tour.gif
+   If we have a specific flow to verify, write a YAML scenario and run:
+     clickcast run tour.yml --emit-events --out tour.gif
+   `--for-humans` gives a legible reel for the user to watch;
+   `--emit-events` prints a machine-readable JSONL line you can parse.
+
+4. READ THE SIDECAR (JSON at `<gif>.json`, schema v3)
+   For each step, gate on the structured fields — NOT regex over prose:
+     - `status`      : "ok" | "failed" | "skipped"
+     - `error_code`  : "timeout" | "locator_missing" | "cross_origin" |
+                       "navigation_error" | "selector_ambiguous" | "other"
+     - `skip_reason` : "optional_no_reaction" | "pre_action_failed" |
+                       "element_vanished" | "cross_origin_bounce"
+     - `page_state`  : title, url_after, console_errors, page_errors,
+                       network_failed
+   The top-level `graph` block gives page nodes + navigation edges you can
+   use to reason about the app's shape, not just the sequence you ran.
+
+5. WATCH STDERR FOR ADVISORIES
+   clickcast prints `⚠ <message> — see <docs-url>` lines for known anti-
+   patterns (nav-heavy tour, click without DOM reaction, very short reel,
+   cross-origin bounce, incoherent cursor styling). Each has a stable
+   kebab-case id you can dedupe or gate on.
+
+6. FOR CI REGRESSION GATES
+   `clickcast assertions <sidecar>.json --baseline golden.json` diffs the
+   run against a committed baseline; nonzero exit on drift. Byte-identical
+   across runs (timestamps, frame paths, and URL query strings excluded).
+
+Reference docs (all in-repo, load lazily as needed):
+  - Sidecar shape:   https://github.com/AlexKay28/clickcast/blob/main/docs/feedback-schema.md
+  - Human-legible reel authoring: https://github.com/AlexKay28/clickcast/blob/main/docs/ONE_PAGE_NAVIGATION_ORDER_TIPS.md
+  - Agent integration:  https://github.com/AlexKay28/clickcast/blob/main/docs/ai-integration.md
+
+If something is unclear, run `clickcast <subcommand> --help` before asking me.
+```
+
+Once the agent has this, ask it something concrete like *"run clickcast auto against `http://localhost:3000` and tell me which clicks had DOM reactions"* — it now has everything it needs.
+
+---
+
 ## First run — 30 seconds
 
 ```bash
