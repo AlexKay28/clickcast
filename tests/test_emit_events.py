@@ -10,6 +10,7 @@ scrapers stay unchanged.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -177,6 +178,24 @@ class TestAutoEmitsEventsFlag:
             assert key in payload, f"missing key {key!r} in event payload"
 
 
+_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _plain(s: str) -> str:
+    """Strip ANSI SGR escape codes from ``s``.
+
+    Rich (bundled with Typer) breaks color runs at hyphen boundaries when
+    rendering flag names to a color-capable terminal — so under
+    ``GITHUB_ACTIONS=true``, the rendered ``--emit-events`` includes ANSI
+    escapes between the hyphens, and a literal ``"--emit-events" in
+    stdout`` check fails even though the flag is visibly present. Local
+    dev terminals happened not to trigger it, so the tests below looked
+    green for months while every CI run has been red. Strip escapes
+    before asserting.
+    """
+    return _ANSI_ESCAPE.sub("", s)
+
+
 class TestCliEmitEventsFlag:
     """Both `auto` and `run` expose `--emit-events` as a CLI flag."""
 
@@ -185,9 +204,9 @@ class TestCliEmitEventsFlag:
     def test_auto_help_shows_emit_events(self) -> None:
         result = self.runner.invoke(app, ["auto", "--help"])
         assert result.exit_code == 0
-        assert "--emit-events" in result.stdout
+        assert "--emit-events" in _plain(result.stdout)
 
     def test_run_help_shows_emit_events(self) -> None:
         result = self.runner.invoke(app, ["run", "--help"])
         assert result.exit_code == 0
-        assert "--emit-events" in result.stdout
+        assert "--emit-events" in _plain(result.stdout)
