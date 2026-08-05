@@ -18,6 +18,7 @@ __all__ = [
     "REPORT_URL",
     "REPO_URL",
     "SCHEMA_URL",
+    "SKILL_URL",
     "build_feedback",
     "feedback_pointer_lines",
 ]
@@ -28,6 +29,11 @@ SCHEMA_URL = (
     "https://raw.githubusercontent.com/AlexKay28/clickcast/main/docs/agent-report-schema/v1.json"
 )
 DOCS_URL = f"{REPO_URL}/blob/main/docs/for-agents.md"
+# Long-form AI-agent skill guide — richer than what fits in `clickcast skill`
+# (which is capped at ~900 words). Every subcommand's --help epilog points
+# agents at this file so they can pull the full workflow patterns from a
+# canonical URL without running the CLI first.
+SKILL_URL = f"{REPO_URL}/blob/main/skill.md"
 DIAGNOSTICS_COMMAND = "clickcast report-bug <sidecar.json>"
 
 _MESSAGE = (
@@ -90,6 +96,7 @@ def feedback_pointer_lines() -> list[str]:
     hooks just make sure a stranded reader (agent OR human) can find the loop.
     """
     return [
+        f"skill guide (for AI agents): {SKILL_URL}",
         f"feedback? file an AI-agent report: {REPORT_URL}",
         f"  schema: {SCHEMA_URL}",
         f"  docs:   {DOCS_URL}",

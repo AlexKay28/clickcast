@@ -15,6 +15,7 @@ from clickcast.feedback.pointers import (
     REPO_URL,
     REPORT_URL,
     SCHEMA_URL,
+    SKILL_URL,
     feedback_pointer_lines,
 )
 
@@ -57,12 +58,20 @@ class TestBuildFeedback:
         assert fb.docs_url == DOCS_URL
         assert fb.diagnostics_command == DIAGNOSTICS_COMMAND
 
-    def test_pointer_lines_reference_all_four_urls(self) -> None:
+    def test_pointer_lines_reference_all_urls(self) -> None:
         joined = "\n".join(feedback_pointer_lines())
+        assert SKILL_URL in joined
         assert REPORT_URL in joined
         assert SCHEMA_URL in joined
         assert DOCS_URL in joined
         assert DIAGNOSTICS_COMMAND in joined
+
+    def test_skill_url_points_at_skill_md(self) -> None:
+        """Regression guard: the epilog's skill-guide pointer must resolve
+        to `skill.md` at the repo root — the file the agent expects to
+        find when it follows the link from `<any-command> --help`."""
+        assert SKILL_URL.startswith(REPO_URL)
+        assert SKILL_URL.endswith("/skill.md")
 
     def test_new_issue_url_prefills_environment(self) -> None:
         fb = build_feedback(_report())

@@ -55,6 +55,7 @@ from clickcast.feedback.pointers import (
     DOCS_URL,
     REPORT_URL,
     SCHEMA_URL,
+    SKILL_URL,
 )
 from clickcast.feedback.session.cli import feedback_app
 from clickcast.feedback.session.storage import record_invocation_safe
@@ -96,14 +97,18 @@ app = typer.Typer(
 
 
 # #40 Track A: every subcommand ends its --help with these pointer lines so
-# a stranded AI-agent user always sees where to file feedback.
+# a stranded AI-agent user always sees where to file feedback. The `skill
+# guide` line points at skill.md (added post-#166) — the long-form
+# agent-facing usage guide with workflow patterns that don't fit in the
+# 900-word `clickcast skill` brief.
 _FEEDBACK_EPILOG = "\n".join(
     [
         "",
-        "Feedback loop (for AI agents and humans):",
-        f"  file a bug report: {REPORT_URL}",
-        f"  report schema:     {SCHEMA_URL}",
+        "For AI agents:",
+        f"  skill guide:       {SKILL_URL}",
         f"  agent docs:        {DOCS_URL}",
+        f"  report schema:     {SCHEMA_URL}",
+        f"  file a bug report: {REPORT_URL}",
         f"  or run: {DIAGNOSTICS_COMMAND}",
     ]
 )
