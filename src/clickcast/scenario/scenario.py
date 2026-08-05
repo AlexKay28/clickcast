@@ -39,7 +39,20 @@ class ScenarioError(Exception):
 
 
 _BROWSER_FIELDS: frozenset[str] = frozenset(
-    {"engine", "viewport", "device", "headful", "lang", "dark", "slowmo", "proxy"}
+    {
+        "engine",
+        "viewport",
+        "device",
+        "headful",
+        "lang",
+        "dark",
+        "slowmo",
+        "proxy",
+        # #166: TLS-bypass + scoped-auth-header fields.
+        "insecure",
+        "extra_headers",
+        "header_host",
+    }
 )
 _RENDER_FIELDS: frozenset[str] = frozenset({"fps", "quality", "loop", "format"})
 
@@ -577,16 +590,16 @@ def loads(
 
 
 def _session_kwargs_from_meta(meta: Meta) -> dict[str, Any]:
-    return {
-        "engine": meta.engine,
-        "viewport": meta.viewport,
-        "device": meta.device,
-        "headful": meta.headful,
-        "slowmo": meta.slowmo,
-        "proxy": meta.proxy,
-        "lang": meta.lang,
-        "dark": meta.dark,
-    }
+    """Route through :meth:`BrowserOpts.to_session_kwargs` so every new
+    field added to :class:`BrowserOpts` (see #166: ``insecure`` /
+    ``extra_headers`` / ``header_host``) reaches :class:`Session`
+    automatically — no parallel dict to maintain."""
+    kwargs = meta.browser.to_session_kwargs()
+    # Session accepts ``None`` viewport (means "no override"); Meta always
+    # provides one because BrowserOpts defaults it. Preserve the legacy
+    # str-form here so tests that pin the shape don't churn.
+    kwargs["viewport"] = meta.viewport
+    return {k: v for k, v in kwargs.items() if v is not None}
 
 
 async def run(

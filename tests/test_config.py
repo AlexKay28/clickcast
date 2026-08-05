@@ -269,6 +269,64 @@ class TestCliCommands:
 # ------------------------------------------------------------------
 
 
+class TestInsecureHeadersConfig:
+    """#166: new Config fields for internal / SSO-protected hosts."""
+
+    def test_defaults(self, tmp_path: Path) -> None:
+        cfg = load(project_toml=tmp_path / "p.toml", user_toml=tmp_path / "u.toml")
+        assert cfg.insecure is False
+        assert cfg.header == []
+        assert cfg.header_host is None
+
+    def test_insecure_env_var(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("CLICKCAST_INSECURE", "true")
+        cfg = load(project_toml=tmp_path / "p.toml", user_toml=tmp_path / "u.toml")
+        assert cfg.insecure is True
+
+    def test_header_host_env_var(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("CLICKCAST_HEADER_HOST", "internal.example.com")
+        cfg = load(project_toml=tmp_path / "p.toml", user_toml=tmp_path / "u.toml")
+        assert cfg.header_host == "internal.example.com"
+
+    def test_header_env_var_scalar(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Common single-header case: user types a bare `Name: value`."""
+        monkeypatch.setenv("CLICKCAST_HEADER", "Authorization: Bearer secret")
+        cfg = load(project_toml=tmp_path / "p.toml", user_toml=tmp_path / "u.toml")
+        assert cfg.header == ["Authorization: Bearer secret"]
+
+    def test_header_env_var_semicolon_separated(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("CLICKCAST_HEADER", "Authorization: Bearer x; X-Trace: 1")
+        cfg = load(project_toml=tmp_path / "p.toml", user_toml=tmp_path / "u.toml")
+        assert cfg.header == ["Authorization: Bearer x", "X-Trace: 1"]
+
+    def test_header_env_var_newline_separated(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("CLICKCAST_HEADER", "Authorization: Bearer x\nX-Trace: 1")
+        cfg = load(project_toml=tmp_path / "p.toml", user_toml=tmp_path / "u.toml")
+        assert cfg.header == ["Authorization: Bearer x", "X-Trace: 1"]
+
+    def test_header_env_var_json_list_still_works(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The JSON-array form is documented as the pydantic-settings native
+        shape — keep it working for scripts / agents that already use it."""
+        monkeypatch.setenv("CLICKCAST_HEADER", '["Authorization: Bearer x", "X-Trace: 1"]')
+        cfg = load(project_toml=tmp_path / "p.toml", user_toml=tmp_path / "u.toml")
+        assert cfg.header == ["Authorization: Bearer x", "X-Trace: 1"]
+
+    def test_header_config_set_round_trip(self, tmp_path: Path) -> None:
+        """`clickcast config set header "A: b; C: d"` round-trips via the
+        list-aware coercer, so users can persist headers to the TOML file
+        the same way they persist any other field."""
+        user = tmp_path / "user.toml"
+        set_user_value("header", "Authorization: Bearer x; X-Trace: 1", user_toml=user)
+        cfg = load(project_toml=tmp_path / "p.toml", user_toml=user)
+        assert cfg.header == ["Authorization: Bearer x", "X-Trace: 1"]
+
+
 class TestGetEffectiveValue:
     def test_matches_load_output(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("CLICKCAST_ENGINE", "webkit")

@@ -187,6 +187,42 @@ DumpElements = Annotated[
         ),
     ),
 ]
+# #166: internal / SSO-protected sites need TLS bypass + scoped auth headers.
+Insecure = Annotated[
+    bool,
+    typer.Option(
+        "--insecure",
+        help=(
+            "Ignore TLS certificate errors (self-signed / private CA). "
+            "Use for internal hosts whose cert chain the bundled Chromium "
+            "does not trust. Same idea as `curl --insecure`."
+        ),
+    ),
+]
+Header = Annotated[
+    list[str] | None,
+    typer.Option(
+        "--header",
+        "-H",
+        help=(
+            'Extra request header, `"Name: value"`. Repeatable. Without '
+            "`--header-host`, sent to EVERY request the page makes — "
+            "including CDN and analytics subresources. For an auth token, "
+            "scope it with `--header-host`."
+        ),
+    ),
+]
+HeaderHost = Annotated[
+    str | None,
+    typer.Option(
+        "--header-host",
+        help=(
+            "Restrict `--header` delivery to requests whose hostname equals "
+            "this host (or is a dotted subdomain of it). Prevents leaking "
+            "bearer tokens to third-party origins the page loads from."
+        ),
+    ),
+]
 # #151 (AI-4) — machine-readable summary line after the shipped prose
 # summary. JSONL-friendly (one object per line, no trailing prose).
 EmitEvents = Annotated[
@@ -230,6 +266,28 @@ def _version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
+def _parse_header_flags(raw: list[str] | None) -> dict[str, str]:
+    """Parse ``--header "Name: value"`` occurrences into a header dict.
+
+    Duplicate names win last (matches Playwright's own extra_http_headers
+    semantics). Malformed entries (no ``:``) raise :class:`typer.BadParameter`
+    so the user gets the same red-message treatment as other CLI misuse.
+    """
+    if not raw:
+        return {}
+    out: dict[str, str] = {}
+    for entry in raw:
+        if ":" not in entry:
+            raise typer.BadParameter(f"--header must be 'Name: value', got {entry!r}")
+        name, _, value = entry.partition(":")
+        name = name.strip()
+        value = value.strip()
+        if not name:
+            raise typer.BadParameter(f"--header has empty name: {entry!r}")
+        out[name] = value
+    return out
+
+
 def _session_kwargs(
     engine: str,
     viewport: str,
@@ -238,12 +296,19 @@ def _session_kwargs(
     lang: str | None,
     dark: bool,
     slowmo: int = 0,
+    *,
+    insecure: bool = False,
+    extra_headers: dict[str, str] | None = None,
+    header_host: str | None = None,
+    proxy: str | None = None,
 ) -> dict[str, Any]:
     """Kept as the CLI's ``BrowserOpts`` factory: turns the flat CLI-flag
     args into a :class:`~clickcast.core.opts.BrowserOpts` and returns its
     :meth:`~clickcast.core.opts.BrowserOpts.to_session_kwargs` shape.
     Since #97 the field list lives in ``BrowserOpts``; this function is
-    only glue for turning ``typer`` params into that dataclass."""
+    only glue for turning ``typer`` params into that dataclass. #166 added
+    ``insecure`` / ``extra_headers`` / ``header_host``; ``proxy`` also
+    flows through now (was silently dropped by ``to_session_kwargs``)."""
     return BrowserOpts(
         engine=engine,
         viewport=Viewport.parse(viewport),
@@ -252,6 +317,10 @@ def _session_kwargs(
         lang=lang,
         dark=dark,
         slowmo=slowmo,
+        proxy=proxy,
+        insecure=insecure,
+        extra_headers=dict(extra_headers or {}),
+        header_host=header_host,
     ).to_session_kwargs()
 
 
@@ -588,6 +657,9 @@ def auto(
     verbose: Verbose = 0,
     dump_elements: DumpElements = False,
     emit_events: EmitEvents = False,
+    insecure: Insecure = False,
+    header: Header = None,
+    header_host: HeaderHost = None,
 ) -> None:
     _setup_logging(verbose)
     set_dump_elements(dump_elements)
@@ -596,6 +668,7 @@ def auto(
     if pace not in _PACE_TABLE:
         _die(f"--pace must be one of {sorted(_PACE_TABLE)}, got {pace!r}")
     compiled_redacts = _compile_redact_patterns(redact_pattern)
+    extra_headers = _parse_header_flags(header)
 
     # --for-humans composite: flip the sub-flags to human defaults, but ONLY
     # for sub-flags the user did not explicitly type on the command line.
@@ -641,7 +714,17 @@ def auto(
             seed_urls=list(seed_url) if seed_url else [],
             dwell=dwell,
             initial_wait=initial_wait,
-            session_kwargs=_session_kwargs(engine, viewport, device, headful, lang, dark),
+            session_kwargs=_session_kwargs(
+                engine,
+                viewport,
+                device,
+                headful,
+                lang,
+                dark,
+                insecure=insecure,
+                extra_headers=extra_headers,
+                header_host=header_host,
+            ),
             fps=fps,
             format_=format,
             quality=quality,
@@ -765,6 +848,9 @@ def run(
     verbose: Verbose = 0,
     dump_elements: DumpElements = False,
     emit_events: EmitEvents = False,
+    insecure: Insecure = False,
+    header: Header = None,
+    header_host: HeaderHost = None,
 ) -> None:
     set_dump_elements(dump_elements)
     compiled_redacts = _compile_redact_patterns(redact_pattern)
@@ -791,6 +877,17 @@ def run(
         meta.browser.headful = headful
     if _is_explicit(ctx, "slowmo"):
         meta.browser.slowmo = slowmo
+    # #166: `--insecure` / `--header` / `--header-host` follow the same
+    # "explicit CLI flag wins over scenario meta" pattern as headful/slowmo
+    # above. Values from Config layers (env / TOML) also arrive here, but
+    # `_is_explicit` gates on ``COMMANDLINE`` — so meta stays authoritative
+    # unless the user actually typed the flag.
+    if _is_explicit(ctx, "insecure"):
+        meta.browser.insecure = insecure
+    if _is_explicit(ctx, "header") and header is not None:
+        meta.browser.extra_headers = _parse_header_flags(header)
+    if _is_explicit(ctx, "header_host"):
+        meta.browser.header_host = header_host
     if _is_explicit(ctx, "format") and format:
         effective_format: str | None = format
     else:
@@ -993,6 +1090,9 @@ def shot(
     device: Device = None,
     engine: Engine = "chromium",
     dark: Dark = False,
+    insecure: Insecure = False,
+    header: Header = None,
+    header_host: HeaderHost = None,
 ) -> None:
     asyncio.run(
         _do_shot(
@@ -1000,7 +1100,17 @@ def shot(
             out=out,
             full_page=full_page,
             wait=wait,
-            session_kwargs=_session_kwargs(engine, viewport, device, False, None, dark),
+            session_kwargs=_session_kwargs(
+                engine,
+                viewport,
+                device,
+                False,
+                None,
+                dark,
+                insecure=insecure,
+                extra_headers=_parse_header_flags(header),
+                header_host=header_host,
+            ),
         )
     )
 
@@ -1121,12 +1231,25 @@ def elements(
     ] = False,
     viewport: ViewportArg = "1280x800",
     engine: Engine = "chromium",
+    insecure: Insecure = False,
+    header: Header = None,
+    header_host: HeaderHost = None,
 ) -> None:
     result_elements = asyncio.run(
         _do_elements(
             url=url,
             limit=limit,
-            session_kwargs=_session_kwargs(engine, viewport, None, False, None, False),
+            session_kwargs=_session_kwargs(
+                engine,
+                viewport,
+                None,
+                False,
+                None,
+                False,
+                insecure=insecure,
+                extra_headers=_parse_header_flags(header),
+                header_host=header_host,
+            ),
         )
     )
     if as_json:
