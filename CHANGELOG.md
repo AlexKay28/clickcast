@@ -13,10 +13,22 @@ Internal-host unblock release. Backwards-compatible with 0.2.5. Adds
 three CLI flags on `shot` / `auto` / `run` / `elements` so agents can
 capture pages behind private-CA TLS or SSO-guarded bearer-token auth —
 the same wall corporate wikis, trackers, admin consoles, and staging
-deployments hit. Plus one long-hidden test-hygiene fix that had every
-main-branch CI run failing since Aug 2 without anyone noticing.
+deployments hit. Plus a comprehensive AI-agent skill guide (`skill.md`)
+that every subcommand's `--help` epilog now points at, and one
+long-hidden test-hygiene fix that had every main-branch CI run failing
+since Aug 2 without anyone noticing.
 
 ### Added
+- **`skill.md` — long-form AI-agent usage guide.** Covers every command
+  with real examples, five recurring workflow patterns (auto → CI
+  baseline, scripted-scenario PR gate, internal-host access, bug
+  reporting loop, env-var-driven config), the sidecar contract, and
+  failure recovery. Every subcommand's `--help` epilog now leads with a
+  pointer to this file — agents that hit any `clickcast X --help` see
+  it first. Complements the shorter `clickcast skill` CLI-embedded
+  brief (which stays capped at ~900 words for tool-discovery messages).
+  New `SKILL_URL` constant in `clickcast.feedback.pointers` so
+  downstream code has one place to reference the URL.
 - **`--insecure` / `--header` / `--header-host` for internal / SSO-protected
   sites** (closes [#166]). Three flags on `shot`, `auto`, `run`, and
   `elements`:
