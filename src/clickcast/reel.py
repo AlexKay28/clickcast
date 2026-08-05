@@ -522,17 +522,16 @@ def _session_kwargs_for_bbox(scenario: Scenario) -> dict[str, Any]:
     """Mirror :func:`clickcast.scenario.scenario._session_kwargs_from_meta`
     for the private-URL-revisit session used by save_region. Kept local to
     avoid depending on a private symbol from another module.
+
+    Since #166 this delegates to :meth:`BrowserOpts.to_session_kwargs`, so
+    ``--insecure`` and scoped auth headers reach the bbox-revisit session
+    too (an internal-host tour that needed them for the primary pass will
+    need them again for the revisit).
     """
     meta = scenario.meta
-    return {
-        "engine": meta.engine,
-        "viewport": meta.viewport,
-        "device": meta.device,
-        "headful": meta.headful,
-        "slowmo": meta.slowmo,
-        "lang": meta.lang,
-        "dark": meta.dark,
-    }
+    kwargs = meta.browser.to_session_kwargs()
+    kwargs["viewport"] = meta.viewport
+    return {k: v for k, v in kwargs.items() if v is not None}
 
 
 async def _bbox_via_fresh_session(

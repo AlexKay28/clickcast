@@ -7,6 +7,7 @@ from contextlib import AsyncExitStack
 from pathlib import Path
 from types import TracebackType
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 from playwright.async_api import (
     Browser,
@@ -14,6 +15,7 @@ from playwright.async_api import (
     Locator,
     Page,
     Playwright,
+    Route,
     async_playwright,
 )
 from playwright.async_api import (
@@ -29,6 +31,7 @@ __all__ = [
     "PlaywrightTimeoutError",
     "Session",
     "WaitArg",
+    "hostname_matches",
 ]
 
 Engine = Literal["chromium", "firefox", "webkit"]
@@ -36,6 +39,33 @@ LoadState = Literal["load", "domcontentloaded", "networkidle"]
 WaitArg = int | float | str
 
 _LOAD_STATES: frozenset[str] = frozenset({"load", "domcontentloaded", "networkidle"})
+
+
+def hostname_matches(url: str, host: str) -> bool:
+    """True if the request URL's hostname equals ``host`` or is a subdomain.
+
+    Substring `in` was tempting but a footgun — e.g. ``host=".net"`` would
+    match ``cdn.example.net`` and defeat the whole point of `--header-host`.
+    A dotted-suffix match (``.example.com`` matches ``a.example.com`` and
+    ``example.com``) is the sharp form. To keep users from accidentally
+    scoping to a whole TLD, we only allow dotted-suffix matching when the
+    target itself contains at least one internal dot — a bare label like
+    ``net`` or ``localhost`` only matches exactly. Empty ``host`` never
+    matches.
+    """
+    if not host:
+        return False
+    parsed_host = (urlparse(url).hostname or "").lower()
+    if not parsed_host:
+        return False
+    target = host.lower().lstrip(".")
+    if not target:
+        return False
+    if parsed_host == target:
+        return True
+    if "." in target:
+        return parsed_host.endswith("." + target)
+    return False
 
 
 class Session:
@@ -60,6 +90,8 @@ class Session:
         lang: str | None = None,
         dark: bool = False,
         extra_http_headers: dict[str, str] | None = None,
+        ignore_https_errors: bool = False,
+        header_host: str | None = None,
     ) -> None:
         self.engine: Engine = engine
         self.viewport = viewport
@@ -70,6 +102,12 @@ class Session:
         self.lang = lang
         self.dark = dark
         self.extra_http_headers = extra_http_headers
+        self.ignore_https_errors = ignore_https_errors
+        # #166: when set, extra_http_headers is NOT applied at context level;
+        # a route interceptor injects it only for requests whose hostname
+        # matches ``header_host`` (exact or dotted-suffix). Keeps bearer
+        # tokens off CDN / analytics subresources.
+        self.header_host = header_host
 
         self._stack: AsyncExitStack | None = None
         self._pw: Playwright | None = None
@@ -91,6 +129,13 @@ class Session:
 
             self._context = await self._browser.new_context(**self._context_kwargs())
             stack.push_async_callback(self._context.close)
+
+            # #166: scoped-header path. When ``header_host`` is set, headers
+            # attach via route interception at request time rather than the
+            # context-wide ``extra_http_headers`` set above (which fires on
+            # every origin, leaking tokens to CDNs / analytics).
+            if self.header_host and self.extra_http_headers:
+                await self._install_scoped_header_route()
 
             self._page = await self._context.new_page()
             self._stack = stack
@@ -132,14 +177,40 @@ class Session:
             kwargs["locale"] = self.lang
         if self.dark:
             kwargs["color_scheme"] = "dark"
-        if self.extra_http_headers:
+        # #166: only set context-wide headers when NOT scoped to a host —
+        # scoped delivery happens via the route interceptor installed in
+        # __aenter__.
+        if self.extra_http_headers and not self.header_host:
             kwargs["extra_http_headers"] = dict(self.extra_http_headers)
+        if self.ignore_https_errors:
+            kwargs["ignore_https_errors"] = True
         if self.proxy:
             if isinstance(self.proxy, str):
                 kwargs["proxy"] = {"server": self.proxy}
             else:
                 kwargs["proxy"] = dict(self.proxy)
         return kwargs
+
+    async def _install_scoped_header_route(self) -> None:
+        """Register a ``context.route`` that injects ``extra_http_headers``
+        only for requests whose hostname matches :attr:`header_host`.
+
+        Note: route interception adds a Python round-trip per request, so
+        we only install it when both a header and a scope are set — the
+        common no-auth or global-header cases still fly through Chromium
+        untouched via the context-wide path in :meth:`_context_kwargs`.
+        """
+        assert self._context is not None
+        headers = dict(self.extra_http_headers or {})
+        host = self.header_host
+
+        async def _inject(route: Route) -> None:
+            request_headers = dict(route.request.headers)
+            if host and hostname_matches(route.request.url, host):
+                request_headers.update(headers)
+            await route.continue_(headers=request_headers)
+
+        await self._context.route("**/*", _inject)
 
     @property
     def page(self) -> Page:

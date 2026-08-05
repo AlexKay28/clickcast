@@ -10,11 +10,12 @@ Public API:
 
 from __future__ import annotations
 
+import json
 import sys
 import warnings
 from pathlib import Path
 from types import UnionType
-from typing import Any, Union, get_args, get_origin
+from typing import Annotated, Any, Union, get_args, get_origin
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -23,9 +24,11 @@ else:
 
 import tomlkit
 from platformdirs import user_config_dir
+from pydantic import field_validator
 from pydantic.fields import FieldInfo
 from pydantic_settings import (
     BaseSettings,
+    NoDecode,
     PydanticBaseSettingsSource,
     SettingsConfigDict,
 )
@@ -148,6 +151,53 @@ class Config(BaseSettings):
     format: str = "gif"
     quality: int = 8
     loop: int = 0
+    # #166: internal / SSO-protected sites.
+    insecure: bool = False
+    # ``NoDecode`` tells pydantic-settings to hand the raw env-var string to
+    # our field_validator below instead of trying to JSON-decode it first
+    # (which fails on the friendlier ``"Name: value"`` scalar form).
+    header: Annotated[list[str], NoDecode] = []
+    header_host: str | None = None
+
+    @field_validator("header", mode="before")
+    @classmethod
+    def _parse_header(cls, value: Any) -> Any:
+        """Accept several friendly env-var shapes for ``CLICKCAST_HEADER``.
+
+        The pydantic-settings default for a ``list[str]`` env var is a JSON
+        array (``'["A: b"]'``), which is awful to type in a shell. This
+        validator accepts:
+
+        - a real list (kwargs / TOML): passed through
+        - a JSON array string: parsed as JSON
+        - a plain scalar string: split on newlines or ``;`` — whichever
+          the user prefers; matches how ``curl -H`` is chained in scripts
+
+        So all four forms work:
+
+            CLICKCAST_HEADER='["Authorization: Bearer x"]'
+            CLICKCAST_HEADER='Authorization: Bearer x'
+            CLICKCAST_HEADER='Authorization: Bearer x;X-Trace: 1'
+            CLICKCAST_HEADER=$'Authorization: Bearer x\\nX-Trace: 1'
+        """
+        if value is None or value == "":
+            return []
+        if isinstance(value, list):
+            return value
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped.startswith("["):
+                try:
+                    parsed = json.loads(stripped)
+                except json.JSONDecodeError:
+                    parsed = None
+                if isinstance(parsed, list):
+                    return [str(x) for x in parsed]
+            # Split on newlines first (least ambiguous with header values
+            # that may legitimately contain commas), fall back to ``;``.
+            parts = stripped.splitlines() if "\n" in stripped else stripped.split(";")
+            return [p.strip() for p in parts if p.strip()]
+        return value
 
 
 # --------------------------------------------------------------------------
@@ -216,6 +266,12 @@ def _coerce_string(value: str, annotation: Any) -> Any:
         return int(value)
     if annotation is float:
         return float(value)
+    # #166: `list[str]` (currently: `header`) accepts the same friendly
+    # shapes as the env-var validator — split on newlines or `;` — so
+    # `clickcast config set header "Authorization: Bearer x"` just works.
+    if get_origin(annotation) is list:
+        parts = value.splitlines() if "\n" in value else value.split(";")
+        return [p.strip() for p in parts if p.strip()]
     return value
 
 

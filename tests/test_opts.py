@@ -18,6 +18,9 @@ class TestBrowserOpts:
         assert opts.dark is False
         assert opts.slowmo == 0
         assert opts.proxy is None
+        assert opts.insecure is False
+        assert opts.extra_headers == {}
+        assert opts.header_host is None
 
     def test_to_session_kwargs_shape(self) -> None:
         opts = BrowserOpts(
@@ -28,6 +31,10 @@ class TestBrowserOpts:
             lang="en-US",
             dark=True,
             slowmo=100,
+            proxy="http://proxy.example:8080",
+            insecure=True,
+            extra_headers={"Authorization": "Bearer x"},
+            header_host="internal.example.com",
         )
         assert opts.to_session_kwargs() == {
             "engine": "firefox",
@@ -37,7 +44,25 @@ class TestBrowserOpts:
             "lang": "en-US",
             "dark": True,
             "slowmo": 100,
+            "proxy": "http://proxy.example:8080",
+            "ignore_https_errors": True,
+            "extra_http_headers": {"Authorization": "Bearer x"},
+            "header_host": "internal.example.com",
         }
+
+    def test_to_session_kwargs_proxy_no_longer_dropped(self) -> None:
+        """Pre-existing bug caught in #166: ``proxy`` lived on BrowserOpts
+        but ``to_session_kwargs`` silently discarded it, so ``--proxy``
+        never reached Playwright. Regression guard."""
+        opts = BrowserOpts(proxy="http://proxy.example:8080")
+        assert opts.to_session_kwargs()["proxy"] == "http://proxy.example:8080"
+
+    def test_to_session_kwargs_headers_none_when_empty(self) -> None:
+        """Empty ``extra_headers`` collapses to ``None`` so downstream
+        filtering (see :func:`clickcast.scenario.scenario._session_kwargs_from_meta`)
+        can drop it — Session's default is ``None``, and passing an
+        empty dict would install a no-op route interceptor."""
+        assert BrowserOpts().to_session_kwargs()["extra_http_headers"] is None
 
     def test_viewport_field_uses_value_type(self) -> None:
         """Field is :class:`Viewport`, not a raw string / tuple."""

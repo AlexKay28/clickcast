@@ -51,6 +51,13 @@ class BrowserOpts:
     dark: bool = False
     slowmo: int = 0
     proxy: str | None = None
+    # #166: internal / SSO-protected sites need to bypass TLS validation and
+    # attach an auth header. `header_host` scopes the header to a single
+    # origin so credentials never leak to CDNs or analytics endpoints the
+    # page happens to fetch from.
+    insecure: bool = False
+    extra_headers: dict[str, str] = field(default_factory=dict)
+    header_host: str | None = None
 
     def to_session_kwargs(self) -> dict[str, Any]:
         """Dict shape :class:`~clickcast.core.session.Session` expects.
@@ -68,6 +75,10 @@ class BrowserOpts:
             "lang": self.lang,
             "dark": self.dark,
             "slowmo": self.slowmo,
+            "proxy": self.proxy,
+            "ignore_https_errors": self.insecure,
+            "extra_http_headers": dict(self.extra_headers) if self.extra_headers else None,
+            "header_host": self.header_host,
         }
 
 
