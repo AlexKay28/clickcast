@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.6] — 2026-08-05
+
+Internal-host unblock release. Backwards-compatible with 0.2.5. Adds
+three CLI flags on `shot` / `auto` / `run` / `elements` so agents can
+capture pages behind private-CA TLS or SSO-guarded bearer-token auth —
+the same wall corporate wikis, trackers, admin consoles, and staging
+deployments hit. Plus one long-hidden test-hygiene fix that had every
+main-branch CI run failing since Aug 2 without anyone noticing.
+
+### Added
+- **`--insecure` / `--header` / `--header-host` for internal / SSO-protected
+  sites** (closes [#166]). Three flags on `shot`, `auto`, `run`, and
+  `elements`:
+  - `--insecure` passes `ignore_https_errors=True` to Playwright so
+    private-CA / self-signed hosts load. Same idea as `curl --insecure`.
+  - `--header "Name: value"` (repeatable, also `-H`) attaches request
+    headers.
+  - `--header-host HOST` scopes headers to one origin by installing a
+    `context.route` interceptor. Hostname match is exact or dotted-suffix
+    (`.example.com` matches `a.example.com` and `example.com`) with a
+    guard: bare labels like `.net` only exact-match, so an accidentally
+    over-broad flag can't scope a bearer token to a whole TLD. Without
+    `--header-host`, headers apply globally — same as Playwright's
+    built-in `extra_http_headers`, but a real credential leak risk for
+    subresources fetched from CDNs / analytics endpoints.
+  - Same three fields wired through `Config`, so `CLICKCAST_INSECURE`,
+    `CLICKCAST_HEADER`, `CLICKCAST_HEADER_HOST`, and `clickcast.toml`
+    all work. `CLICKCAST_HEADER` accepts a friendlier scalar or
+    `;`- / newline-separated form (not just the pydantic-settings default
+    JSON list) so agents don't have to type `'["Auth: Bearer x"]'` in a
+    shell.
+  - On `run`, the flags follow the same "explicit CLI flag wins over
+    scenario meta" pattern as `--headful` / `--slowmo`. Scenario YAML
+    can also carry the fields flat (`meta.insecure: true`) via the
+    existing flat-to-nested migration shim.
+
+### Fixed
+- **`BrowserOpts.to_session_kwargs()` silently dropped `proxy`** — noticed
+  while touching the same file for [#166]. `BrowserOpts.proxy` existed
+  as a field but the shape method never included it in the dict, so
+  `--proxy` and `CLICKCAST_PROXY` never actually reached Playwright.
+  `_session_kwargs_from_meta` (scenario) and `_session_kwargs_for_bbox`
+  (reel) now also delegate through `BrowserOpts.to_session_kwargs()`
+  rather than maintaining parallel dicts, so any future field added to
+  `BrowserOpts` propagates automatically.
+- **`test_emit_events` CLI-help assertions were failing on every CI run
+  since Aug 2** (closes [#168]). Rich (bundled with Typer) breaks color
+  runs at hyphen boundaries when rendering flag names under
+  `GITHUB_ACTIONS=true`, so `"--emit-events" in result.stdout` failed
+  literally even though the flag was visibly present in the panel.
+  Local dev terminals didn't trigger the split, so the tests looked
+  green locally while every CI run stayed red — the v0.2.5 release
+  commit merged with red CI for exactly this reason. Fixed with a
+  small `_plain(s)` helper that strips SGR escapes before asserting.
+
 ## [0.2.5] — 2026-08-02
 
 AI-agent ergonomics + refactor release — closes all 15 findings from the
@@ -984,3 +1039,5 @@ Initial public release.
 [#43]: https://github.com/AlexKay28/clickcast/issues/43
 [#46]: https://github.com/AlexKay28/clickcast/issues/46
 [#151]: https://github.com/AlexKay28/clickcast/issues/151
+[#166]: https://github.com/AlexKay28/clickcast/issues/166
+[#168]: https://github.com/AlexKay28/clickcast/pull/168
