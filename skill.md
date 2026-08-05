@@ -350,6 +350,7 @@ Top-level fields you'll actually read:
 
 ```python
 from clickcast.feedback import load
+
 report = load("tour.gif.json")
 for step in report.steps:
     if step.status == "failed":
