@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -9,7 +10,7 @@ import pytest
 from typer.testing import CliRunner
 
 from clickcast import __version__
-from clickcast.cli import _parse_viewport, _run_doctor_checks, app
+from clickcast.cli import _parse_viewport, _run_doctor_checks, _setup_logging, app
 
 runner = CliRunner()
 
@@ -319,3 +320,97 @@ class TestAutoIntegration:
         assert out.exists()
         sidecar = out.with_suffix(out.suffix + ".json")
         assert not sidecar.exists()
+
+
+# ------------------------------------------------------------------
+# #174 — _setup_logging must not wipe root handlers of a library caller
+# ------------------------------------------------------------------
+
+
+class TestSetupLoggingScoping:
+    """Regression tests for #174.
+
+    Pre-fix, ``_setup_logging`` called ``logging.basicConfig(force=True)``,
+    which silently detaches every handler already attached to the root
+    logger. Apps that import clickcast as a library (with their own JSON /
+    structured / Sentry root handlers) lost them the instant any code path
+    called ``_setup_logging``.
+
+    The fix scopes ``_setup_logging`` to the ``"clickcast"`` logger only,
+    and installs a stderr handler on root exclusively from :func:`main`
+    (the CLI entrypoint) when root has no handlers yet.
+    """
+
+    def _reset_clickcast_logger(self) -> None:
+        cc = logging.getLogger("clickcast")
+        cc.setLevel(logging.NOTSET)
+
+    def test_library_mode_preserves_root_handlers(self) -> None:
+        """Direct call to ``_setup_logging`` (library mode) must not detach
+        pre-existing root handlers. Also asserts the ``clickcast`` logger
+        reflects the requested verbosity."""
+        root = logging.getLogger()
+        saved_handlers = list(root.handlers)
+        saved_level = root.level
+        try:
+            root.handlers.clear()
+            sentinel = logging.NullHandler()
+            root.addHandler(sentinel)
+
+            _setup_logging(1)
+
+            assert sentinel in root.handlers, (
+                "root handler was detached — _setup_logging leaked into root logging"
+            )
+            assert logging.getLogger("clickcast").level == logging.INFO
+
+            _setup_logging(2)
+            assert sentinel in root.handlers
+            assert logging.getLogger("clickcast").level == logging.DEBUG
+        finally:
+            root.handlers[:] = saved_handlers
+            root.setLevel(saved_level)
+            self._reset_clickcast_logger()
+
+    def test_cli_mode_sets_clickcast_level(self) -> None:
+        """Invoking a CLI command with ``--verbose`` must still bump the
+        ``clickcast`` logger's effective level (INFO for one -v, DEBUG for
+        two)."""
+        cc = logging.getLogger("clickcast")
+        saved_cc_level = cc.level
+        try:
+            # Patch _do_auto so no real browser launches — the coroutine
+            # it returns is closed to avoid a RuntimeWarning about a never-
+            # awaited coroutine when the caller sees our async stub.
+            async def _noop(**_kwargs: object) -> None:
+                return None
+
+            with patch("clickcast.cli._do_auto", side_effect=_noop):
+                r = runner.invoke(
+                    app,
+                    [
+                        "auto",
+                        "https://example.com",
+                        "--verbose",
+                        "--max-steps",
+                        "1",
+                    ],
+                )
+            assert r.exit_code == 0, r.output
+            assert cc.level == logging.INFO
+
+            with patch("clickcast.cli._do_auto", side_effect=_noop):
+                r = runner.invoke(
+                    app,
+                    [
+                        "auto",
+                        "https://example.com",
+                        "-vv",
+                        "--max-steps",
+                        "1",
+                    ],
+                )
+            assert r.exit_code == 0, r.output
+            assert cc.level == logging.DEBUG
+        finally:
+            cc.setLevel(saved_cc_level)
