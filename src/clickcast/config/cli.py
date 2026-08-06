@@ -12,6 +12,8 @@ Registered on the root app in :mod:`clickcast.cli` via
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from pathlib import Path
 from typing import Annotated, Any, NoReturn
 
 import typer
@@ -21,6 +23,7 @@ from clickcast.config.config import (
 )
 from clickcast.config.config import (
     get_effective_value,
+    set_project_value,
     set_user_value,
     user_config_path,
 )
@@ -126,15 +129,39 @@ def get_cmd(
 
 @config_app.command(
     "set",
-    help="Persist a config key to the user TOML.",
+    help="Persist a config key to the user (default) or project TOML.",
     epilog=_FEEDBACK_EPILOG,
 )
 def set_cmd(
     key: Annotated[str, typer.Argument(help="Config key.")],
     value: Annotated[str, typer.Argument(help="Value to persist.")],
+    scope: Annotated[
+        str,
+        typer.Option(
+            "--scope",
+            help=(
+                "Which TOML to write to: 'user' (default — persists across "
+                "projects, stored in the platform config dir) or 'project' "
+                "(writes to ./clickcast.toml so the repo pins a shared "
+                "default that overrides user-scope in the precedence stack). "
+                "See #177."
+            ),
+        ),
+    ] = "user",
 ) -> None:
+    # ``set_user_value`` / ``set_project_value`` share a (key, value) →
+    # Path signature but their keyword-only path-override args are named
+    # differently (``user_toml`` / ``project_toml``). Typed as
+    # :class:`Callable` so mypy doesn't compare the divergent kwarg names.
+    setter: Callable[[str, str], Path]
+    if scope == "user":
+        setter = set_user_value
+    elif scope == "project":
+        setter = set_project_value
+    else:
+        _die(f"--scope must be 'user' or 'project', got {scope!r}")
     try:
-        written_to = set_user_value(key, value)
+        written_to = setter(key, value)
     except (KeyError, ValueError) as e:
         _die(str(e))
     typer.echo(f"✔ {key} = {value}  ({written_to})")
