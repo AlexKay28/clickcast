@@ -1051,13 +1051,19 @@ async def _do_run(
     # See #151 (AI-4): machine-readable summary line for JSONL parsers.
     # Off by default; on prints one JSON object after the prose summary
     # with the same key set the ``auto`` engine emits. ``pages`` and
-    # ``clicks`` are counted from the scenario's completed step list —
-    # `goto` steps count as page loads; `click`/`dblclick` count as clicks.
+    # ``clicks`` are counted from steps that actually EXECUTED successfully
+    # (``result.results`` with ``status == "ok"``) — not from the parsed
+    # YAML source — so a scenario that fails at step 3 of 5, or one whose
+    # `optional` steps got skipped, reports the true executed count.
+    # Mirrors the ``auto`` engine's semantics (see #172): both callers of
+    # ``_emit_tour_complete`` now report executed pages/clicks.
     if emit_events:
         from clickcast.auto import _emit_tour_complete
 
-        pages = sum(1 for s in scenario.steps if s.action == "goto")
-        clicks = sum(1 for s in scenario.steps if s.action in ("click", "dblclick"))
+        pages = sum(1 for r in result.results if r.status == "ok" and r.action == "goto")
+        clicks = sum(
+            1 for r in result.results if r.status == "ok" and r.action in ("click", "dblclick")
+        )
         _emit_tour_complete(
             gif_path=str(enc.path),
             frames=enc.frame_count,
