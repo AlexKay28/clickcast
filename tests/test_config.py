@@ -253,11 +253,9 @@ class TestCliCommands:
     def test_config_set_writes_to_user_toml(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # Redirect user_config_path to a tmp location
+        # `set_user_value` calls `user_config_path()` from its own module;
+        # patch there so the write lands in a tmp file.
         target = tmp_path / "config.toml"
-        monkeypatch.setattr("clickcast.cli.user_config_path", lambda: target)
-        # `set_user_value` uses config.user_config_path directly, not the CLI's
-        # import — patch there too.
         monkeypatch.setattr("clickcast.config.config.user_config_path", lambda: target)
         r = runner.invoke(app, ["config", "set", "engine", "firefox"])
         assert r.exit_code == 0, r.output
@@ -324,6 +322,35 @@ class TestCliCommands:
         assert starts["fps"] == starts["header"] == starts["header_host"], (
             f"value columns misaligned: {starts!r}\nlines: {lines!r}"
         )
+
+
+def _header_line(stdout: str) -> str:
+    """Return the ``header`` row from ``clickcast config list`` output.
+
+    Matches ``header`` but not ``header_host`` — key/value output uses a
+    single space between key and value column, so we anchor on the trailing
+    space.
+    """
+    for ln in stdout.splitlines():
+        if ln.strip().startswith("header ") and not ln.strip().startswith("header_host"):
+            return ln
+    raise AssertionError(f"no `header` line in output:\n{stdout}")
+
+    # ------------------------------------------------------------------
+    # #177: `config` is a Typer sub-app — each subcommand has its own --help.
+    # ------------------------------------------------------------------
+
+    def test_config_help_lists_all_subcommands(self) -> None:
+        r = runner.invoke(app, ["config", "--help"])
+        assert r.exit_code == 0, r.output
+        for sub in ("path", "list", "get", "set"):
+            assert sub in r.stdout, f"expected {sub!r} in `config --help` output"
+
+    def test_config_get_help_shows_key_argument(self) -> None:
+        r = runner.invoke(app, ["config", "get", "--help"])
+        assert r.exit_code == 0, r.output
+        assert "key" in r.stdout.lower()
+        assert "Config key" in r.stdout
 
 
 def _header_line(stdout: str) -> str:
