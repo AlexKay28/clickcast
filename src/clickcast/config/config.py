@@ -38,6 +38,7 @@ __all__ = [
     "get_effective_value",
     "load",
     "project_config_path",
+    "set_project_value",
     "set_user_value",
     "user_config_path",
 ]
@@ -291,6 +292,32 @@ def _load_tomlkit_document(path: Path) -> tomlkit.TOMLDocument:
         return tomlkit.document()
 
 
+def _write_value_to_toml(key: str, value: str, path: Path) -> Path:
+    """Coerce ``value`` and write it into the TOML file at ``path``.
+
+    Shared helper for :func:`set_user_value` and :func:`set_project_value` —
+    same coercion + tomlkit-preserving-write semantics, only the target
+    path differs. Callers responsible for choosing the path.
+    """
+    field = Config.model_fields.get(key)
+    if field is None:
+        raise KeyError(f"unknown config key: {key}")
+    coerced = _coerce_string(value, field.annotation)
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    doc = _load_tomlkit_document(path)
+    defaults = doc.get("defaults")
+    if isinstance(defaults, dict):
+        # Existing [defaults] wrapper — write inside it so shape survives.
+        defaults[key] = coerced
+    else:
+        doc[key] = coerced
+
+    path.write_text(tomlkit.dumps(doc))
+    return path
+
+
 def set_user_value(
     key: str,
     value: str,
@@ -304,24 +331,26 @@ def set_user_value(
     the new key is written INSIDE that table so its shape survives the round
     trip.
     """
-    field = Config.model_fields.get(key)
-    if field is None:
-        raise KeyError(f"unknown config key: {key}")
-    coerced = _coerce_string(value, field.annotation)
-
     path = user_toml if user_toml is not None else user_config_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
+    return _write_value_to_toml(key, value, path)
 
-    doc = _load_tomlkit_document(path)
-    defaults = doc.get("defaults")
-    if isinstance(defaults, dict):
-        # Existing [defaults] wrapper — write inside it so shape survives.
-        defaults[key] = coerced
-    else:
-        doc[key] = coerced
 
-    path.write_text(tomlkit.dumps(doc))
-    return path
+def set_project_value(
+    key: str,
+    value: str,
+    *,
+    project_toml: Path | None = None,
+) -> Path:
+    """Coerce ``value`` and write it to the project TOML (``./clickcast.toml``).
+
+    Peer to :func:`set_user_value` (see #177). Project-scope writes let a
+    team pin a repo-wide default that overrides user-scope in the precedence
+    stack — useful for shared conventions (e.g. ``engine = "firefox"`` in
+    a repo whose fixtures need Firefox-specific behaviour) without asking
+    every collaborator to edit their user TOML.
+    """
+    path = project_toml if project_toml is not None else project_config_path()
+    return _write_value_to_toml(key, value, path)
 
 
 def get_effective_value(

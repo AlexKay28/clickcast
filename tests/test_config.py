@@ -200,6 +200,38 @@ class TestSetUserValue:
         assert cfg.engine == "webkit"
 
 
+class TestSetProjectValue:
+    """#177: peer of :func:`set_user_value` that targets ``./clickcast.toml``."""
+
+    def test_writes_and_round_trips(self, tmp_path: Path) -> None:
+        from clickcast.config import set_project_value
+
+        project = tmp_path / "clickcast.toml"
+        set_project_value("engine", "webkit", project_toml=project)
+        cfg = load(project_toml=project, user_toml=tmp_path / "u.toml")
+        assert cfg.engine == "webkit"
+
+    def test_project_beats_user_in_precedence_stack(self, tmp_path: Path) -> None:
+        """Precedence check that #177's whole motivation depends on: a
+        project-scope write outranks a user-scope value for the same key.
+        If this ever reversed, `--scope project` becomes a no-op for teams
+        whose members already have a user default set."""
+        from clickcast.config import set_project_value
+
+        user = tmp_path / "user.toml"
+        project = tmp_path / "clickcast.toml"
+        set_user_value("engine", "firefox", user_toml=user)
+        set_project_value("engine", "webkit", project_toml=project)
+        cfg = load(project_toml=project, user_toml=user)
+        assert cfg.engine == "webkit"
+
+    def test_unknown_key_raises(self, tmp_path: Path) -> None:
+        from clickcast.config import set_project_value
+
+        with pytest.raises(KeyError, match="unknown"):
+            set_project_value("nonsense", "x", project_toml=tmp_path / "p.toml")
+
+
 class TestMalformedTomlRaises:
     """Per #151 (PERF-3): a malformed TOML file must not fall back silently.
 
@@ -260,6 +292,70 @@ class TestCliCommands:
         r = runner.invoke(app, ["config", "set", "engine", "firefox"])
         assert r.exit_code == 0, r.output
         assert 'engine = "firefox"' in target.read_text()
+
+    # ------------------------------------------------------------------
+    # #177: `--scope user|project` selects which TOML the write lands in.
+    # ------------------------------------------------------------------
+
+    def test_config_set_scope_project_writes_to_project_toml(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`--scope project` writes to ./clickcast.toml, not the user TOML.
+
+        Verifies both (a) the target file is the project path from
+        ``project_config_path()``, and (b) the user TOML is untouched — so
+        a project-scope write can't accidentally leak into user defaults.
+        """
+        project_target = tmp_path / "clickcast.toml"
+        user_target = tmp_path / "user.toml"
+        monkeypatch.setattr("clickcast.config.config.project_config_path", lambda: project_target)
+        monkeypatch.setattr("clickcast.config.config.user_config_path", lambda: user_target)
+        r = runner.invoke(app, ["config", "set", "engine", "firefox", "--scope", "project"])
+        assert r.exit_code == 0, r.output
+        assert 'engine = "firefox"' in project_target.read_text()
+        assert not user_target.exists(), "user TOML must stay untouched on project-scope write"
+
+    def test_config_set_scope_project_round_trips_via_load(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A project-scope write must be readable through the precedence
+        stack — i.e. `load(project_toml=...)` sees the value we set."""
+        from clickcast.config import load as load_config
+
+        project_target = tmp_path / "clickcast.toml"
+        monkeypatch.setattr("clickcast.config.config.project_config_path", lambda: project_target)
+        monkeypatch.setattr("clickcast.config.config.user_config_path", lambda: tmp_path / "u.toml")
+        r = runner.invoke(app, ["config", "set", "engine", "webkit", "--scope", "project"])
+        assert r.exit_code == 0, r.output
+        cfg = load_config(project_toml=project_target, user_toml=tmp_path / "u.toml")
+        assert cfg.engine == "webkit"
+
+    def test_config_set_scope_defaults_to_user(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Omitting `--scope` writes to the user TOML — preserves the
+        backwards-compat behaviour every existing caller expects."""
+        project_target = tmp_path / "clickcast.toml"
+        user_target = tmp_path / "user.toml"
+        monkeypatch.setattr("clickcast.config.config.project_config_path", lambda: project_target)
+        monkeypatch.setattr("clickcast.config.config.user_config_path", lambda: user_target)
+        r = runner.invoke(app, ["config", "set", "fps", "24"])
+        assert r.exit_code == 0, r.output
+        assert "fps = 24" in user_target.read_text()
+        assert not project_target.exists()
+
+    def test_config_set_scope_invalid_rejected(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An unknown scope value fails cleanly (nonzero exit + red message),
+        rather than silently defaulting to user or crashing on an AttributeError."""
+        monkeypatch.setattr("clickcast.config.config.user_config_path", lambda: tmp_path / "u.toml")
+        monkeypatch.setattr(
+            "clickcast.config.config.project_config_path", lambda: tmp_path / "p.toml"
+        )
+        r = runner.invoke(app, ["config", "set", "engine", "firefox", "--scope", "garbage"])
+        assert r.exit_code != 0
+        assert "scope" in (r.output + (r.stderr or "")).lower()
 
     # ------------------------------------------------------------------
     # #175: `config list` formatting — no Python repr for list / None,

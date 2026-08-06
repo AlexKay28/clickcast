@@ -5,6 +5,7 @@ from clickcast.config.config import (
     get_effective_value,
     load,
     project_config_path,
+    set_project_value,
     set_user_value,
     user_config_path,
 )
@@ -14,6 +15,7 @@ __all__ = [
     "get_effective_value",
     "load",
     "project_config_path",
+    "set_project_value",
     "set_user_value",
     "user_config_path",
 ]
