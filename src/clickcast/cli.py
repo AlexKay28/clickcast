@@ -67,10 +67,16 @@ log = logging.getLogger("clickcast.auto")
 
 
 def _setup_logging(verbose: int) -> None:
-    """Configure root logging for the current command based on -v count.
+    """Configure the ``clickcast`` logger tree based on -v count.
 
     0 → WARNING (default), 1 → INFO (per-click + per-page traces),
     2+ → DEBUG (per-frame + internal wait details).
+
+    Scoped fix for #174: only touches the ``"clickcast"`` logger, never the
+    root logger. Library callers (apps that import clickcast and have their
+    own JSON / structured / Sentry handlers on root) keep their setup
+    intact. The CLI entrypoint :func:`main` installs a stderr handler on
+    root when needed so CLI users still see log output.
     """
     if verbose <= 0:
         level = logging.WARNING
@@ -78,13 +84,31 @@ def _setup_logging(verbose: int) -> None:
         level = logging.INFO
     else:
         level = logging.DEBUG
-    # `force=True` so a second CLI invocation in the same process (tests) can
-    # re-configure without leftover handlers doubling every line.
-    logging.basicConfig(
-        level=level,
-        format="%(levelname)s %(name)s: %(message)s",
-        force=True,
-    )
+    logger = logging.getLogger("clickcast")
+    logger.setLevel(level)
+    # Let records propagate to whatever root logger the embedding app (or
+    # our own :func:`main`) has configured — don't attach a handler here,
+    # or every test / library caller would get one silently bolted on.
+
+
+def _ensure_cli_root_handler() -> None:
+    """Attach a stderr handler to root if the CLI is running bare.
+
+    Called from :func:`main` only. When clickcast is used as a library the
+    embedding app owns root logging; we must not touch it. In CLI mode,
+    though, we still want log output on the terminal — so if root has no
+    handlers at all, install a minimal stderr handler matching the format
+    the pre-#174 ``basicConfig`` call used.
+    """
+    root = logging.getLogger()
+    if root.handlers:
+        return
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
+    root.addHandler(handler)
+    # NOTSET (0) on root lets our scoped clickcast level through unmodified,
+    # while any library logger the user hasn't opted into stays silent.
+    root.setLevel(logging.NOTSET)
 
 
 app = typer.Typer(
@@ -1710,6 +1734,10 @@ def main() -> None:
     start_monotonic = time.monotonic()
     argv = list(sys.argv[1:])
     exit_code = 0
+    # #174: only in CLI mode do we touch root logging — attach a stderr
+    # handler if the process doesn't have one already. Library callers that
+    # invoke Typer commands directly (or `_setup_logging`) never reach this.
+    _ensure_cli_root_handler()
     try:
         app()
     except SystemExit as e:
