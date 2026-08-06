@@ -12,7 +12,6 @@ import inspect
 import json
 import logging
 import re
-import shutil
 import subprocess
 import sys
 import time
@@ -1425,8 +1424,11 @@ def install(
     ] = False,
 ) -> None:
     engine_list = engines or ["chromium"]
-    playwright_bin = shutil.which("playwright") or f"{sys.executable} -m playwright"
-    cmd = [*playwright_bin.split(), "install"]
+    # Always use the venv's playwright module — a system-wide `playwright`
+    # binary on PATH could point at a different playwright version than the
+    # one clickcast imports, causing "Executable doesn't exist" errors when
+    # the runtime tries to launch a browser it never downloaded. (#176)
+    cmd = [sys.executable, "-m", "playwright", "install"]
     if with_deps:
         cmd.append("--with-deps")
     cmd.extend(engine_list)
