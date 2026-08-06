@@ -1119,11 +1119,16 @@ def shot(
     viewport: ViewportArg = "1280x800",
     device: Device = None,
     engine: Engine = "chromium",
+    headful: Headful = False,
+    lang: Lang = None,
     dark: Dark = False,
+    slowmo: Slowmo = 0,
+    verbose: Verbose = 0,
     insecure: Insecure = False,
     header: Header = None,
     header_host: HeaderHost = None,
 ) -> None:
+    _setup_logging(verbose)
     asyncio.run(
         _do_shot(
             url=url,
@@ -1134,9 +1139,10 @@ def shot(
                 engine,
                 viewport,
                 device,
-                False,
-                None,
+                headful,
+                lang,
                 dark,
+                slowmo,
                 insecure=insecure,
                 extra_headers=_parse_header_flags(header),
                 header_host=header_host,
@@ -1260,11 +1266,18 @@ def elements(
         bool, typer.Option("--json", help="Emit machine-readable JSON on stdout.")
     ] = False,
     viewport: ViewportArg = "1280x800",
+    device: Device = None,
     engine: Engine = "chromium",
+    headful: Headful = False,
+    lang: Lang = None,
+    dark: Dark = False,
+    slowmo: Slowmo = 0,
+    verbose: Verbose = 0,
     insecure: Insecure = False,
     header: Header = None,
     header_host: HeaderHost = None,
 ) -> None:
+    _setup_logging(verbose)
     result_elements = asyncio.run(
         _do_elements(
             url=url,
@@ -1272,10 +1285,11 @@ def elements(
             session_kwargs=_session_kwargs(
                 engine,
                 viewport,
-                None,
-                False,
-                None,
-                False,
+                device,
+                headful,
+                lang,
+                dark,
+                slowmo,
                 insecure=insecure,
                 extra_headers=_parse_header_flags(header),
                 header_host=header_host,

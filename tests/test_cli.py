@@ -542,3 +542,161 @@ class TestSetupLoggingScoping:
             assert cc.level == logging.DEBUG
         finally:
             cc.setLevel(saved_cc_level)
+
+
+# ------------------------------------------------------------------
+# #178: `shot` / `elements` symmetry with `auto` / `run`
+# for --headful / --lang / --slowmo / --verbose (+ elements' --device / --dark).
+# ------------------------------------------------------------------
+
+
+class TestShotSymmetryFlags:
+    """`shot` must accept --headful/--lang/--slowmo/--verbose and thread
+    them through to `_session_kwargs` (issue #178)."""
+
+    def test_all_flags_reach_session_kwargs(self, tmp_path: Path) -> None:
+        captured: dict[str, object] = {}
+
+        async def _capture(**kwargs: object) -> None:
+            captured.update(kwargs)
+
+        with patch("clickcast.cli._do_shot", side_effect=_capture):
+            r = runner.invoke(
+                app,
+                [
+                    "shot",
+                    "data:text/html,x",
+                    "--out",
+                    str(tmp_path / "s.png"),
+                    "--headful",
+                    "--slowmo",
+                    "100",
+                    "--lang",
+                    "fr-FR",
+                    "--verbose",
+                ],
+            )
+        assert r.exit_code == 0, r.output
+        sk = captured["session_kwargs"]  # type: ignore[index]
+        assert sk["headful"] is True  # type: ignore[index]
+        assert sk["slowmo"] == 100  # type: ignore[index]
+        assert sk["lang"] == "fr-FR"  # type: ignore[index]
+
+    def test_verbose_sets_clickcast_logger_level(self, tmp_path: Path) -> None:
+        """--verbose on `shot` must bump the clickcast logger like `auto` does."""
+        cc = logging.getLogger("clickcast")
+        saved = cc.level
+        try:
+
+            async def _noop(**_kwargs: object) -> None:
+                return None
+
+            with patch("clickcast.cli._do_shot", side_effect=_noop):
+                r = runner.invoke(
+                    app,
+                    [
+                        "shot",
+                        "data:text/html,x",
+                        "--out",
+                        str(tmp_path / "s.png"),
+                        "-vv",
+                    ],
+                )
+            assert r.exit_code == 0, r.output
+            assert cc.level == logging.DEBUG
+        finally:
+            cc.setLevel(saved)
+
+    def test_defaults_when_no_flags(self, tmp_path: Path) -> None:
+        """Sanity: bare `shot` still yields the pre-#178 default session_kwargs."""
+        captured: dict[str, object] = {}
+
+        async def _capture(**kwargs: object) -> None:
+            captured.update(kwargs)
+
+        with patch("clickcast.cli._do_shot", side_effect=_capture):
+            r = runner.invoke(
+                app,
+                ["shot", "data:text/html,x", "--out", str(tmp_path / "s.png")],
+            )
+        assert r.exit_code == 0, r.output
+        sk = captured["session_kwargs"]  # type: ignore[index]
+        assert sk["headful"] is False  # type: ignore[index]
+        assert sk["slowmo"] == 0  # type: ignore[index]
+        assert sk["lang"] is None  # type: ignore[index]
+        assert sk["dark"] is False  # type: ignore[index]
+
+
+class TestElementsSymmetryFlags:
+    """`elements` must accept --device/--headful/--lang/--dark/--slowmo/--verbose
+    (issue #178). Previously all six were unavailable."""
+
+    def test_all_flags_reach_session_kwargs(self) -> None:
+        captured: dict[str, object] = {}
+
+        async def _capture(**kwargs: object) -> list[object]:
+            captured.update(kwargs)
+            return []
+
+        with patch("clickcast.cli._do_elements", side_effect=_capture):
+            r = runner.invoke(
+                app,
+                [
+                    "elements",
+                    "data:text/html,x",
+                    "--device",
+                    "iPhne 15",  # any string — device is a bare passthrough
+                    "--headful",
+                    "--dark",
+                    "--slowmo",
+                    "50",
+                    "--lang",
+                    "en-US",
+                    "--verbose",
+                ],
+            )
+        # Typer accepts unknown device strings; the CLI just forwards them.
+        assert r.exit_code == 0, r.output
+        sk = captured["session_kwargs"]  # type: ignore[index]
+        assert sk["device"] == "iPhne 15"  # type: ignore[index]
+        assert sk["headful"] is True  # type: ignore[index]
+        assert sk["dark"] is True  # type: ignore[index]
+        assert sk["slowmo"] == 50  # type: ignore[index]
+        assert sk["lang"] == "en-US"  # type: ignore[index]
+
+    def test_verbose_sets_clickcast_logger_level(self) -> None:
+        """--verbose on `elements` must bump the clickcast logger."""
+        cc = logging.getLogger("clickcast")
+        saved = cc.level
+        try:
+
+            async def _noop(**_kwargs: object) -> list[object]:
+                return []
+
+            with patch("clickcast.cli._do_elements", side_effect=_noop):
+                r = runner.invoke(
+                    app,
+                    ["elements", "data:text/html,x", "-vv"],
+                )
+            assert r.exit_code == 0, r.output
+            assert cc.level == logging.DEBUG
+        finally:
+            cc.setLevel(saved)
+
+    def test_defaults_when_no_flags(self) -> None:
+        """Sanity: bare `elements` still yields the pre-#178 defaults."""
+        captured: dict[str, object] = {}
+
+        async def _capture(**kwargs: object) -> list[object]:
+            captured.update(kwargs)
+            return []
+
+        with patch("clickcast.cli._do_elements", side_effect=_capture):
+            r = runner.invoke(app, ["elements", "data:text/html,x"])
+        assert r.exit_code == 0, r.output
+        sk = captured["session_kwargs"]  # type: ignore[index]
+        assert sk["device"] is None  # type: ignore[index]
+        assert sk["headful"] is False  # type: ignore[index]
+        assert sk["lang"] is None  # type: ignore[index]
+        assert sk["dark"] is False  # type: ignore[index]
+        assert sk["slowmo"] == 0  # type: ignore[index]
