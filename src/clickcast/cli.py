@@ -34,13 +34,9 @@ from clickcast.config import (
     Config as ConfigModel,
 )
 from clickcast.config import (
-    get_effective_value,
-    set_user_value,
-    user_config_path,
-)
-from clickcast.config import (
     load as load_config,
 )
+from clickcast.config.cli import config_app
 from clickcast.core.actions import set_dump_elements
 from clickcast.core.opts import BrowserOpts
 from clickcast.core.session import Session
@@ -1507,74 +1503,16 @@ def _find_playwright_engine(engine: str) -> tuple[Path, str] | None:
 
 
 # ==========================================================================
-# clickcast config
+# clickcast config …  (#177)
 # ==========================================================================
 
-
-def _format_value(v: Any) -> str:
-    """Render a config value for ``clickcast config list``.
-
-    Kept in ``cli.py`` because this is a presentation concern — ``config.py``
-    holds the model + loader, and shouldn't know how the CLI wants to display
-    things. Placed above the ``config`` command so the reader sees the
-    formatter next to the only caller.
-
-    Handles the shapes that ``get_effective_value`` can return:
-
-    - non-empty ``list``: ``"; "``-joined, matching the friendlier env-var
-      syntax that the ``_parse_header`` validator accepts for
-      ``CLICKCAST_HEADER`` (see ``config/config.py``). Pasting the output
-      back into the env var round-trips.
-    - empty ``list``: ``"(none)"`` — bare ``[]`` reads as "broken", not
-      "unset".
-    - ``None`` (unset ``Optional``): ``"(unset)"`` — bare ``None`` looks
-      like the literal string.
-    - anything else: ``str(v)``.
-    """
-    if isinstance(v, list):
-        if not v:
-            return "(none)"
-        return "; ".join(str(item) for item in v)
-    if v is None:
-        return "(unset)"
-    return str(v)
-
-
-@app.command(help="Read / write persistent defaults.", epilog=_FEEDBACK_EPILOG)
-def config(
-    action: Annotated[str, typer.Argument(help="path | get | set | list")],
-    key: Annotated[str | None, typer.Argument(help="Config key (for get / set).")] = None,
-    value: Annotated[str | None, typer.Argument(help="Value (for set).")] = None,
-) -> None:
-    if action == "path":
-        typer.echo(str(user_config_path()))
-        return
-    if action == "list":
-        # Auto-width the key column so longer field names (``header_host``)
-        # stay aligned with shorter ones (``fps``). Hardcoding 12 misaligned
-        # any field whose name grew past that during later work — #175.
-        longest = max(len(k) for k in ConfigModel.model_fields)
-        for k in sorted(ConfigModel.model_fields):
-            typer.echo(f"  {k:<{longest}}  {_format_value(get_effective_value(k))}")
-        return
-    if action == "get":
-        if not key:
-            raise typer.BadParameter("`config get` requires a key")
-        try:
-            typer.echo(get_effective_value(key))
-        except KeyError as e:
-            _die(str(e))
-        return
-    if action == "set":
-        if not key or value is None:
-            raise typer.BadParameter("`config set` requires both a key and a value")
-        try:
-            written_to = set_user_value(key, value)
-        except (KeyError, ValueError) as e:
-            _die(str(e))
-        typer.echo(f"✔ {key} = {value}  ({written_to})")
-        return
-    raise typer.BadParameter(f"unknown action {action!r}; expected path | get | set | list")
+# Sub-app: `clickcast config path|list|get|set`. Grouped rather than a
+# single command with a string-dispatched action arg so each subcommand
+# gets its own --help, shell completion sees the valid names, and
+# arg-requirement checks fall out of the Typer signature. See
+# `src/clickcast/config/cli.py` for the command bodies. The list-value
+# formatter that #175 added lives there too, next to its `list_cmd` caller.
+app.add_typer(config_app, name="config")
 
 
 # ==========================================================================
