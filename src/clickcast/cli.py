@@ -1375,6 +1375,35 @@ def _find_playwright_engine(engine: str) -> Path | None:
 # ==========================================================================
 
 
+def _format_value(v: Any) -> str:
+    """Render a config value for ``clickcast config list``.
+
+    Kept in ``cli.py`` because this is a presentation concern — ``config.py``
+    holds the model + loader, and shouldn't know how the CLI wants to display
+    things. Placed above the ``config`` command so the reader sees the
+    formatter next to the only caller.
+
+    Handles the shapes that ``get_effective_value`` can return:
+
+    - non-empty ``list``: ``"; "``-joined, matching the friendlier env-var
+      syntax that the ``_parse_header`` validator accepts for
+      ``CLICKCAST_HEADER`` (see ``config/config.py``). Pasting the output
+      back into the env var round-trips.
+    - empty ``list``: ``"(none)"`` — bare ``[]`` reads as "broken", not
+      "unset".
+    - ``None`` (unset ``Optional``): ``"(unset)"`` — bare ``None`` looks
+      like the literal string.
+    - anything else: ``str(v)``.
+    """
+    if isinstance(v, list):
+        if not v:
+            return "(none)"
+        return "; ".join(str(item) for item in v)
+    if v is None:
+        return "(unset)"
+    return str(v)
+
+
 @app.command(help="Read / write persistent defaults.", epilog=_FEEDBACK_EPILOG)
 def config(
     action: Annotated[str, typer.Argument(help="path | get | set | list")],
@@ -1385,8 +1414,12 @@ def config(
         typer.echo(str(user_config_path()))
         return
     if action == "list":
+        # Auto-width the key column so longer field names (``header_host``)
+        # stay aligned with shorter ones (``fps``). Hardcoding 12 misaligned
+        # any field whose name grew past that during later work — #175.
+        longest = max(len(k) for k in ConfigModel.model_fields)
         for k in sorted(ConfigModel.model_fields):
-            typer.echo(f"  {k:<12}  {get_effective_value(k)}")
+            typer.echo(f"  {k:<{longest}}  {_format_value(get_effective_value(k))}")
         return
     if action == "get":
         if not key:

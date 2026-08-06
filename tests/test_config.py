@@ -263,6 +263,87 @@ class TestCliCommands:
         assert r.exit_code == 0, r.output
         assert 'engine = "firefox"' in target.read_text()
 
+    # ------------------------------------------------------------------
+    # #175: `config list` formatting — no Python repr for list / None,
+    # aligned columns regardless of field-name length.
+    # ------------------------------------------------------------------
+
+    def test_config_list_formats_list_with_semicolons_no_brackets(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A populated list-typed field renders as ``"; "``-joined values,
+        not Python's ``['a', 'b']`` repr. This matches the friendlier env-var
+        syntax that ``_parse_header`` accepts for ``CLICKCAST_HEADER``."""
+        monkeypatch.setenv("CLICKCAST_HEADER", "Authorization: Bearer x; X-Trace: 1")
+        r = runner.invoke(app, ["config", "list"])
+        assert r.exit_code == 0
+        assert "Authorization: Bearer x; X-Trace: 1" in r.stdout
+        # The buggy code printed the Python repr — guard against regression.
+        assert "['Authorization" not in r.stdout
+        assert "'X-Trace: 1'" not in r.stdout
+        assert "[" not in _header_line(r.stdout)
+        assert "]" not in _header_line(r.stdout)
+
+    def test_config_list_formats_empty_list_as_none_marker(self) -> None:
+        """The default ``header = []`` should render as ``(none)``, not
+        the bare ``[]`` that looks like a bug in the output."""
+        r = runner.invoke(app, ["config", "list"])
+        assert r.exit_code == 0
+        line = _header_line(r.stdout)
+        assert "(none)" in line
+        assert "[]" not in line
+
+    def test_config_list_formats_unset_optional_as_unset_marker(self) -> None:
+        """Unset ``Optional`` fields (``lang: str | None = None``) should
+        render as ``(unset)``, not the bare ``None`` string."""
+        r = runner.invoke(app, ["config", "list"])
+        assert r.exit_code == 0
+        lang_line = next(ln for ln in r.stdout.splitlines() if ln.strip().startswith("lang "))
+        assert "(unset)" in lang_line
+        # Bare "None" as the value is the buggy shape — guard against it.
+        # Split on the field name to isolate the value column.
+        value = lang_line.split("lang", 1)[1].strip()
+        assert value == "(unset)"
+
+    def test_config_list_columns_align_across_field_name_lengths(self) -> None:
+        """Short (``fps``), medium (``header``) and long (``header_host``)
+        field names must line up in the value column. The bug hardcoded
+        width 12, which was tight for ``header_host`` (11 chars) and
+        misaligned any field longer than that."""
+        r = runner.invoke(app, ["config", "list"])
+        assert r.exit_code == 0
+        lines = {
+            name: next(ln for ln in r.stdout.splitlines() if ln.strip().startswith(f"{name} "))
+            for name in ("fps", "header", "header_host")
+        }
+        # Value column = first char after the run of spaces that follows the key.
+        starts = {
+            name: len(ln) - len(ln.lstrip(" ")) + len(name) + _count_trailing_spaces(ln, name)
+            for name, ln in lines.items()
+        }
+        assert starts["fps"] == starts["header"] == starts["header_host"], (
+            f"value columns misaligned: {starts!r}\nlines: {lines!r}"
+        )
+
+
+def _header_line(stdout: str) -> str:
+    """Return the ``header`` row from ``clickcast config list`` output.
+
+    Matches ``header`` but not ``header_host`` — key/value output uses a
+    single space between key and value column, so we anchor on the trailing
+    space.
+    """
+    for ln in stdout.splitlines():
+        if ln.strip().startswith("header ") and not ln.strip().startswith("header_host"):
+            return ln
+    raise AssertionError(f"no `header` line in output:\n{stdout}")
+
+
+def _count_trailing_spaces(line: str, name: str) -> int:
+    """Number of padding spaces between the key ``name`` and the value column."""
+    after = line.split(name, 1)[1]
+    return len(after) - len(after.lstrip(" "))
+
 
 # ------------------------------------------------------------------
 # get_effective_value: sanity around all-layers behaviour
