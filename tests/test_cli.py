@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -175,6 +176,26 @@ class TestInstall:
             sp.return_value.returncode = 3
             r = runner.invoke(app, ["install"])
         assert r.exit_code == 3
+
+    def test_ignores_system_playwright_binary(self) -> None:
+        """Regression for #176: a system-wide `playwright` on PATH must not
+        override the venv's playwright module — otherwise `install` fetches
+        browsers for the wrong playwright version.
+        """
+        with (
+            patch("shutil.which", return_value="/usr/local/bin/playwright") as which,
+            patch("clickcast.cli.subprocess.run") as sp,
+        ):
+            sp.return_value.returncode = 0
+            r = runner.invoke(app, ["install", "chromium"])
+        assert r.exit_code == 0
+        argv = sp.call_args.args[0]
+        assert argv == [sys.executable, "-m", "playwright", "install", "chromium"]
+        assert not argv[0].endswith("/playwright")
+        # The fix should not consult shutil.which at all for the invocation,
+        # but tolerate the case where it's called elsewhere — assert the
+        # invocation is correct regardless of what which() would return.
+        _ = which  # silence unused-var lint
 
 
 # ------------------------------------------------------------------
