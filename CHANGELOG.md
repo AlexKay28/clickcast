@@ -7,6 +7,82 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.7] — 2026-08-06
+
+CLI review batch. Backwards-compatible with 0.2.6. Six issues resolved
+from a top-to-bottom review of `src/clickcast/cli.py` (five real bugs,
+one refactor with a UX follow-up). Nothing surface-visible changes for
+existing invocations — every fix either corrects a wrong value that was
+being emitted, unblocks a case that used to fail silently, or moves the
+CLI onto more idiomatic Typer plumbing.
+
+### Fixed
+- **`clickcast install` was picking up a system-wide `playwright` binary
+  over the venv's** (closes [#176]). The old
+  `shutil.which("playwright") or {sys.executable} -m playwright` dispatch
+  meant that a global `playwright` on `PATH` (e.g. from a separate
+  `pip install playwright` or a future brew/apt install per [#170]) would
+  fetch browsers built for a different playwright version than the venv's
+  `import playwright` uses — producing mystery "Executable doesn't exist
+  at ..." errors at runtime. Always uses `[sys.executable, "-m",
+  "playwright", ...]` now; `import shutil` dropped as unused.
+- **`clickcast config list` printed list-typed fields as Python repr**
+  (closes [#175]). The `header` field introduced in 0.2.6 rendered as
+  `['Authorization: Bearer x', 'X-Trace: 1']` and unset optionals rendered
+  as `None`. New `_format_value` helper: non-empty lists render as
+  `"; "`-joined (matches the friendlier env-var syntax `_parse_header`
+  accepts), empty lists as `(none)`, `None` as `(unset)`. Key column
+  auto-widths to the longest field name so `header_host` no longer
+  misaligns.
+- **`clickcast run --emit-events` counted `pages`/`clicks` from the
+  scenario source, not from steps that actually executed** (closes
+  [#172]). A scenario failing at step 3 of 5 still reported 5-worth of
+  pages/clicks in the `tour_complete` JSON event. Counts from
+  `result.results` filtered on `status == "ok"` now. Bonus semantics
+  improvement: `repeat: 3` on a click step now counts as 3 clicks (was
+  1). Cross-checked with `auto`'s emit path.
+- **`_setup_logging(force=True)` destroyed the root-logger config for
+  library callers** (closes [#174]). Any application that imported
+  clickcast alongside its own logging setup (JSON / structured / Sentry)
+  had its handlers silently replaced on first CLI-adjacent code path.
+  Scoped to the `"clickcast"` logger tree; a new
+  `_ensure_cli_root_handler()` runs from `main()` and only attaches a
+  stderr handler if root has none yet. CLI users still see logs;
+  library users keep their handlers.
+- **`clickcast doctor` labeled the Playwright cache DIRECTORY as the
+  browser's "executable path"** (closes [#173]). Users trying to run
+  the printed value got "is a directory" errors. New
+  `_ENGINE_EXECUTABLE_PARTS` mapping (mirrored from Playwright's
+  upstream `EXECUTABLE_PATHS`) resolves the actual binary per engine ×
+  OS (chromium/firefox/webkit on linux/darwin/win32, including
+  chromium's Chrome-for-Testing variant). Fallback labels the install
+  directory as `"install dir"` so novel layouts don't regress doctor to
+  "not installed". Tightened the cache glob to `<prefix>-<numeric>` so
+  `chromium-headless-shell-*` no longer shadows the real chromium
+  install.
+
+### Changed
+- **`clickcast config` converted from a string-dispatched command to a
+  Typer sub-app** (closes [#177]). `config` was the only command using
+  a positional `action` argument with hand-rolled arg-requirement
+  checks per branch. Now:
+  - `clickcast config <TAB>` autocomplete resolves `path` / `list` /
+    `get` / `set`.
+  - Each subcommand has its own `--help` with per-arg docs.
+  - `clickcast config set` gains a **`--scope user|project`** flag —
+    `--scope project` writes to `./clickcast.toml` so a repo can pin a
+    shared default that overrides individual users in the precedence
+    stack (useful for teams without asking each collaborator to edit
+    their user TOML). Default is `user` so every existing invocation
+    keeps working.
+  - New `set_project_value()` peer of `set_user_value()`, both routed
+    through a shared `_write_value_to_toml()` helper so their tomlkit
+    round-trip and coercion semantics can't drift.
+
+  Every existing invocation (`clickcast config path`,
+  `clickcast config get engine`, `clickcast config set engine firefox`)
+  works unchanged.
+
 ## [0.2.6] — 2026-08-05
 
 Internal-host unblock release. Backwards-compatible with 0.2.5. Adds
@@ -1053,3 +1129,10 @@ Initial public release.
 [#151]: https://github.com/AlexKay28/clickcast/issues/151
 [#166]: https://github.com/AlexKay28/clickcast/issues/166
 [#168]: https://github.com/AlexKay28/clickcast/pull/168
+[#170]: https://github.com/AlexKay28/clickcast/issues/170
+[#172]: https://github.com/AlexKay28/clickcast/issues/172
+[#173]: https://github.com/AlexKay28/clickcast/issues/173
+[#174]: https://github.com/AlexKay28/clickcast/issues/174
+[#175]: https://github.com/AlexKay28/clickcast/issues/175
+[#176]: https://github.com/AlexKay28/clickcast/issues/176
+[#177]: https://github.com/AlexKay28/clickcast/issues/177
