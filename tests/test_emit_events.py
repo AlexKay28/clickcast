@@ -11,14 +11,23 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import typer
 from typer.testing import CliRunner
 
 from clickcast.auto import _emit_tour_complete
-from clickcast.cli import _do_auto, app
+from clickcast.cli import _do_auto, _do_run, app
+from clickcast.core.actions import (
+    ActionResult,
+    ClickStep,
+    GotoStep,
+    ScrollStep,
+)
+from clickcast.scenario.scenario import RunResult, Scenario
 from tests._stubs import FakeSession, make_element, make_result
 
 
@@ -210,3 +219,187 @@ class TestCliEmitEventsFlag:
         result = self.runner.invoke(app, ["run", "--help"])
         assert result.exit_code == 0
         assert "--emit-events" in _plain(result.stdout)
+
+
+class TestRunEmitEventsCountsExecutedStepsOnly:
+    """Regression for #172.
+
+    ``clickcast run --emit-events`` used to count ``pages``/``clicks``
+    from the parsed scenario source, so a 5-step scenario that failed at
+    step 3 still reported 5-worth of steps. Count from ``result.results``
+    (executed) instead, filtering on ``status == "ok"`` — consistent with
+    the ``auto`` engine which already reports executed totals.
+    """
+
+    @pytest.mark.asyncio
+    async def test_pages_and_clicks_count_only_executed_ok_steps(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        # 5-step scenario: goto, click, click, click, goto.
+        # Simulate a failure at index 2 (the second click) — only the
+        # first goto + first click actually executed successfully. The
+        # third-through-fifth steps never ran.
+        scenario = Scenario(
+            steps=[
+                GotoStep(url="https://x.example/"),
+                ClickStep(selector="#a"),
+                ClickStep(selector="#b-boom"),
+                ClickStep(selector="#c"),
+                GotoStep(url="https://x.example/next"),
+            ]
+        )
+
+        # Fake results: 2 ok, 1 failed, and nothing after (matches
+        # RunResult semantics — the runner returns on first failure).
+        fake_results = [
+            ActionResult(ok=True, status="ok", action="goto"),
+            ActionResult(ok=True, status="ok", action="click", selector="#a"),
+            ActionResult(
+                ok=False,
+                status="failed",
+                action="click",
+                selector="#b-boom",
+                error="boom",
+            ),
+        ]
+        fake_run_result = RunResult(results=fake_results, failed_at=2)
+
+        # Stub the heavy dependencies inside _do_run so the test doesn't
+        # need a real browser or ffmpeg — but keep _do_run itself under
+        # test (per #172: assert the emit-events block, don't stub it).
+        fake_enc = MagicMock()
+        fake_enc.path = tmp_path / "reel.gif"
+        fake_enc.format = "gif"
+        fake_enc.size_bytes = 1024
+        fake_enc.frame_count = 10
+        fake_enc.duration_s = 1.0
+
+        class _FakeRecorder:
+            def __init__(self, *_a: Any, **_kw: Any) -> None:
+                self.frames_dir = tmp_path / "frames"
+                self.frames_dir.mkdir(exist_ok=True)
+
+            def __enter__(self) -> _FakeRecorder:
+                return self
+
+            def __exit__(self, *_a: Any) -> None:
+                return None
+
+            def flush(self) -> list[Any]:
+                return []
+
+        with (
+            patch(
+                "clickcast.cli.run_scenario",
+                AsyncMock(return_value=fake_run_result),
+            ),
+            patch("clickcast.cli.Recorder", _FakeRecorder),
+            patch("clickcast.cli.annotate_frames_dir"),
+            patch("clickcast.cli.encode", return_value=fake_enc),
+            pytest.raises(typer.Exit),
+        ):
+            # _do_run raises typer.Exit(1) on a failed scenario.
+            # Not what we're testing; we care about the emitted JSON,
+            # which is printed BEFORE the raise.
+            await _do_run(
+                scenario=scenario,
+                out=str(tmp_path / "reel.gif"),
+                format_=None,
+                no_sidecar=True,
+                emit_events=True,
+            )
+
+        stdout = capsys.readouterr().out
+        json_lines = [line for line in stdout.splitlines() if line.strip().startswith("{")]
+        assert json_lines, f"no JSON line in stdout:\n{stdout}"
+        payload = json.loads(json_lines[-1])
+        assert payload["event"] == "tour_complete"
+        # ONLY 1 goto and 1 click actually ran successfully — the failed
+        # click and the never-executed remaining steps must NOT be counted.
+        assert payload["pages"] == 1, (
+            f"pages should count only executed 'goto' steps with status=='ok', "
+            f"got {payload['pages']} (bug #172)"
+        )
+        assert payload["clicks"] == 1, (
+            f"clicks should count only executed 'click'/'dblclick' steps with "
+            f"status=='ok', got {payload['clicks']} (bug #172)"
+        )
+
+    @pytest.mark.asyncio
+    async def test_skipped_optional_steps_not_counted(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        # A scenario with an optional click that got skipped (status=='skipped').
+        # Skipped steps must not inflate the clicks total either — same fix.
+        scenario = Scenario(
+            steps=[
+                GotoStep(url="https://x.example/"),
+                ClickStep(selector="#missing", optional=True),
+                ScrollStep(by=200),
+            ]
+        )
+        fake_results = [
+            ActionResult(ok=True, status="ok", action="goto"),
+            ActionResult(
+                ok=True,
+                status="skipped",
+                action="click",
+                selector="#missing",
+                skip_reason="locator_missing",
+            ),
+            ActionResult(ok=True, status="ok", action="scroll"),
+        ]
+        fake_run_result = RunResult(results=fake_results, failed_at=None)
+
+        fake_enc = MagicMock()
+        fake_enc.path = tmp_path / "reel.gif"
+        fake_enc.format = "gif"
+        fake_enc.size_bytes = 1024
+        fake_enc.frame_count = 10
+        fake_enc.duration_s = 1.0
+
+        class _FakeRecorder:
+            def __init__(self, *_a: Any, **_kw: Any) -> None:
+                self.frames_dir = tmp_path / "frames"
+                self.frames_dir.mkdir(exist_ok=True)
+
+            def __enter__(self) -> _FakeRecorder:
+                return self
+
+            def __exit__(self, *_a: Any) -> None:
+                return None
+
+            def flush(self) -> list[Any]:
+                return []
+
+        with (
+            patch(
+                "clickcast.cli.run_scenario",
+                AsyncMock(return_value=fake_run_result),
+            ),
+            patch("clickcast.cli.Recorder", _FakeRecorder),
+            patch("clickcast.cli.annotate_frames_dir"),
+            patch("clickcast.cli.encode", return_value=fake_enc),
+        ):
+            await _do_run(
+                scenario=scenario,
+                out=str(tmp_path / "reel.gif"),
+                format_=None,
+                no_sidecar=True,
+                emit_events=True,
+            )
+
+        stdout = capsys.readouterr().out
+        json_lines = [line for line in stdout.splitlines() if line.strip().startswith("{")]
+        assert json_lines, f"no JSON line in stdout:\n{stdout}"
+        payload = json.loads(json_lines[-1])
+        # 1 goto ok, 1 click SKIPPED, 1 scroll ok → clicks should be 0.
+        assert payload["pages"] == 1
+        assert payload["clicks"] == 0, (
+            f"skipped optional click must not count toward clicks total, "
+            f"got {payload['clicks']} (bug #172)"
+        )
