@@ -10,7 +10,13 @@ import pytest
 from typer.testing import CliRunner
 
 from clickcast import __version__
-from clickcast.cli import _parse_viewport, _run_doctor_checks, _setup_logging, app
+from clickcast.cli import (
+    _find_playwright_engine,
+    _parse_viewport,
+    _run_doctor_checks,
+    _setup_logging,
+    app,
+)
 
 runner = CliRunner()
 
@@ -145,6 +151,128 @@ class TestDoctor:
         data = json.loads(r.stdout)
         assert "checks" in data
         assert isinstance(data["checks"], list)
+
+
+# ------------------------------------------------------------------
+# _find_playwright_engine — issue #173: must resolve real executables,
+# not just hand back the version-cache directory.
+# ------------------------------------------------------------------
+
+
+class TestFindPlaywrightEngine:
+    """Regression coverage for #173.
+
+    The old implementation returned e.g. ``~/.cache/ms-playwright/chromium-1092``
+    and labeled it "executable path" — but that's a directory. These tests
+    build a fake ms-playwright cache under ``tmp_path``, redirect the lookup
+    via ``Path.home``, and assert we resolve to the actual binary file.
+    """
+
+    def _touch(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"")
+
+    def test_chromium_resolves_to_linux_binary(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("clickcast.cli.sys.platform", "linux")
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+        # Build both x64 and arm64 layouts so the platform-agnostic lookup is
+        # unambiguous — either "chrome-linux" or "chrome-linux64" is correct
+        # depending on arch. We ship the CFT x64 layout which is what the
+        # candidate list tries first on linux.
+        exe = tmp_path / ".cache" / "ms-playwright" / "chromium-1234" / "chrome-linux64" / "chrome"
+        self._touch(exe)
+        found = _find_playwright_engine("chromium")
+        assert found is not None
+        path, kind = found
+        assert path == exe
+        assert path.is_file()
+        assert kind == "executable"
+
+    def test_chromium_falls_back_to_linux_arm64_layout(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("clickcast.cli.sys.platform", "linux")
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+        exe = tmp_path / ".cache" / "ms-playwright" / "chromium-1234" / "chrome-linux" / "chrome"
+        self._touch(exe)
+        found = _find_playwright_engine("chromium")
+        assert found is not None
+        path, kind = found
+        assert path == exe
+        assert kind == "executable"
+
+    def test_firefox_resolves_to_linux_binary(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("clickcast.cli.sys.platform", "linux")
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+        exe = tmp_path / ".cache" / "ms-playwright" / "firefox-9999" / "firefox" / "firefox"
+        self._touch(exe)
+        found = _find_playwright_engine("firefox")
+        assert found is not None
+        path, kind = found
+        assert path == exe
+        assert path.is_file()
+        assert kind == "executable"
+
+    def test_webkit_resolves_to_pw_run_launcher(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("clickcast.cli.sys.platform", "linux")
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+        exe = tmp_path / ".cache" / "ms-playwright" / "webkit-2000" / "pw_run.sh"
+        self._touch(exe)
+        found = _find_playwright_engine("webkit")
+        assert found is not None
+        path, kind = found
+        assert path == exe
+        assert path.is_file()
+        assert kind == "executable"
+
+    def test_missing_cache_returns_none(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("clickcast.cli.sys.platform", "linux")
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+        assert _find_playwright_engine("chromium") is None
+
+    def test_novel_layout_falls_back_to_install_dir_with_clear_label(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A future Playwright release ships an install dir but none of the
+        # known executable sub-paths exist. Doctor must not lie: report the
+        # install dir and clearly label it as such.
+        monkeypatch.setattr("clickcast.cli.sys.platform", "linux")
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+        install = tmp_path / ".cache" / "ms-playwright" / "chromium-9999"
+        install.mkdir(parents=True)
+        (install / "some-new-layout.txt").write_bytes(b"")
+        found = _find_playwright_engine("chromium")
+        assert found is not None
+        path, kind = found
+        assert path == install
+        assert kind == "install dir"
+
+    def test_chromium_does_not_match_headless_shell_dir(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # `chromium-headless-shell-*` shares the "chromium" prefix but has a
+        # different executable layout. The old glob would swallow it and then
+        # fail to find `chrome-linux/chrome` inside. Ensure our lookup only
+        # considers real `chromium-<version>` install dirs.
+        monkeypatch.setattr("clickcast.cli.sys.platform", "linux")
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+        cache = tmp_path / ".cache" / "ms-playwright"
+        (cache / "chromium-headless-shell-1500").mkdir(parents=True)
+        exe = cache / "chromium-1000" / "chrome-linux64" / "chrome"
+        self._touch(exe)
+        found = _find_playwright_engine("chromium")
+        assert found is not None
+        path, kind = found
+        assert path == exe
+        assert kind == "executable"
 
 
 # ------------------------------------------------------------------
