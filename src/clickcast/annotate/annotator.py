@@ -11,6 +11,8 @@ from typing import Literal
 
 from PIL import Image, ImageDraw, ImageFont
 
+from clickcast.annotate.grid import GridConfig, draw_grid
+
 __all__ = [
     "ActionsPanelStyle",
     "AnnotateConfig",
@@ -218,6 +220,12 @@ class AnnotateConfig:
     progress_style: ProgressStyle = field(default_factory=ProgressStyle)
     panel: ActionsPanelStyle = field(default_factory=ActionsPanelStyle)
     target: TargetHighlightStyle = field(default_factory=TargetHighlightStyle)
+    # Pixel-grid overlay for AI-agent spatial understanding (#171). Off
+    # unless the caller sets ``grid.enabled=True`` (or a GridConfig
+    # instance whose ``enabled`` is True). The pipeline layer renders the
+    # grid AFTER any zoom pass and BEFORE the click / cursor / label
+    # layers, so overlay signals stay legible over the grid.
+    grid: GridConfig | None = None
 
 
 def _load_font(config: AnnotateConfig) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
@@ -332,6 +340,15 @@ class Annotator:
             while len(self._cursor_history) > history_cap:
                 self._cursor_history.pop(0)
 
+        # Grid overlay comes right after the raw content — before every
+        # click / cursor / label layer, so those signals sit on top of the
+        # grid and stay legible (see #171). The layer order per the issue
+        # is content → grid → highlights → arrows → labels. `canvas` is
+        # already RGBA at this point, so draw_grid mutates it in place;
+        # reassigning defensively covers a future refactor where the
+        # base image mode changes.
+        if self.config.grid is not None and self.config.grid.enabled:
+            canvas = draw_grid(canvas, self.config.grid)
         if self.config.progress:
             self._draw_progress(canvas, step_index, total_steps)
         if self.config.target_highlight and target_bbox is not None:

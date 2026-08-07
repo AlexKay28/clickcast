@@ -1,5 +1,24 @@
 {
   "$defs": {
+    "AnnotateMetadata": {
+      "additionalProperties": false,
+      "description": "Annotator-side render params attached to the sidecar (#171).\n\nCurrently carries only :attr:`grid` — the pixel-grid overlay's params.\nKept as its own model so future annotator features (highlight, cursor\nstyle, etc.) can grow a peer field without another top-level break.",
+      "properties": {
+        "grid": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GridMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "AnnotateMetadata",
+      "type": "object"
+    },
     "ComponentNode": {
       "additionalProperties": false,
       "description": "A stable DOM subtree that appears on ≥ 2 ``PageNode`` entries.\n\nDeduped across pages by ``dom_signature`` — same primary-nav rendered on\n/pricing and /docs surfaces exactly one ``ComponentNode``. Empty list in\nthe v2-shipped-first slice (see :class:`PageNode.components`).",
@@ -247,6 +266,36 @@
         }
       },
       "title": "Graph",
+      "type": "object"
+    },
+    "GridMetadata": {
+      "additionalProperties": false,
+      "description": "Coordinate-grid render params carried on the sidecar (#171).\n\nWhen the reel was rendered with the ``--grid`` overlay, the sidecar\nsurfaces the parameters the grid was drawn with so agents parsing the\nreel know the coordinate system (pitch = major-line spacing, style =\n``\"full\"`` vs ``\"ruler\"``, color = the RGBA hex used for the major\nlines and labels). Absent from the sidecar when the grid was off.",
+      "properties": {
+        "pitch": {
+          "minimum": 1,
+          "title": "Pitch",
+          "type": "integer"
+        },
+        "style": {
+          "default": "full",
+          "enum": [
+            "full",
+            "ruler"
+          ],
+          "title": "Style",
+          "type": "string"
+        },
+        "color": {
+          "title": "Color",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pitch",
+        "color"
+      ],
+      "title": "GridMetadata",
       "type": "object"
     },
     "Media": {
@@ -523,7 +572,7 @@
       "type": "object"
     }
   },
-  "description": "AI-feedback sidecar — the primary contract for downstream agents.\n\nDeliberately does NOT set ``extra=\"forbid\"`` at the top level so #29 Track\nC can add a ``graph`` block without a breaking schema change. The nested\nmodels above DO forbid extras — those shapes are stable.\n\nv2 added the optional ``graph`` block. v3 (this release) adds two\noptional per-step gates: :attr:`StepReport.skip_reason` (see #151 AI-2)\nand :attr:`StepReport.error_code` (see #151 AI-5). Both default to\n``None`` so v1 / v2 sidecars round-trip through the v3 model\nunchanged: every added field is optional, no shape was removed.",
+  "description": "AI-feedback sidecar — the primary contract for downstream agents.\n\nDeliberately does NOT set ``extra=\"forbid\"`` at the top level so #29 Track\nC can add a ``graph`` block without a breaking schema change. The nested\nmodels above DO forbid extras — those shapes are stable.\n\nv2 added the optional ``graph`` block. v3 (this release) adds two\noptional per-step gates: :attr:`StepReport.skip_reason` (see #151 AI-2)\nand :attr:`StepReport.error_code` (see #151 AI-5). Both default to\n``None`` so v1 / v2 sidecars round-trip through the v3 model\nunchanged: every added field is optional, no shape was removed.\n\nv3 also gained an optional :attr:`annotate` block carrying the grid\noverlay's render params (#171). Absent when the grid was off, so v1\n/ v2 sidecars still round-trip.",
   "properties": {
     "schema_version": {
       "default": 3,
@@ -613,6 +662,17 @@
       "anyOf": [
         {
           "$ref": "#/$defs/Graph"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "annotate": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AnnotateMetadata"
         },
         {
           "type": "null"

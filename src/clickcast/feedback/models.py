@@ -240,6 +240,36 @@ class Graph(BaseModel):
     edges: list[Edge] = Field(default_factory=list)
 
 
+class GridMetadata(BaseModel):
+    """Coordinate-grid render params carried on the sidecar (#171).
+
+    When the reel was rendered with the ``--grid`` overlay, the sidecar
+    surfaces the parameters the grid was drawn with so agents parsing the
+    reel know the coordinate system (pitch = major-line spacing, style =
+    ``"full"`` vs ``"ruler"``, color = the RGBA hex used for the major
+    lines and labels). Absent from the sidecar when the grid was off.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    pitch: int = Field(ge=1)
+    style: Literal["full", "ruler"] = "full"
+    color: str
+
+
+class AnnotateMetadata(BaseModel):
+    """Annotator-side render params attached to the sidecar (#171).
+
+    Currently carries only :attr:`grid` — the pixel-grid overlay's params.
+    Kept as its own model so future annotator features (highlight, cursor
+    style, etc.) can grow a peer field without another top-level break.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    grid: GridMetadata | None = None
+
+
 class Report(BaseModel):
     """AI-feedback sidecar — the primary contract for downstream agents.
 
@@ -252,6 +282,10 @@ class Report(BaseModel):
     and :attr:`StepReport.error_code` (see #151 AI-5). Both default to
     ``None`` so v1 / v2 sidecars round-trip through the v3 model
     unchanged: every added field is optional, no shape was removed.
+
+    v3 also gained an optional :attr:`annotate` block carrying the grid
+    overlay's render params (#171). Absent when the grid was off, so v1
+    / v2 sidecars still round-trip.
     """
 
     # No extra="forbid" here — see docstring above.
@@ -270,6 +304,7 @@ class Report(BaseModel):
     errors: list[str] = Field(default_factory=list)
     feedback: Feedback | None = None
     graph: Graph | None = None
+    annotate: AnnotateMetadata | None = None
 
 
 class StepAssertion(BaseModel):

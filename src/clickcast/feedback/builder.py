@@ -6,15 +6,17 @@ import time
 from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 from clickcast.core.actions import ActionResult, BaseStep
 from clickcast.feedback.collector import PageStateCollector
 from clickcast.feedback.graph import build_graph
 from clickcast.feedback.models import (
+    AnnotateMetadata,
     DiscoveredElement,
     ErrorCode,
     Graph,
+    GridMetadata,
     Media,
     Report,
     SkipReason,
@@ -30,6 +32,7 @@ def _package_version() -> str:
 
 
 if TYPE_CHECKING:
+    from clickcast.annotate.grid import GridConfig
     from clickcast.core.session import Session
     from clickcast.discovery import Element
 
@@ -61,12 +64,33 @@ class ReportBuilder:
         self._collector: PageStateCollector | None = None
         self._started_at = datetime.now(timezone.utc).isoformat()
         self._start_mono = time.monotonic()
+        # #171: grid overlay params (pitch/style/color) recorded when the
+        # reel was rendered with ``--grid``. ``None`` when the grid was
+        # off — the sidecar then omits the ``annotate`` block entirely.
+        self._grid: GridMetadata | None = None
 
     def attach(self, session: Session) -> None:
         """Wire the collector to the session — call once, at the start.
         Since #98 the collector uses Session's narrow event surface
         (``session.on/off``) instead of reaching through ``session.page``."""
         self._collector = PageStateCollector(session)
+
+    def set_grid(self, grid: GridConfig) -> None:
+        """Attach the grid overlay's render params to the sidecar (#171).
+
+        The sidecar's ``annotate.grid`` block reflects the pitch, style,
+        and color the reel was actually rendered with — so an agent
+        parsing the reel knows the coordinate system it's measuring
+        against. No-op-safe: pass a disabled :class:`GridConfig` (or
+        just don't call this method) and the block stays absent.
+        """
+        if not grid.enabled:
+            return
+        # ``grid.style`` is already ``Literal["full", "ruler"]`` in GridConfig,
+        # but we normalise defensively so a caller who passed a bare ``str``
+        # (bypassing the type checker) still lands on a valid enum.
+        style: Literal["full", "ruler"] = "ruler" if grid.style == "ruler" else "full"
+        self._grid = GridMetadata(pitch=grid.pitch, style=style, color=grid.color)
 
     def set_discovered(self, elements: list[Element]) -> None:
         self._discovered = [
@@ -144,6 +168,10 @@ class ReportBuilder:
         except Exception as exc:  # pragma: no cover — defensive
             self._warnings.append(f"graph build failed: {exc!r}")
 
+        annotate_block: AnnotateMetadata | None = None
+        if self._grid is not None:
+            annotate_block = AnnotateMetadata(grid=self._grid)
+
         report = Report(
             clickcast_version=_package_version(),
             url=self._url,
@@ -157,6 +185,7 @@ class ReportBuilder:
             warnings=self._warnings,
             errors=self._errors,
             graph=graph,
+            annotate=annotate_block,
         )
         # Detach page listeners so the collector doesn't outlive the builder.
         # Idempotent — safe to call even if we were never attached.
