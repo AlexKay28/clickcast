@@ -17,6 +17,7 @@ from clickcast.feedback.builder import ReportBuilder
 from clickcast.feedback.collector import PageStateCollector
 from clickcast.feedback.graph import build_graph, dom_signature
 from clickcast.feedback.models import (
+    AnnotateMetadata,
     Assertions,
     ComponentNode,
     DiscoveredElement,
@@ -24,6 +25,7 @@ from clickcast.feedback.models import (
     Feedback,
     FeedbackTemplate,
     Graph,
+    GridMetadata,
     Media,
     PageNode,
     PageState,
@@ -38,6 +40,7 @@ from clickcast.feedback.redact import strip_query_strings as _strip_query_string
 __all__ = [
     "ASSERTIONS_SCHEMA_VERSION",
     "Advisory",
+    "AnnotateMetadata",
     "Assertions",
     "ComponentNode",
     "DiscoveredElement",
@@ -45,6 +48,7 @@ __all__ = [
     "Feedback",
     "FeedbackTemplate",
     "Graph",
+    "GridMetadata",
     "Media",
     "PageNode",
     "PageState",

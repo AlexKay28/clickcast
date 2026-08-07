@@ -154,6 +154,16 @@ class Config(BaseSettings):
     loop: int = 0
     # #166: internal / SSO-protected sites.
     insecure: bool = False
+    # #171: pixel-grid overlay for AI-agent spatial understanding. Off by
+    # default; enable via ``CLICKCAST_GRID=1`` (or ``--grid`` on ``auto`` /
+    # ``run``) to give downstream agents a coordinate reference on every
+    # frame. ``grid_pitch`` sets major-line spacing; ``grid_color`` is the
+    # RGBA hex; ``grid_style`` picks between full gridlines + labels
+    # (``"full"``) and edge-strip labels only (``"ruler"``).
+    grid: bool = False
+    grid_pitch: int = 100
+    grid_color: str = "#FFFFFF33"
+    grid_style: str = "full"
     # ``NoDecode`` tells pydantic-settings to hand the raw env-var string to
     # our field_validator below instead of trying to JSON-decode it first
     # (which fails on the friendlier ``"Name: value"`` scalar form).

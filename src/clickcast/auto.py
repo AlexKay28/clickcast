@@ -592,6 +592,11 @@ async def run_tour(cfg: AutoConfig) -> None:
                 viewport=cfg.session_kwargs.get("viewport"),
             )
             builder.attach(sess)
+            # #171: surface the grid overlay's render params on the sidecar
+            # so agents parsing the reel know the coordinate system it was
+            # rendered with. No-op when the grid is disabled.
+            if cfg.annotate.grid is not None:
+                builder.set_grid(cfg.annotate.grid)
 
         with Recorder(fps=cfg.fps, default_dwell=cfg.dwell) as rec:
             step_annotations: dict[int, StepAnnotation] = {}

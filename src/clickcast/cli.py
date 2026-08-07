@@ -27,7 +27,12 @@ import typer
 from platformdirs import user_config_dir
 
 from clickcast import __version__
-from clickcast.annotate import AnnotateConfig, StepAnnotation, annotate_frames_dir
+from clickcast.annotate import (
+    AnnotateConfig,
+    GridConfig,
+    StepAnnotation,
+    annotate_frames_dir,
+)
 from clickcast.auto import AutoConfig, run_tour
 from clickcast.capture import Recorder
 from clickcast.config import (
@@ -247,6 +252,45 @@ HeaderHost = Annotated[
         ),
     ),
 ]
+# #171: pixel-grid overlay flags. Off by default across every command that
+# accepts them (`auto`, `run`); the `shot` command exposes the same flags
+# so the help stays discoverable, but v1 does not composite the grid onto
+# a single screenshot — noted in the help text. See `_do_shot`.
+Grid = Annotated[
+    bool,
+    typer.Option(
+        "--grid",
+        help=(
+            "Overlay a pixel-grid on every frame so AI-agent consumers can "
+            "measure distances by reading coordinate labels instead of "
+            "counting pixels. Off by default."
+        ),
+    ),
+]
+GridPitch = Annotated[
+    int,
+    typer.Option(
+        "--grid-pitch",
+        help="Major-line spacing in px (default 100). Minor lines at pitch/10.",
+    ),
+]
+GridColor = Annotated[
+    str,
+    typer.Option(
+        "--grid-color",
+        help="RGBA hex, e.g. #FFFFFF33 (white @ 20% opacity, the default).",
+    ),
+]
+GridStyle = Annotated[
+    str,
+    typer.Option(
+        "--grid-style",
+        help=(
+            "full | ruler (default full). full = major+minor gridlines + edge "
+            "labels; ruler = edge labels only, no gridlines."
+        ),
+    ),
+]
 # #151 (AI-4) — machine-readable summary line after the shipped prose
 # summary. JSONL-friendly (one object per line, no trailing prose).
 EmitEvents = Annotated[
@@ -381,6 +425,36 @@ def _write_sidecar(
         strip_query_strings=strip_query_strings,
     )
     return sidecar
+
+
+def _build_grid_config(
+    enabled: bool,
+    pitch: int,
+    color: str,
+    style: str,
+) -> GridConfig | None:
+    """Turn the CLI grid flags into a :class:`GridConfig` (or ``None``).
+
+    Validates ``pitch`` and ``style`` early with :class:`typer.BadParameter`
+    so bad input surfaces with the same red-message treatment as other CLI
+    misuse. Returns ``None`` when the grid is disabled — mirrors the
+    ``AnnotateConfig.grid`` field, whose ``None`` means "off, don't build".
+    """
+    if not enabled:
+        return None
+    if pitch <= 0:
+        raise typer.BadParameter(f"--grid-pitch must be > 0, got {pitch}")
+    if style not in ("full", "ruler"):
+        raise typer.BadParameter(f"--grid-style must be 'full' or 'ruler', got {style!r}")
+    # Validate the color string here (rather than deferring to the annotator)
+    # so bad input fails BEFORE the browser launches — much nicer feedback loop.
+    from clickcast.annotate.grid import parse_rgba_hex
+
+    try:
+        parse_rgba_hex(color)
+    except ValueError as e:
+        raise typer.BadParameter(f"--grid-color: {e}") from e
+    return GridConfig(enabled=True, pitch=pitch, color=color, style=style)  # type: ignore[arg-type]
 
 
 def _compile_redact_patterns(raw: list[str] | None) -> list[re.Pattern[str]]:
@@ -684,6 +758,10 @@ def auto(
     insecure: Insecure = False,
     header: Header = None,
     header_host: HeaderHost = None,
+    grid: Grid = False,
+    grid_pitch: GridPitch = 100,
+    grid_color: GridColor = "#FFFFFF33",
+    grid_style: GridStyle = "full",
 ) -> None:
     _setup_logging(verbose)
     set_dump_elements(dump_elements)
@@ -693,6 +771,7 @@ def auto(
         _die(f"--pace must be one of {sorted(_PACE_TABLE)}, got {pace!r}")
     compiled_redacts = _compile_redact_patterns(redact_pattern)
     extra_headers = _parse_header_flags(header)
+    grid_cfg = _build_grid_config(grid, grid_pitch, grid_color, grid_style)
 
     # --for-humans composite: flip the sub-flags to human defaults, but ONLY
     # for sub-flags the user did not explicitly type on the command line.
@@ -762,6 +841,7 @@ def auto(
             title_card=title_card,
             summary_card=summary_card,
             emit_events=emit_events,
+            grid=grid_cfg,
         )
     )
 
@@ -795,12 +875,13 @@ async def _do_auto(
     title_card: bool = False,
     summary_card: bool = False,
     emit_events: bool = False,
+    grid: GridConfig | None = None,
 ) -> None:
     # The AutoConfig.target_highlight flag drives recorder-side padding +
     # bbox lookup; the annotator itself needs its own toggle so the layer
     # actually renders. Keep the two in lockstep here so a shipped caller
     # that flips one always gets the other.
-    annotate = AnnotateConfig(target_highlight=target_highlight)
+    annotate = AnnotateConfig(target_highlight=target_highlight, grid=grid)
     await run_tour(
         AutoConfig(
             url=url,
@@ -875,9 +956,14 @@ def run(
     insecure: Insecure = False,
     header: Header = None,
     header_host: HeaderHost = None,
+    grid: Grid = False,
+    grid_pitch: GridPitch = 100,
+    grid_color: GridColor = "#FFFFFF33",
+    grid_style: GridStyle = "full",
 ) -> None:
     set_dump_elements(dump_elements)
     compiled_redacts = _compile_redact_patterns(redact_pattern)
+    grid_cfg = _build_grid_config(grid, grid_pitch, grid_color, grid_style)
     variables: dict[str, str] = {}
     for pair in var or []:
         if "=" not in pair:
@@ -947,6 +1033,7 @@ def run(
             redact_patterns=compiled_redacts,
             strip_query_strings=strip_query_strings,
             emit_events=emit_events,
+            grid=grid_cfg,
         )
     )
 
@@ -1013,6 +1100,7 @@ async def _do_run(
     redact_patterns: list[re.Pattern[str]] | None = None,
     strip_query_strings: bool = False,
     emit_events: bool = False,
+    grid: GridConfig | None = None,
 ) -> None:
     builder: ReportBuilder | None = None
     if not no_sidecar:
@@ -1024,14 +1112,21 @@ async def _do_run(
             except (TypeError, ValueError):
                 viewport_list = None
         builder = ReportBuilder(engine=scenario.meta.engine, viewport=viewport_list)
+        if grid is not None:
+            builder.set_grid(grid)
 
+    annotate_cfg = AnnotateConfig(grid=grid) if grid is not None else None
     with Recorder(fps=scenario.meta.fps, default_dwell=scenario.meta.dwell) as rec:
         result = await run_scenario(scenario, recorder=rec, builder=builder)
         rec.flush()
         # Overlays for scenario reels — same pipeline as `auto`. Every executed
         # step maps to one recorder step_index (repeat counts multiply); walk
         # them in parallel with `result.results` to build per-step annotations.
-        annotate_frames_dir(rec.frames_dir, steps=_scenario_step_annotations(scenario, result))
+        annotate_frames_dir(
+            rec.frames_dir,
+            steps=_scenario_step_annotations(scenario, result),
+            config=annotate_cfg,
+        )
         out_path = Path(out)
         enc = encode(
             rec.frames_dir,
@@ -1127,8 +1222,13 @@ def shot(
     insecure: Insecure = False,
     header: Header = None,
     header_host: HeaderHost = None,
+    grid: Grid = False,
+    grid_pitch: GridPitch = 100,
+    grid_color: GridColor = "#FFFFFF33",
+    grid_style: GridStyle = "full",
 ) -> None:
     _setup_logging(verbose)
+    grid_cfg = _build_grid_config(grid, grid_pitch, grid_color, grid_style)
     asyncio.run(
         _do_shot(
             url=url,
@@ -1147,6 +1247,7 @@ def shot(
                 extra_headers=_parse_header_flags(header),
                 header_host=header_host,
             ),
+            grid=grid_cfg,
         )
     )
 
@@ -1158,6 +1259,7 @@ async def _do_shot(
     full_page: bool,
     wait: str,
     session_kwargs: dict[str, Any],
+    grid: GridConfig | None = None,
 ) -> None:
     async with Session(**session_kwargs) as sess:
         wait_value: str | float
@@ -1169,6 +1271,19 @@ async def _do_shot(
         out_path = Path(out)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         await sess.screenshot(path=out_path, full_page=full_page)
+    # #171: apply the grid overlay to the saved screenshot. Kept as a
+    # separate post-screenshot pass so the shot pipeline stays a single
+    # file on disk — the annotator's frame-manifest machinery is overkill
+    # for one image.
+    if grid is not None:
+        from PIL import Image
+
+        from clickcast.annotate.grid import draw_grid
+
+        with Image.open(out_path) as img:
+            img.load()
+            gridded = draw_grid(img.convert("RGBA"), grid)
+        gridded.convert("RGB").save(out_path, format="PNG")
     typer.echo(f"✔ {out_path} ({out_path.stat().st_size // 1024} KB)")
 
 
