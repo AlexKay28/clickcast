@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.9] — 2026-08-07
+
+Agent-spatial-reasoning release. Backwards-compatible. Adds a
+pixel-grid annotation layer so AI agents consuming reels and
+screenshots can measure distances in the image instead of counting
+pixels by eye or hitting the DOM. Sidecar bumps v3 additively:
+new optional `annotate` block records the grid params the reel was
+rendered with.
+
+### Added
+- **Pixel-grid overlay** (closes [#171]). New `--grid` flag on
+  `shot` / `auto` / `run`, plus `--grid-pitch`, `--grid-color`,
+  `--grid-style`. Two styles:
+  - `full` (default): major gridlines every N pixels (default 100)
+    + minor gridlines every N/10 + coordinate labels along the top
+    and left edges. White @ 20% opacity by default so the grid
+    doesn't dominate the image.
+  - `ruler`: coordinate labels only, no gridlines — for agents that
+    just need the coordinate system without the visual density.
+
+  Wired through `Config` (`CLICKCAST_GRID`, `CLICKCAST_GRID_PITCH`,
+  `CLICKCAST_GRID_COLOR`, `CLICKCAST_GRID_STYLE`) so an agent can
+  export the settings once and every command picks them up.
+
+  Layer order: `content → grid → highlights → arrows → labels` —
+  grid draws BEHIND click highlights / sticky arrows / cursors so
+  they stay legible over it. Compatible with `--zoom-on-click`:
+  grid renders on the zoomed frame, so labels reflect the current
+  image coordinates (test locks this contract).
+
+  Sidecar now carries an optional `annotate.grid` block
+  (`{pitch, style, color}`) when the grid was rendered — agents
+  parsing a reel know the coordinate system without inspecting the
+  image.
+
+  Implementation is a pure-Pillow module at
+  `src/clickcast/annotate/grid.py`; no dependency changes.
+
 ## [0.2.8] — 2026-08-07
 
 Follow-up polish over 0.2.7. Backwards-compatible. Single change: closes
@@ -1158,3 +1196,4 @@ Initial public release.
 [#176]: https://github.com/AlexKay28/clickcast/issues/176
 [#177]: https://github.com/AlexKay28/clickcast/issues/177
 [#178]: https://github.com/AlexKay28/clickcast/issues/178
+[#171]: https://github.com/AlexKay28/clickcast/issues/171
