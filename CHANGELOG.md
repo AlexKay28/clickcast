@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.8] — 2026-08-07
+
+Follow-up polish over 0.2.7. Backwards-compatible. Single change: closes
+the last flag-parity gap left over from the CLI review in 0.2.7 so every
+session-producing command accepts the same browser-behaviour +
+observability flags.
+
+### Changed
+- **`shot` and `elements` now accept `--headful`, `--lang`, `--slowmo`,
+  `--verbose`** (closes [#178]). `elements` additionally gains
+  `--device` and `--dark`. Before this release, both commands hardcoded
+  those args to defaults, so a user hitting a flaky page with either
+  command had no way to flip to headful, crank slowmo, or get verbose
+  traces without switching to `auto` / `run`. Now the four
+  session-producing commands (`auto`, `run`, `shot`, `elements`) share
+  the same flag surface. `_setup_logging(verbose)` fires at the top of
+  each command body, matching the `auto` pattern. No changes to
+  `_session_kwargs` or `BrowserOpts` — the pre-existing plumbing
+  already accepted these fields; the commands just weren't exposing
+  them.
+
 ## [0.2.7] — 2026-08-06
 
 CLI review batch. Backwards-compatible with 0.2.6. Six issues resolved
@@ -1136,3 +1157,4 @@ Initial public release.
 [#175]: https://github.com/AlexKay28/clickcast/issues/175
 [#176]: https://github.com/AlexKay28/clickcast/issues/176
 [#177]: https://github.com/AlexKay28/clickcast/issues/177
+[#178]: https://github.com/AlexKay28/clickcast/issues/178
