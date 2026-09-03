@@ -38,6 +38,28 @@ On Linux CI you'll need the system libs Chromium depends on:
 clickcast install --with-deps chromium
 ```
 
+### Homebrew (macOS/Linux)
+
+```bash
+brew install --build-from-source ./Formula/clickcast.rb   # works today, clone this repo first
+brew install AlexKay28/clickcast/clickcast                # tap not bootstrapped yet -- see docs/packaging/homebrew.md
+```
+
+### apt (Debian/Ubuntu, `.deb`)
+
+```bash
+bash scripts/build_deb.sh 0.2.9 && sudo dpkg -i dist-deb/clickcast_0.2.9_amd64.deb   # works today, clone this repo first
+sudo apt install clickcast                                                           # hosted repo not bootstrapped yet -- see docs/packaging/apt.md
+```
+
+Both native packages skip the Chromium download (~180MB, versioned
+independently of clickcast) and never install a second `ffmpeg` (clickcast
+already bundles one via `imageio[ffmpeg]`) -- run `clickcast install
+--with-deps chromium` once after either install path. Full design rationale,
+what's live today vs. what needs one-time bootstrapping, and the exact
+bootstrap steps: [`docs/packaging/homebrew.md`](docs/packaging/homebrew.md),
+[`docs/packaging/apt.md`](docs/packaging/apt.md).
+
 ---
 
 ## For AI agents — copy this prompt into your chat
