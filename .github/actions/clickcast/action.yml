@@ -1,0 +1,407 @@
+name: 'clickcast'
+description: >-
+  Record a clickcast reel (a scenario replay or auto-discovered tour), gate
+  it against a committed baseline (structural `assertions` + optional
+  pixel-level `diff`), and post/update a single PR comment with the reel GIF
+  and a summary table. Wraps `clickcast install` -> `run`/`auto` ->
+  `assertions --baseline` -> `diff` -- see docs/ci/README.md for the full
+  writeup and an example workflow.
+author: 'clickcast'
+branding:
+  icon: 'film'
+  color: 'purple'
+
+inputs:
+  scenario:
+    description: >-
+      Path to a clickcast scenario YAML, driving `clickcast run`. Set this
+      OR `url` (scenario wins if both are set).
+    required: false
+    default: ''
+  url:
+    description: >-
+      Target URL for `clickcast auto` (auto-discovery mode). Only used when
+      `scenario` is not set.
+    required: false
+    default: ''
+  out:
+    description: 'Output path for the reel. Default: reel.gif'
+    required: false
+    default: 'reel.gif'
+  vars:
+    description: >-
+      Newline-separated `KEY=VALUE` pairs, passed as repeated `--var
+      KEY=VALUE` to `clickcast run` -- scenario mode only, e.g. to point a
+      scenario written against `{{ base_url }}` at a PR preview URL or a
+      locally-served fixture. Ignored in `auto`/`url` mode.
+    required: false
+    default: ''
+  baseline:
+    description: >-
+      Path to a committed, DISTILLED assertions baseline -- the output of
+      `clickcast assertions <sidecar> > baseline.json`, not a raw sidecar.
+      When set, runs `clickcast assertions <this run's sidecar> --baseline
+      <this file>` as a structural regression gate (step count / action /
+      label / status / error counters). See README.md's "CI: 2-line
+      regression gate" section for how to bootstrap this file.
+    required: false
+    default: ''
+  baseline-sidecar:
+    description: >-
+      Path to a committed baseline RUN sidecar (a raw `<name>.json` sidecar,
+      typically captured with `clickcast run --format frames` so its frame
+      PNGs are real files on disk, not just referenced by a GIF) for the
+      pixel-level `clickcast diff` gate. The sidecar's frame PNGs MUST be
+      committed alongside it -- either in a `frames/` directory next to the
+      sidecar JSON, or wherever its own `media.path` points, relative to the
+      sidecar's own directory. The distilled `baseline` JSON above has no
+      pixels in it and cannot be used for this. When set, this action makes
+      a SECOND `--format frames` capture of the current run (in addition to
+      the primary reel capture) so it has real frame files to diff against.
+    required: false
+    default: ''
+  diff-threshold:
+    description: >-
+      Per-pixel channel-delta cutoff (0-255) for `clickcast diff
+      --threshold`. Empty = clickcast's own default.
+    required: false
+    default: ''
+  diff-fail-above:
+    description: >-
+      Percent-changed cutoff for `clickcast diff --fail-above`. Empty runs
+      the diff gate in report-only mode (it always exits 0, comment still
+      shows the percentages).
+    required: false
+    default: ''
+  clickcast-version:
+    description: >-
+      Pinned clickcast version to install (e.g. "0.3.0"). Pin this in
+      consuming workflows too, per Action semver conventions -- see
+      docs/ci/README.md.
+    required: false
+    default: '0.3.0'
+  install:
+    description: >-
+      Whether this action should install clickcast + the browser engine
+      itself (`pip install clickcast==<clickcast-version>` +
+      `clickcast install`, with the usual Playwright cache). Set to "false"
+      when a prior step in your job already put a working `clickcast` on
+      PATH with its browser installed -- e.g. this repo's own
+      clickcast-self-check.yml, which installs clickcast FROM SOURCE
+      (`pip install -e .`) to dogfood the branch under test rather than a
+      published PyPI release.
+    required: false
+    default: 'true'
+  engine:
+    description: 'Browser engine to install and drive: chromium | firefox | webkit.'
+    required: false
+    default: 'chromium'
+  python-version:
+    description: 'Python version for actions/setup-python.'
+    required: false
+    default: '3.12'
+  post-comment:
+    description: >-
+      Post/update a single PR comment (upserted by a hidden marker, so
+      re-runs update it in place) with the reel + assertions/diff summary.
+      Only takes effect on `pull_request` events; requires `pull-requests:
+      write` (and `contents: write` if you want the reel image published to
+      the `clickcast-media` branch for inline rendering -- see below). Set
+      to "false" to skip commenting and only produce outputs.
+    required: false
+    default: 'true'
+  publish-reel-image:
+    description: >-
+      Push the reel GIF to an orphan `clickcast-media` branch in this repo
+      and embed it inline in the PR comment via a raw-content URL (GitHub
+      renders `.gif` image links inline in comment bodies -- there is no
+      public REST/GraphQL endpoint to attach a binary file directly to an
+      issue/PR comment the way the web UI's drag-and-drop does). Requires
+      `contents: write`, and only works for same-repo PRs (a fork PR's
+      GITHUB_TOKEN is read-only, so this step is skipped with a warning,
+      not a failure). Set to "false" to skip and reference the workflow's
+      uploaded artifact instead.
+    required: false
+    default: 'true'
+  github-token:
+    description: 'Token used for the PR comment and (optionally) the media-branch push.'
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  sidecar-path:
+    description: 'Path to the primary reel sidecar JSON (`<out>.json`).'
+    value: ${{ steps.run.outputs.sidecar-path }}
+  reel-path:
+    description: 'Path to the produced reel (GIF/MP4/WebP).'
+    value: ${{ steps.run.outputs.reel-path }}
+  assertions-passed:
+    description: '"true" / "false" / "" (assertions gate not run) -- structural gate result.'
+    value: ${{ steps.assertions.outputs.passed }}
+  diff-summary-path:
+    description: 'Path to the visual-diff `summary.json`, when the diff gate ran.'
+    value: ${{ steps.diff.outputs.summary-path }}
+  diff-worst-pct:
+    description: 'Highest per-step changed_pct from the visual diff, when it ran.'
+    value: ${{ steps.diff.outputs.worst-pct }}
+  diff-passed:
+    description: '"true" / "false" / "" (diff gate not run, or ran report-only) -- visual gate result.'
+    value: ${{ steps.diff.outputs.passed }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Validate inputs
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ -z "${{ inputs.scenario }}" ] && [ -z "${{ inputs.url }}" ]; then
+          echo "::error::clickcast action: set either 'scenario' or 'url'." >&2
+          exit 1
+        fi
+
+    - uses: actions/setup-python@v5
+      if: inputs.install == 'true'
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache: pip
+
+    - name: Install clickcast
+      if: inputs.install == 'true'
+      shell: bash
+      run: pip install "clickcast==${{ inputs.clickcast-version }}"
+
+    # Same two-part cache-key strategy as this repo's own ci.yml (see the
+    # comment there about issue #43 item 3): key on the RESOLVED playwright
+    # version, not the pinned clickcast version, so a clickcast release that
+    # bumps its playwright pin busts the cache instead of reusing a stale
+    # browser bundle and hitting "Executable doesn't exist at ..." at
+    # runtime.
+    - name: Resolve Playwright version
+      id: pw-version
+      if: inputs.install == 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        v=$(python -c "from importlib.metadata import version; print(version('playwright'))")
+        echo "version=$v" >> "$GITHUB_OUTPUT"
+
+    - name: Cache Playwright browsers
+      id: pw-cache
+      if: inputs.install == 'true'
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/ms-playwright
+          ~/Library/Caches/ms-playwright
+        key: clickcast-action-playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}-${{ inputs.engine }}
+
+    # Symmetric cache-hit/miss branches, mirroring ci.yml: a hit only needs
+    # the (fast) system deps re-applied, a miss needs the full ~180MB
+    # browser download too.
+    - name: Install Playwright system deps (cache hit)
+      if: inputs.install == 'true' && steps.pw-cache.outputs.cache-hit == 'true'
+      shell: bash
+      run: python -m playwright install-deps ${{ inputs.engine }}
+
+    - name: Install Playwright + engine (cache miss)
+      if: inputs.install == 'true' && steps.pw-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: clickcast install --with-deps ${{ inputs.engine }}
+
+    - name: Run reel
+      id: run
+      shell: bash
+      run: |
+        set -euo pipefail
+        var_args=()
+        if [ -n "${{ inputs.vars }}" ]; then
+          while IFS= read -r kv; do
+            [ -z "$kv" ] && continue
+            var_args+=(--var "$kv")
+          done <<< "${{ inputs.vars }}"
+        fi
+        if [ -n "${{ inputs.scenario }}" ]; then
+          clickcast run "${{ inputs.scenario }}" --out "${{ inputs.out }}" "${var_args[@]}"
+        else
+          clickcast auto "${{ inputs.url }}" --out "${{ inputs.out }}" --engine "${{ inputs.engine }}"
+        fi
+        echo "reel-path=${{ inputs.out }}" >> "$GITHUB_OUTPUT"
+        echo "sidecar-path=${{ inputs.out }}.json" >> "$GITHUB_OUTPUT"
+
+    # Nonzero `clickcast assertions --baseline` exit means real structural
+    # drift. We deliberately do NOT let that fail this step outright (`set
+    # +e` + capture the code ourselves): the PR comment below should still
+    # show the failure instead of the job dying silently before it can post
+    # anything. The "Gate on results" step at the end fails the Action for
+    # real once the comment (if any) has gone out.
+    - name: Structural assertions gate
+      id: assertions
+      if: inputs.baseline != ''
+      shell: bash
+      run: |
+        set +e
+        clickcast assertions "${{ steps.run.outputs.sidecar-path }}" \
+          --baseline "${{ inputs.baseline }}" --json \
+          > "${{ runner.temp }}/clickcast-assertions.json"
+        code=$?
+        set -e
+        if [ "$code" -eq 0 ]; then echo "passed=true" >> "$GITHUB_OUTPUT"; else echo "passed=false" >> "$GITHUB_OUTPUT"; fi
+        echo "result-path=${{ runner.temp }}/clickcast-assertions.json" >> "$GITHUB_OUTPUT"
+        cat "${{ runner.temp }}/clickcast-assertions.json"
+
+    # Frames are only persisted to disk when `--format frames` is used (the
+    # default gif/mp4/webp encoders consume the recorder's frame buffer and
+    # discard it) -- so a second capture is the only way to get real pixels
+    # for `clickcast diff` without changing what the primary `out` reel
+    # looks like. See action.yml's `baseline-sidecar` input docs above.
+    - name: Capture frames for visual diff
+      id: diff-capture
+      if: inputs.baseline-sidecar != ''
+      shell: bash
+      run: |
+        set -euo pipefail
+        var_args=()
+        if [ -n "${{ inputs.vars }}" ]; then
+          while IFS= read -r kv; do
+            [ -z "$kv" ] && continue
+            var_args+=(--var "$kv")
+          done <<< "${{ inputs.vars }}"
+        fi
+        FRAMES_OUT="${{ runner.temp }}/clickcast-diff-frames"
+        if [ -n "${{ inputs.scenario }}" ]; then
+          clickcast run "${{ inputs.scenario }}" --format frames --out "$FRAMES_OUT" "${var_args[@]}"
+        else
+          clickcast auto "${{ inputs.url }}" --format frames --out "$FRAMES_OUT" --engine "${{ inputs.engine }}"
+        fi
+        echo "sidecar-path=$FRAMES_OUT.json" >> "$GITHUB_OUTPUT"
+
+    # Same "capture, don't fail outright" pattern as the assertions gate
+    # above -- see its comment.
+    - name: Visual diff gate
+      id: diff
+      if: inputs.baseline-sidecar != ''
+      shell: bash
+      run: |
+        set +e
+        args=(diff "${{ steps.diff-capture.outputs.sidecar-path }}" "${{ inputs.baseline-sidecar }}" --out "${{ runner.temp }}/clickcast-diff")
+        if [ -n "${{ inputs.diff-threshold }}" ]; then args+=(--threshold "${{ inputs.diff-threshold }}"); fi
+        if [ -n "${{ inputs.diff-fail-above }}" ]; then args+=(--fail-above "${{ inputs.diff-fail-above }}"); fi
+        clickcast "${args[@]}"
+        code=$?
+        set -e
+        summary="${{ runner.temp }}/clickcast-diff/summary.json"
+        echo "summary-path=$summary" >> "$GITHUB_OUTPUT"
+        if [ -n "${{ inputs.diff-fail-above }}" ]; then
+          if [ "$code" -eq 0 ]; then echo "passed=true" >> "$GITHUB_OUTPUT"; else echo "passed=false" >> "$GITHUB_OUTPUT"; fi
+        else
+          echo "passed=" >> "$GITHUB_OUTPUT"
+        fi
+        if [ -f "$summary" ]; then
+          worst=$(python -c "import json; d=json.load(open('$summary')); print(max((s['changed_pct'] for s in d.get('steps', [])), default=0.0))")
+        else
+          worst="0.0"
+        fi
+        echo "worst-pct=$worst" >> "$GITHUB_OUTPUT"
+
+    # Best-effort: push the reel GIF to an orphan `clickcast-media` branch
+    # so the PR comment can embed it with a raw-content URL and have GitHub
+    # render it inline (see `publish-reel-image` input docs). A fork PR's
+    # token can't push here -- that's expected, not an error, so failures
+    # are swallowed into a warning and the comment step falls back to
+    # linking the uploaded artifact instead.
+    - name: Publish reel image
+      id: publish-image
+      if: inputs.publish-reel-image == 'true' && inputs.post-comment == 'true' && github.event_name == 'pull_request'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        set -eo pipefail
+        REEL="${{ steps.run.outputs.reel-path }}"
+        case "$REEL" in
+          /*) REEL_ABS="$REEL" ;;
+          *) REEL_ABS="${{ github.workspace }}/$REEL" ;;
+        esac
+        REPO="${{ github.repository }}"
+        BRANCH="clickcast-media"
+        DEST_REL="pr-${{ github.event.pull_request.number }}/${{ github.run_id }}-$(basename "$REEL")"
+        WORKDIR="${{ runner.temp }}/clickcast-media-push"
+        rm -rf "$WORKDIR" && mkdir -p "$WORKDIR"
+        publish_failed=0
+        (
+          set -e
+          cd "$WORKDIR"
+          git init -q
+          git config user.name "clickcast-ci[bot]"
+          git config user.email "clickcast-ci@users.noreply.github.com"
+          REMOTE="https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+          if git fetch --depth 1 "$REMOTE" "refs/heads/$BRANCH" 2>/dev/null; then
+            git checkout -q FETCH_HEAD -b "$BRANCH"
+          else
+            git checkout -q --orphan "$BRANCH"
+            git rm -rf -q . 2>/dev/null || true
+          fi
+          mkdir -p "$(dirname "$DEST_REL")"
+          cp "$REEL_ABS" "$DEST_REL"
+          git add "$DEST_REL"
+          git commit -q -m "clickcast reel: PR #${{ github.event.pull_request.number }} run ${{ github.run_id }}"
+          git push -q "$REMOTE" "HEAD:refs/heads/$BRANCH"
+        ) || publish_failed=1
+        if [ "$publish_failed" -eq 1 ]; then
+          echo "::warning::clickcast action: could not publish the reel image to the '$BRANCH' branch (likely a fork PR with a read-only token) -- the PR comment will note the reel is available as a workflow artifact instead."
+          echo "url=" >> "$GITHUB_OUTPUT"
+        else
+          echo "url=https://raw.githubusercontent.com/${REPO}/${BRANCH}/${DEST_REL}" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Upload reel as workflow artifact
+      if: inputs.post-comment == 'true' && github.event_name == 'pull_request'
+      uses: actions/upload-artifact@v4
+      with:
+        name: clickcast-reel-${{ github.run_id }}
+        path: |
+          ${{ steps.run.outputs.reel-path }}
+          ${{ steps.run.outputs.sidecar-path }}
+        retention-days: 30
+
+    - name: Post / update PR comment
+      if: inputs.post-comment == 'true' && github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      env:
+        REEL_IMAGE_URL: ${{ steps.publish-image.outputs.url }}
+        REEL_PATH: ${{ steps.run.outputs.reel-path }}
+        ASSERTIONS_BASELINE_SET: ${{ inputs.baseline != '' }}
+        ASSERTIONS_PASSED: ${{ steps.assertions.outputs.passed }}
+        ASSERTIONS_RESULT_PATH: ${{ steps.assertions.outputs.result-path }}
+        DIFF_BASELINE_SET: ${{ inputs.baseline-sidecar != '' }}
+        DIFF_PASSED: ${{ steps.diff.outputs.passed }}
+        DIFF_SUMMARY_PATH: ${{ steps.diff.outputs.summary-path }}
+        DIFF_FAIL_ABOVE: ${{ inputs.diff-fail-above }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const script = require('${{ github.action_path }}/scripts/post_comment.js');
+          await script({ github, context, core });
+
+    # The comment (if any) has gone out by now with the real pass/fail
+    # status baked in -- fail the Action for real here, once, instead of
+    # letting the assertions/diff steps above die outright and skip the
+    # comment. `always()` so this still runs (and still gates) even if an
+    # earlier step in this sequence failed unexpectedly.
+    - name: Gate on assertions / diff result
+      if: always()
+      shell: bash
+      run: |
+        set -uo pipefail
+        fail=0
+        if [ "${{ steps.assertions.outputs.passed }}" = "false" ]; then
+          echo "::error::clickcast assertions found drift against the baseline (${{ inputs.baseline }})"
+          fail=1
+        fi
+        if [ "${{ steps.diff.outputs.passed }}" = "false" ]; then
+          echo "::error::clickcast diff exceeded --fail-above ${{ inputs.diff-fail-above }} against the baseline (${{ inputs.baseline-sidecar }})"
+          fail=1
+        fi
+        exit "$fail"

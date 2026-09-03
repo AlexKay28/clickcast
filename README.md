@@ -440,6 +440,13 @@ See [`docs/ai-integration.md`](docs/ai-integration.md) for the two-line agent-in
 
 ## CI: 2-line regression gate
 
+On GitHub Actions? [`.github/actions/clickcast`](.github/actions/clickcast/action.yml)
+packages this recipe (plus the visual `diff` gate below, browser caching,
+and a PR comment with the reel + a summary table) as a reusable Action —
+see [`docs/ci/README.md`](docs/ci/README.md). This section stays the
+canonical recipe for every other CI platform, and for anyone who'd rather
+not depend on a third-party Action for two lines of shell.
+
 Every reel writes a JSON sidecar, but raw sidecars carry timestamps, frame
 filenames, and query-string tokens — none of which are stable across runs.
 For a proper CI regression gate, use `clickcast assertions` (or
