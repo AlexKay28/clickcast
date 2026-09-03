@@ -1,0 +1,129 @@
+name: Update Homebrew tap
+
+# Fires after `release.yml`'s `gh-release` job creates a real (non-prerelease)
+# GitHub release. Renders `Formula/clickcast.rb` for the new version (sdist
+# URL + sha256 looked up from PyPI) and pushes it to the AlexKay28/homebrew-clickcast
+# tap repo, so `brew install AlexKay28/clickcast/clickcast` picks it up.
+#
+# Requires the `HOMEBREW_TAP_TOKEN` secret (a PAT with `contents:write` on
+# the tap repo) -- see docs/packaging/homebrew.md's "One-time bootstrap"
+# section. Until that's configured, this workflow still renders the formula
+# and uploads it as a build artifact (so it can be inspected / pushed
+# manually), it just skips the push step.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "clickcast version to publish (e.g. 0.3.0). Defaults to the triggering release's tag."
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  bump-formula:
+    # workflow_dispatch has no `release` context (`github.event.release` is
+    # null there, and `!null` is true), so this only actually filters the
+    # `release` trigger -- which release.yml only fires for non-prerelease
+    # tags in the first place. Kept as a belt-and-braces guard.
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    steps:
+      # The `secrets` context isn't available in `if:` conditionals at all
+      # (job- or step-level) -- https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability.
+      # Route it through a step output instead, and gate later steps on that.
+      - name: Check for tap token
+        id: check-secret
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -n "$HOMEBREW_TAP_TOKEN" ]; then
+            echo "has_token=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Resolve version
+        id: version
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          VERSION="$INPUT_VERSION"
+          if [ -z "$VERSION" ]; then
+            VERSION="${RELEASE_TAG#v}"
+          fi
+          if [ -z "$VERSION" ]; then
+            echo "::error::no version resolved -- pass workflow_dispatch input 'version' or trigger via a release"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for PyPI to serve this version
+        # scripts/homebrew_formula.py needs the sdist URL + sha256 from
+        # PyPI's JSON API; this release event fires only after release.yml's
+        # `release` job (PyPI upload) already succeeded, but the index can
+        # lag by a few seconds. Same polling shape as release.yml's
+        # smoke-test job.
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 20); do
+            if curl -sf "https://pypi.org/pypi/clickcast/${VERSION}/json" >/dev/null; then
+              echo "clickcast==${VERSION} visible on PyPI after ${i} attempts"
+              exit 0
+            fi
+            echo "attempt $i/20: clickcast==${VERSION} not yet on PyPI; sleeping 5s..."
+            sleep 5
+          done
+          echo "::error::PyPI never served clickcast==${VERSION} within 100s"
+          exit 1
+
+      - name: Render formula
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: python scripts/homebrew_formula.py "$VERSION" --out /tmp/clickcast.rb
+
+      - name: Upload rendered formula
+        uses: actions/upload-artifact@v4
+        with:
+          name: clickcast-formula-${{ steps.version.outputs.version }}
+          path: /tmp/clickcast.rb
+
+      - name: Push formula to AlexKay28/homebrew-clickcast
+        if: ${{ steps.check-secret.outputs.has_token == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/AlexKay28/homebrew-clickcast.git" /tmp/tap
+          mkdir -p /tmp/tap/Formula
+          cp /tmp/clickcast.rb /tmp/tap/Formula/clickcast.rb
+          cd /tmp/tap
+          git config user.name "clickcast-release-bot"
+          git config user.email "actions@github.com"
+          if git diff --quiet -- Formula/clickcast.rb; then
+            echo "formula for ${VERSION} unchanged in tap repo; nothing to push"
+            exit 0
+          fi
+          git add Formula/clickcast.rb
+          git commit -m "clickcast ${VERSION}"
+          git push origin HEAD:main
+
+      - name: Tap not bootstrapped yet
+        if: ${{ steps.check-secret.outputs.has_token == 'false' }}
+        run: |
+          echo "::warning::HOMEBREW_TAP_TOKEN is not set -- skipping push to AlexKay28/homebrew-clickcast."
+          echo "The rendered formula was still uploaded as a workflow artifact."
+          echo "See docs/packaging/homebrew.md for the one-time bootstrap steps."
