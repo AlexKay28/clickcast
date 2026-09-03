@@ -1,0 +1,10 @@
+meta:
+  name: pixel-visual-diff demo — run (dark mode toggled)
+steps:
+  - goto: https://react.dev/
+    wait: networkidle
+    label: Open homepage
+  - click: "role=button[name=\"Use Dark Mode\"]"
+    label: Toggle dark mode (the "regression")
+  - wait: 1.0
+  - screenshot: {}

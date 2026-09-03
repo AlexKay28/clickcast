@@ -1,0 +1,290 @@
+[
+  {
+    "selector": "role=link[name=\"React\"]",
+    "role": "link",
+    "text": "React",
+    "bbox": [
+      16,
+      8,
+      48,
+      48
+    ],
+    "score": 3,
+    "source": "dom-heuristic",
+    "accessibility": {
+      "selector": "role=link[name=\"React\"]",
+      "bbox": [
+        16,
+        8,
+        48,
+        48
+      ],
+      "score": 3,
+      "role": "link",
+      "name": "React",
+      "state": {
+        "disabled": null,
+        "checked": null,
+        "expanded": null,
+        "pressed": null,
+        "selected": null
+      },
+      "grid_cell": [
+        0,
+        0
+      ]
+    }
+  },
+  {
+    "selector": "role=button[name=\"Use Dark Mode\"]",
+    "role": "button",
+    "text": "Use Dark Mode",
+    "bbox": [
+      1116,
+      8,
+      48,
+      48
+    ],
+    "score": 3,
+    "source": "dom-heuristic",
+    "accessibility": {
+      "selector": "role=button[name=\"Use Dark Mode\"]",
+      "bbox": [
+        1116,
+        8,
+        48,
+        48
+      ],
+      "score": 3,
+      "role": "button",
+      "name": "Use Dark Mode",
+      "state": {
+        "disabled": null,
+        "checked": null,
+        "expanded": null,
+        "pressed": null,
+        "selected": null
+      },
+      "grid_cell": [
+        22,
+        0
+      ]
+    }
+  },
+  {
+    "selector": "role=link[name=\"Translations\"]",
+    "role": "link",
+    "text": "Translations",
+    "bbox": [
+      1164,
+      8,
+      48,
+      48
+    ],
+    "score": 3,
+    "source": "dom-heuristic",
+    "accessibility": {
+      "selector": "role=link[name=\"Translations\"]",
+      "bbox": [
+        1164,
+        8,
+        48,
+        48
+      ],
+      "score": 3,
+      "role": "link",
+      "name": "Translations",
+      "state": {
+        "disabled": null,
+        "checked": null,
+        "expanded": null,
+        "pressed": null,
+        "selected": null
+      },
+      "grid_cell": [
+        23,
+        0
+      ]
+    }
+  },
+  {
+    "selector": "role=link[name=\"Open on GitHub\"]",
+    "role": "link",
+    "text": "Open on GitHub",
+    "bbox": [
+      1212,
+      8,
+      48,
+      48
+    ],
+    "score": 3,
+    "source": "dom-heuristic",
+    "accessibility": {
+      "selector": "role=link[name=\"Open on GitHub\"]",
+      "bbox": [
+        1212,
+        8,
+        48,
+        48
+      ],
+      "score": 3,
+      "role": "link",
+      "name": "Open on GitHub",
+      "state": {
+        "disabled": null,
+        "checked": null,
+        "expanded": null,
+        "pressed": null,
+        "selected": null
+      },
+      "grid_cell": [
+        24,
+        0
+      ]
+    }
+  },
+  {
+    "selector": "role=link[name=\"v19.2\"]",
+    "role": "link",
+    "text": "v19.2",
+    "bbox": [
+      68,
+      9,
+      32,
+      46
+    ],
+    "score": 3,
+    "source": "dom-heuristic",
+    "accessibility": {
+      "selector": "role=link[name=\"v19.2\"]",
+      "bbox": [
+        68,
+        9,
+        32,
+        46
+      ],
+      "score": 3,
+      "role": "link",
+      "name": "v19.2",
+      "state": {
+        "disabled": null,
+        "checked": null,
+        "expanded": null,
+        "pressed": null,
+        "selected": null
+      },
+      "grid_cell": [
+        1,
+        0
+      ]
+    }
+  },
+  {
+    "selector": "role=link[name=\"Learn\"]",
+    "role": "link",
+    "text": "Learn",
+    "bbox": [
+      750,
+      11,
+      66,
+      42
+    ],
+    "score": 3,
+    "source": "dom-heuristic",
+    "accessibility": {
+      "selector": "role=link[name=\"Learn\"]",
+      "bbox": [
+        750,
+        11,
+        66,
+        42
+      ],
+      "score": 3,
+      "role": "link",
+      "name": "Learn",
+      "state": {
+        "disabled": null,
+        "checked": null,
+        "expanded": null,
+        "pressed": null,
+        "selected": null
+      },
+      "grid_cell": [
+        15,
+        0
+      ]
+    }
+  },
+  {
+    "selector": "role=link[name=\"Reference\"]",
+    "role": "link",
+    "text": "Reference",
+    "bbox": [
+      822,
+      11,
+      100,
+      42
+    ],
+    "score": 3,
+    "source": "dom-heuristic",
+    "accessibility": {
+      "selector": "role=link[name=\"Reference\"]",
+      "bbox": [
+        822,
+        11,
+        100,
+        42
+      ],
+      "score": 3,
+      "role": "link",
+      "name": "Reference",
+      "state": {
+        "disabled": null,
+        "checked": null,
+        "expanded": null,
+        "pressed": null,
+        "selected": null
+      },
+      "grid_cell": [
+        16,
+        0
+      ]
+    }
+  },
+  {
+    "selector": "role=link[name=\"Community\"] >> nth=0",
+    "role": "link",
+    "text": "Community",
+    "bbox": [
+      928,
+      11,
+      109,
+      42
+    ],
+    "score": 3,
+    "source": "dom-heuristic",
+    "accessibility": {
+      "selector": "role=link[name=\"Community\"] >> nth=0",
+      "bbox": [
+        928,
+        11,
+        109,
+        42
+      ],
+      "score": 3,
+      "role": "link",
+      "name": "Community",
+      "state": {
+        "disabled": null,
+        "checked": null,
+        "expanded": null,
+        "pressed": null,
+        "selected": null
+      },
+      "grid_cell": [
+        18,
+        0
+      ]
+    }
+  }
+]
