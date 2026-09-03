@@ -348,3 +348,83 @@ class Assertions(BaseModel):
     schema_version: int = 1
     step_count: int = Field(ge=0)
     steps: list[StepAssertion] = Field(default_factory=list)
+
+
+class BBox(BaseModel):
+    """A pixel bounding box, ``(x, y, width, height)`` — top-left anchored.
+
+    Mirrors the ``(x, y, width, height)`` convention already used elsewhere
+    in the codebase (:attr:`DiscoveredElement.bbox`,
+    :meth:`~clickcast.annotate.annotator.Annotator.annotate`'s
+    ``target_bbox``), so a bbox read out of a visual-diff report lines up
+    with bboxes read out of the rest of the sidecar without a conversion.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    x: int = Field(ge=0)
+    y: int = Field(ge=0)
+    width: int = Field(gt=0)
+    height: int = Field(gt=0)
+
+
+class UnmatchedStep(BaseModel):
+    """A run or baseline step that :func:`clickcast.feedback.visual_diff.visual_diff`
+    could not pair with a counterpart on the other side.
+
+    See :mod:`clickcast.feedback.visual_diff` for the full pairing algorithm
+    (index-first, label-fallback) — this model is the "flag it, don't
+    silently skip it" half of that design (#202).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    side: Literal["run", "baseline"]
+    index: int = Field(ge=0)
+    label: str | None = None
+    reason: str
+
+
+class StepVisualDiff(BaseModel):
+    """Pixel-diff result for one paired (run step, baseline step).
+
+    ``run_index`` / ``baseline_index`` are usually equal (the common,
+    index-paired case) but can diverge when the two sidecars were paired by
+    label fallback because their step counts differed. ``changed_pct`` is
+    the percentage (0-100) of the frame's pixels that differ above
+    ``threshold`` AFTER overlay exclusion (when enabled). ``regions`` are
+    the connected-component bounding boxes of the changed area, in the RUN
+    frame's pixel coordinates. ``diff_image_path`` is ``None`` when nothing
+    changed (no image is written for a clean step).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    run_index: int = Field(ge=0)
+    baseline_index: int = Field(ge=0)
+    label: str | None = None
+    changed_pct: float = Field(ge=0, le=100)
+    regions: list[BBox] = Field(default_factory=list)
+    diff_image_path: str | None = None
+    run_frame: str | None = None
+    baseline_frame: str | None = None
+
+
+class VisualDiffReport(BaseModel):
+    """Pixel-level visual-diff report between a run sidecar and a baseline
+    sidecar — the output contract of
+    :func:`clickcast.feedback.visual_diff.visual_diff` (#201/#203).
+
+    ``extra="forbid"`` for the same reason as :class:`Assertions`: this
+    shape is consumed by another team's CI Action (#206/#208) as well as by
+    ``clickcast diff``, so a silently-added key should fail loudly at the
+    model boundary instead of drifting unnoticed.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: int = 1
+    threshold: float = Field(ge=0)
+    exclude_overlays: bool = True
+    steps: list[StepVisualDiff] = Field(default_factory=list)
+    unmatched_steps: list[UnmatchedStep] = Field(default_factory=list)

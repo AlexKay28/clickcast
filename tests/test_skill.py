@@ -189,13 +189,14 @@ class TestMarkdown:
     def test_contains_sidecar_schema_url(self) -> None:
         assert SIDECAR_SCHEMA_URL in render_markdown()
 
-    def test_word_count_under_900(self) -> None:
+    def test_word_count_under_1000(self) -> None:
         # The proposal target was ~500 words; the cap gives room for growth
         # without letting the brief bloat into a manual. Bumped from 800 to
-        # 900 when `feedback` (#124) added the 12th command — legitimate
-        # growth from a new command shouldn't force pruning the other 11.
+        # 900 when `feedback` (#124) added the 12th command, then to 1000
+        # when `diff` (#201/#204) added the 13th — legitimate growth from a
+        # new command shouldn't force pruning the others.
         words = len(render_markdown().split())
-        assert words < 900, f"brief has grown to {words} words — trim it"
+        assert words < 1000, f"brief has grown to {words} words — trim it"
 
     def test_starts_with_versioned_header(self) -> None:
         assert render_markdown().splitlines()[0] == (

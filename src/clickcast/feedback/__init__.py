@@ -19,6 +19,7 @@ from clickcast.feedback.graph import build_graph, dom_signature
 from clickcast.feedback.models import (
     AnnotateMetadata,
     Assertions,
+    BBox,
     ComponentNode,
     DiscoveredElement,
     Edge,
@@ -32,16 +33,22 @@ from clickcast.feedback.models import (
     Report,
     StepAssertion,
     StepReport,
+    StepVisualDiff,
+    UnmatchedStep,
+    VisualDiffReport,
 )
 from clickcast.feedback.pointers import build_feedback, feedback_pointer_lines
 from clickcast.feedback.redact import apply_patterns
 from clickcast.feedback.redact import strip_query_strings as _strip_query_strings
+from clickcast.feedback.visual_diff import VISUAL_DIFF_SCHEMA_VERSION, visual_diff
 
 __all__ = [
     "ASSERTIONS_SCHEMA_VERSION",
+    "VISUAL_DIFF_SCHEMA_VERSION",
     "Advisory",
     "AnnotateMetadata",
     "Assertions",
+    "BBox",
     "ComponentNode",
     "DiscoveredElement",
     "Edge",
@@ -57,6 +64,9 @@ __all__ = [
     "ReportBuilder",
     "StepAssertion",
     "StepReport",
+    "StepVisualDiff",
+    "UnmatchedStep",
+    "VisualDiffReport",
     "build_advisories",
     "build_assertions",
     "build_feedback",
@@ -66,6 +76,7 @@ __all__ = [
     "feedback_pointer_lines",
     "load",
     "load_assertions",
+    "visual_diff",
     "write",
 ]
 

@@ -50,6 +50,7 @@ from clickcast.discovery import Element, discover
 from clickcast.encode import encode
 from clickcast.feedback import Media, ReportBuilder, feedback_pointer_lines
 from clickcast.feedback import write as write_report
+from clickcast.feedback.models import VisualDiffReport
 from clickcast.feedback.pointers import (
     DIAGNOSTICS_COMMAND,
     DOCS_URL,
@@ -59,6 +60,7 @@ from clickcast.feedback.pointers import (
 )
 from clickcast.feedback.session.cli import feedback_app
 from clickcast.feedback.session.storage import record_invocation_safe
+from clickcast.feedback.visual_diff import DEFAULT_THRESHOLD as DEFAULT_VISUAL_DIFF_THRESHOLD
 from clickcast.scenario import ScenarioError, load
 from clickcast.scenario import run as run_scenario
 
@@ -1840,6 +1842,120 @@ def assertions(
 
     if not is_clean:
         raise typer.Exit(code=1)
+
+
+# ==========================================================================
+# clickcast diff  (#201/#204) — pixel-level visual diff, `assertions`' companion
+# ==========================================================================
+
+
+@app.command(
+    "diff",
+    help="Pixel-diff a run's frames against a baseline's (companion to `assertions`).",
+    epilog=_FEEDBACK_EPILOG,
+)
+def diff(
+    run_sidecar: Annotated[
+        Path,
+        typer.Argument(help="Path to the current run's `reel.gif.json` sidecar."),
+    ],
+    baseline_sidecar: Annotated[
+        Path,
+        typer.Argument(help="Path to the baseline run's `reel.gif.json` sidecar."),
+    ],
+    out: Annotated[
+        Path | None,
+        typer.Option(
+            "--out",
+            help=(
+                "Directory for region-highlighted diff images + summary.json. "
+                "Default: `<run-sidecar-stem>.diff/` next to the run sidecar."
+            ),
+        ),
+    ] = None,
+    threshold: Annotated[
+        float,
+        typer.Option(
+            "--threshold",
+            help=(
+                "Per-pixel channel-delta cutoff (0-255 scale) above which a pixel "
+                "counts as changed — the anti-aliasing/noise floor, not a percent."
+            ),
+        ),
+    ] = DEFAULT_VISUAL_DIFF_THRESHOLD,
+    no_exclude_overlays: Annotated[
+        bool,
+        typer.Option(
+            "--no-exclude-overlays",
+            help=(
+                "Disable exclusion of clickcast's own annotator overlays (progress "
+                "bar / label / actions panel / cursor+ripple) — strict raw-pixel diff."
+            ),
+        ),
+    ] = False,
+    fail_above: Annotated[
+        float | None,
+        typer.Option(
+            "--fail-above",
+            help=(
+                "Exit non-zero when any step's changed_pct exceeds this percentage "
+                "(0-100), or when a step could not be paired with its counterpart. "
+                "Omit to report only (always exits 0) — usable standalone as a CI "
+                "gate, not only alongside `assertions`."
+            ),
+        ),
+    ] = None,
+) -> None:
+    from clickcast.feedback.visual_diff import max_changed_pct
+    from clickcast.feedback.visual_diff import visual_diff as _visual_diff
+
+    if not run_sidecar.exists():
+        _die(f"sidecar not found: {run_sidecar}")
+    if not baseline_sidecar.exists():
+        _die(f"baseline not found: {baseline_sidecar}")
+
+    try:
+        report = _visual_diff(
+            run_sidecar,
+            baseline_sidecar,
+            threshold=threshold,
+            out_dir=out,
+            exclude_overlays=not no_exclude_overlays,
+        )
+    except Exception as e:
+        _die(f"could not compute visual diff: {e}")
+
+    worst = max_changed_pct(report)
+    for step in report.steps:
+        marker = "✗" if fail_above is not None and step.changed_pct > fail_above else "·"
+        color = typer.colors.RED if marker == "✗" else typer.colors.GREEN
+        region_note = f", {len(step.regions)} region(s)" if step.regions else ""
+        typer.secho(
+            f"{marker} step {step.run_index} ({step.label or step.run_index}): "
+            f"{step.changed_pct:.2f}% changed{region_note}",
+            fg=color,
+        )
+    for u in report.unmatched_steps:
+        typer.secho(
+            f"! {u.side} step {u.index} ({u.label or u.index}): unmatched — {u.reason}",
+            fg=typer.colors.YELLOW,
+        )
+
+    typer.echo(f"worst step: {worst:.2f}% changed; wrote report to {_visual_diff_out_hint(report)}")
+
+    if fail_above is None:
+        return
+
+    should_fail = worst > fail_above or bool(report.unmatched_steps)
+    if should_fail:
+        raise typer.Exit(code=1)
+
+
+def _visual_diff_out_hint(report: VisualDiffReport) -> str:
+    for step in report.steps:
+        if step.diff_image_path:
+            return str(Path(step.diff_image_path).parent)
+    return "(no diff images written — see summary.json in --out)"
 
 
 # ==========================================================================

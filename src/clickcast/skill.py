@@ -191,6 +191,21 @@ COMMAND_BRIEFS: tuple[CommandBrief, ...] = (
         example="clickcast assertions reel.gif.json --baseline golden.json",
     ),
     CommandBrief(
+        name="diff",
+        summary="Pixel-level visual diff between a run and a baseline — `assertions`' visual sibling.",
+        when_to_use=(
+            "You want to know if the page LOOKS different, not just whether "
+            "the same steps ran. Excludes clickcast's own overlays by default."
+        ),
+        key_flags=(
+            FlagBrief("--out DIR", "diff images + summary.json"),
+            FlagBrief("--threshold FLOAT", "per-pixel noise floor (0-255)"),
+            FlagBrief("--no-exclude-overlays", "strict raw-pixel diff"),
+            FlagBrief("--fail-above PCT", "nonzero exit above this changed_pct"),
+        ),
+        example="clickcast diff reel.gif.json baseline.gif.json --fail-above 5",
+    ),
+    CommandBrief(
         name="report-bug",
         summary=(
             "Turn a sidecar into an actionable AI-agent bug report. "
