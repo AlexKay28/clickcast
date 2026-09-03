@@ -135,9 +135,9 @@ class TestElementsFlags:
     def test_insecure_and_header(self, tmp_path: Path) -> None:
         captured: dict[str, object] = {}
 
-        async def _capture(**kwargs: object) -> list[object]:
+        async def _capture(**kwargs: object) -> tuple[list[object], list[object]]:
             captured.update(kwargs)
-            return []
+            return [], []
 
         with patch("clickcast.cli._do_elements", side_effect=_capture):
             r = runner.invoke(

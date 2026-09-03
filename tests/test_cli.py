@@ -367,7 +367,53 @@ class TestElementsIntegration:
         data = json.loads(r.stdout)
         assert isinstance(data, list)
         assert data  # at least one element
-        assert set(data[0].keys()) == {"selector", "role", "text", "bbox", "score", "source"}
+        # #196/#199: `elements --json` gains an additive `accessibility`
+        # block (role/name/state/grid_cell) alongside the pre-existing
+        # heuristic fields.
+        assert set(data[0].keys()) == {
+            "selector",
+            "role",
+            "text",
+            "bbox",
+            "score",
+            "source",
+            "accessibility",
+        }
+        a11y = data[0]["accessibility"]
+        assert set(a11y.keys()) == {
+            "selector",
+            "bbox",
+            "score",
+            "role",
+            "name",
+            "state",
+            "grid_cell",
+        }
+        assert a11y["grid_cell"] is None  # no --grid flag passed
+
+    def test_grid_flag_populates_grid_cell(self) -> None:
+        r = runner.invoke(
+            app,
+            [
+                "elements",
+                _FIXTURE_URL,
+                "--json",
+                "--viewport",
+                "400x300",
+                "--limit",
+                "5",
+                "--grid",
+                "--grid-pitch",
+                "50",
+            ],
+        )
+        assert r.exit_code == 0, r.output
+        data = json.loads(r.stdout)
+        assert data
+        for entry in data:
+            cell = entry["accessibility"]["grid_cell"]
+            assert cell is not None
+            assert cell == [entry["bbox"][0] // 50, entry["bbox"][1] // 50]
 
 
 @pytest.mark.integration
@@ -634,9 +680,9 @@ class TestElementsSymmetryFlags:
     def test_all_flags_reach_session_kwargs(self) -> None:
         captured: dict[str, object] = {}
 
-        async def _capture(**kwargs: object) -> list[object]:
+        async def _capture(**kwargs: object) -> tuple[list[object], list[object]]:
             captured.update(kwargs)
-            return []
+            return [], []
 
         with patch("clickcast.cli._do_elements", side_effect=_capture):
             r = runner.invoke(
@@ -670,8 +716,8 @@ class TestElementsSymmetryFlags:
         saved = cc.level
         try:
 
-            async def _noop(**_kwargs: object) -> list[object]:
-                return []
+            async def _noop(**_kwargs: object) -> tuple[list[object], list[object]]:
+                return [], []
 
             with patch("clickcast.cli._do_elements", side_effect=_noop):
                 r = runner.invoke(
@@ -687,9 +733,9 @@ class TestElementsSymmetryFlags:
         """Sanity: bare `elements` still yields the pre-#178 defaults."""
         captured: dict[str, object] = {}
 
-        async def _capture(**kwargs: object) -> list[object]:
+        async def _capture(**kwargs: object) -> tuple[list[object], list[object]]:
             captured.update(kwargs)
-            return []
+            return [], []
 
         with patch("clickcast.cli._do_elements", side_effect=_capture):
             r = runner.invoke(app, ["elements", "data:text/html,x"])
