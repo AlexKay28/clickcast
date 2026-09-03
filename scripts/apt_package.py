@@ -35,8 +35,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import sys
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
+
+# datetime.UTC is 3.11+; project's requires-python is 3.10.
+UTC = timezone.utc
 
 MAINTAINER = "Alexander Kaigorodov <55444371+AlexKay28@users.noreply.github.com>"
 HOMEPAGE = "https://github.com/AlexKay28/clickcast"
