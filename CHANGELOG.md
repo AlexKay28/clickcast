@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-09-03
+
+Agent-autonomy release. Backwards-compatible with 0.2.9. The biggest
+release yet: live agent control via a new MCP server, a pixel-level
+visual diff engine, accessibility semantics fused with the pixel-grid
+overlay (sidecar bumps v3 → v4, additive), a packaged CI GitHub Action,
+day-one Homebrew/apt distribution tooling, and a self-healing first-run
+experience so a fresh `pip install clickcast` gets you working
+immediately instead of dead-ending on a missing-browser traceback.
+
 ### Added
 - **Pixel-level visual diff between two runs** (closes [#201], [#202],
   [#203], [#204], [#205]). `clickcast assertions --baseline` ([#112]) is
