@@ -15,8 +15,9 @@ import re
 import subprocess
 import sys
 import time
+from collections.abc import Callable, Coroutine
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, TypeVar
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -43,6 +44,7 @@ from clickcast.config import (
 )
 from clickcast.config.cli import config_app
 from clickcast.core.actions import set_dump_elements
+from clickcast.core.engines import EngineNotInstalledError, find_installed_engine
 from clickcast.core.opts import BrowserOpts
 from clickcast.core.session import Session
 from clickcast.core.viewport import Viewport
@@ -328,6 +330,57 @@ def _parse_viewport(v: str) -> tuple[int, int]:
 def _die(msg: str, code: int = 1) -> None:
     typer.secho(msg, fg=typer.colors.RED, err=True)
     raise typer.Exit(code)
+
+
+def _install_engine(engine_list: list[str], *, with_deps: bool) -> int:
+    """Run `playwright install` for `engine_list`. Shared by the `install`
+    command and the missing-engine pre-flight prompt below."""
+    # Always use the venv's playwright module — a system-wide `playwright`
+    # binary on PATH could point at a different playwright version than the
+    # one clickcast imports, causing "Executable doesn't exist" errors when
+    # the runtime tries to launch a browser it never downloaded. (#176)
+    cmd = [sys.executable, "-m", "playwright", "install"]
+    if with_deps:
+        cmd.append("--with-deps")
+    cmd.extend(engine_list)
+    typer.echo(f"→ {' '.join(cmd)}")
+    result = subprocess.run(cmd, check=False)
+    return result.returncode
+
+
+_T = TypeVar("_T")
+
+
+def _handle_missing_engine(exc: EngineNotInstalledError) -> None:
+    """Called once when a browser-launching command hits a missing engine.
+
+    Interactive terminal: offer to install it right now — the point is that
+    a user's very first real command self-heals instead of dead-ending on a
+    Playwright traceback. Non-interactive (CI, piped input): never prompt,
+    just fail with the exact fix command.
+    """
+    engine = exc.engine
+    fix_cmd = f"clickcast install --with-deps {engine}"
+    if not sys.stdin.isatty():
+        _die(f"{engine} isn't installed. Run: {fix_cmd}")
+    typer.secho(f"⚠ {engine} isn't installed.", fg=typer.colors.YELLOW, err=True)
+    if not typer.confirm(f"Install it now? ({fix_cmd})", default=True):
+        _die(f"{engine} isn't installed. Run: {fix_cmd}")
+    code = _install_engine([engine], with_deps=True)
+    if code != 0:
+        _die(f"install failed (exit {code}). Run manually: {fix_cmd}")
+
+
+def _run(factory: Callable[[], Coroutine[Any, Any, _T]]) -> _T:
+    """`asyncio.run`, but a missing browser engine gets one self-heal retry
+    instead of a raw Playwright traceback. `factory` (not a bare coroutine)
+    because a coroutine object can only be awaited once — a retry needs a
+    fresh one."""
+    try:
+        return asyncio.run(factory())
+    except EngineNotInstalledError as exc:
+        _handle_missing_engine(exc)
+        return asyncio.run(factory())
 
 
 def _version_callback(value: bool) -> None:
@@ -807,8 +860,8 @@ def auto(
         for_humans,
     )
 
-    asyncio.run(
-        _do_auto(
+    _run(
+        lambda: _do_auto(
             url=url,
             out=out,
             max_steps=max_steps,
@@ -1025,8 +1078,8 @@ def run(
         # us a new GotoStep with the overridden url and leaves the rest alone.
         steps[first_goto_idx] = steps[first_goto_idx].model_copy(update={"url": url})
 
-    asyncio.run(
-        _do_run(
+    _run(
+        lambda: _do_run(
             scenario=scenario.model_copy(update={"meta": meta, "steps": steps}),
             out=final_out,
             format_=effective_format,
@@ -1231,8 +1284,8 @@ def shot(
 ) -> None:
     _setup_logging(verbose)
     grid_cfg = _build_grid_config(grid, grid_pitch, grid_color, grid_style)
-    asyncio.run(
-        _do_shot(
+    _run(
+        lambda: _do_shot(
             url=url,
             out=out,
             full_page=full_page,
@@ -1334,7 +1387,7 @@ def init(
         _die(f"{path} already exists; pass --force to overwrite")
 
     if from_auto:
-        content = asyncio.run(_scenario_from_discovery(url, name, out))
+        content = _run(lambda: _scenario_from_discovery(url, name, out))
     else:
         content = _STARTER_SCENARIO.format(name=name, url=url, out=out)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1400,8 +1453,8 @@ def elements(
 ) -> None:
     _setup_logging(verbose)
     grid_cfg = _build_grid_config(grid, grid_pitch, grid_color, grid_style)
-    result_elements, accessibility = asyncio.run(
-        _do_elements(
+    result_elements, accessibility = _run(
+        lambda: _do_elements(
             url=url,
             limit=limit,
             session_kwargs=_session_kwargs(
@@ -1599,121 +1652,9 @@ def _run_doctor_checks() -> dict[str, Any]:
     return {"ok": ok, "checks": checks}
 
 
-# Per-engine, per-platform executable path components relative to the Playwright
-# browser install directory (e.g. ~/.cache/ms-playwright/chromium-1234/).
-#
-# Sourced from Playwright's own driver bundle (see
-# `playwright/driver/package/lib/coreBundle.js`, EXECUTABLE_PATHS). Kept in
-# lock-step shape with the upstream table so future Playwright releases can be
-# added without reinventing anything.
-_ENGINE_EXECUTABLE_PARTS: dict[str, dict[str, tuple[str, ...]]] = {
-    "chromium": {
-        # Linux CFT ships as chrome-linux64/chrome on x64 and chrome-linux/chrome
-        # on arm64; we try both and take whichever is on disk.
-        "linux": ("chrome-linux", "chrome"),
-        "linux-x64": ("chrome-linux64", "chrome"),
-        "darwin": ("chrome-mac", "Chromium.app", "Contents", "MacOS", "Chromium"),
-        "darwin-x64": (
-            "chrome-mac-x64",
-            "Google Chrome for Testing.app",
-            "Contents",
-            "MacOS",
-            "Google Chrome for Testing",
-        ),
-        "darwin-arm64": (
-            "chrome-mac-arm64",
-            "Google Chrome for Testing.app",
-            "Contents",
-            "MacOS",
-            "Google Chrome for Testing",
-        ),
-        "win32": ("chrome-win", "chrome.exe"),
-        "win32-x64": ("chrome-win64", "chrome.exe"),
-    },
-    "firefox": {
-        "linux": ("firefox", "firefox"),
-        "darwin": ("firefox", "Nightly.app", "Contents", "MacOS", "firefox"),
-        "win32": ("firefox", "firefox.exe"),
-    },
-    "webkit": {
-        # Playwright ships webkit behind a `pw_run.sh` launcher on POSIX (it
-        # sets up LD_LIBRARY_PATH / DYLD_FRAMEWORK_PATH before exec'ing the
-        # real binary). The launcher IS the executable entry point.
-        "linux": ("pw_run.sh",),
-        "darwin": ("pw_run.sh",),
-        "win32": ("Playwright.exe",),
-    },
-}
-
-
-def _candidate_executable_parts(engine: str) -> list[tuple[str, ...]]:
-    """Return the plausible executable path components for `engine` on the current OS."""
-    engine_map = _ENGINE_EXECUTABLE_PARTS.get(engine)
-    if not engine_map:
-        return []
-    plat = sys.platform  # "linux", "darwin", "win32"
-    # Prefer arch-specific entries (they mirror upstream's linux-x64 /
-    # darwin-arm64 etc.) but always fall through to the plain-platform default.
-    keys: list[str] = []
-    if plat == "linux":
-        keys = ["linux-x64", "linux"]
-    elif plat == "darwin":
-        keys = ["darwin-arm64", "darwin-x64", "darwin"]
-    elif plat == "win32":
-        keys = ["win32-x64", "win32"]
-    else:
-        keys = [plat]
-    seen: set[tuple[str, ...]] = set()
-    out: list[tuple[str, ...]] = []
-    for k in keys:
-        parts = engine_map.get(k)
-        if parts and parts not in seen:
-            seen.add(parts)
-            out.append(parts)
-    return out
-
-
-def _find_playwright_engine(engine: str) -> tuple[Path, str] | None:
-    """Locate a Playwright browser install and (best-effort) its executable.
-
-    Returns ``(path, kind)`` where ``kind`` is:
-
-    - ``"executable"`` — ``path`` points at the actual browser binary (or the
-      ``pw_run.sh`` launcher for webkit). This is what a user can invoke.
-    - ``"install dir"`` — we found the browser's version directory under
-      ``ms-playwright/`` but couldn't map it to a known executable layout
-      (e.g. a novel install shape from a future Playwright release). ``path``
-      is the install directory; the caller should label it as such rather than
-      pretend it's runnable.
-
-    Returns ``None`` if no matching browser is installed.
-    """
-    cache_root = Path.home() / ".cache" / "ms-playwright"
-    if not cache_root.exists():
-        alt = Path.home() / "Library" / "Caches" / "ms-playwright"
-        cache_root = alt if alt.exists() else cache_root
-    if not cache_root.exists():
-        return None
-    prefix = {"chromium": "chromium", "firefox": "firefox", "webkit": "webkit"}.get(engine)
-    if not prefix:
-        return None
-    # Restrict to `<prefix>-<numeric-version>` dirs. This filters out sibling
-    # installs that share the prefix but have a different exec layout, e.g.
-    # `chromium-headless-shell-*` and `chromium-tip-of-tree-*`.
-    matches = sorted(
-        p
-        for p in cache_root.glob(f"{prefix}-*")
-        if p.is_dir() and p.name[len(prefix) + 1 :].isdigit()
-    )
-    if not matches:
-        return None
-    install_dir = matches[-1]
-    for parts in _candidate_executable_parts(engine):
-        candidate = install_dir.joinpath(*parts)
-        if candidate.exists():
-            return candidate, "executable"
-    # Novel layout: don't lie about what we found.
-    return install_dir, "install dir"
+# Moved to core/engines.py (shared with Session's pre-flight check) — kept
+# importable under its original name since tests/test_cli.py references it.
+_find_playwright_engine = find_installed_engine
 
 
 # ==========================================================================
@@ -1746,17 +1687,8 @@ def install(
     ] = False,
 ) -> None:
     engine_list = engines or ["chromium"]
-    # Always use the venv's playwright module — a system-wide `playwright`
-    # binary on PATH could point at a different playwright version than the
-    # one clickcast imports, causing "Executable doesn't exist" errors when
-    # the runtime tries to launch a browser it never downloaded. (#176)
-    cmd = [sys.executable, "-m", "playwright", "install"]
-    if with_deps:
-        cmd.append("--with-deps")
-    cmd.extend(engine_list)
-    typer.echo(f"→ {' '.join(cmd)}")
-    result = subprocess.run(cmd, check=False)
-    raise typer.Exit(code=result.returncode)
+    code = _install_engine(engine_list, with_deps=with_deps)
+    raise typer.Exit(code=code)
 
 
 # ==========================================================================

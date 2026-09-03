@@ -44,3 +44,20 @@ async def test_close_session_with_nothing_open_errors() -> None:
     payload = result_json(result)
     assert payload["error_code"] == "other"
     assert "no active session" in payload["error"]
+
+
+async def test_start_session_with_missing_engine_returns_actionable_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An agent can't answer an interactive install prompt, so `start_session`
+    must never try one — the missing-engine case degrades to the same
+    `_safe_tool` error-payload channel every other MCP failure uses, with
+    the fix command in the message text (see EngineNotInstalledError)."""
+    monkeypatch.setattr("clickcast.core.session.find_installed_engine", lambda engine: None)
+    async with open_client() as client:
+        result = await client.call_tool("start_session", {})
+    assert result.isError is True
+    payload = result_json(result)
+    assert payload["error_code"] == "other"
+    assert "chromium isn't installed" in payload["error"]
+    assert "clickcast install --with-deps chromium" in payload["error"]

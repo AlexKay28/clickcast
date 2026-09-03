@@ -26,17 +26,24 @@ Point it at a URL and it will *auto-discover* the interactive elements and build
 
 ## Install
 
-```bash
-pip install clickcast                 # requires Python ≥ 3.10
-clickcast install                     # download chromium (~one-time, ~180 MB)
-clickcast doctor                      # verify environment
-```
-
-On Linux CI you'll need the system libs Chromium depends on:
+One line, ready to run immediately after:
 
 ```bash
-clickcast install --with-deps chromium
+pip install clickcast && clickcast install --with-deps chromium && clickcast doctor
 ```
+
+Broken down — `pip install clickcast` (requires Python ≥ 3.10) gets you the
+CLI; `clickcast install` downloads Chromium (~one-time, ~180MB — kept out of
+the pip package itself since it's versioned independently and every project
+doesn't need every engine); `--with-deps` also pulls the system libraries
+Chromium needs (Linux only, may prompt for `sudo`); `clickcast doctor`
+confirms everything above actually worked.
+
+Forgot the second step? Any command that needs a browser (`auto`, `run`,
+`shot`, `elements`, `mcp`) detects a missing engine itself and offers to
+install it right then instead of failing — say yes once and it retries
+automatically. That prompt only fires in an interactive terminal; CI/scripted
+runs fail fast with the exact fix command instead of hanging on stdin.
 
 ### Homebrew (macOS/Linux)
 

@@ -256,6 +256,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - README's Install section gains both paths, each marked with what works
     today (local `--build-from-source` / local `.deb` build) vs. what needs
     the one-time, owner-only bootstrap (the hosted tap / apt repo).
+- **Self-healing pre-flight when a browser engine isn't installed.** Before
+  this, any browser-launching command (`auto`, `run`, `shot`, `elements`,
+  `mcp`) run before `clickcast install` surfaced Playwright's raw
+  `Executable doesn't exist` traceback — the #1 "why doesn't this work"
+  failure mode right after a fresh `pip install clickcast`.
+  - New `clickcast.core.engines` module (extracted from the detection logic
+    `doctor` already had) + `EngineNotInstalledError`. `Session.__aenter__`
+    now checks it before Playwright even starts — the one place every entry
+    point (CLI, the Python `Reel`/`AsyncReel` API, the MCP server) funnels
+    through, so one check covers all of them.
+  - CLI commands catch that error once (`_run`, wrapping `asyncio.run`) and,
+    on an interactive terminal, offer to install the missing engine right
+    then — say yes once and the original command retries automatically.
+    Non-interactive contexts (CI, piped input) never prompt: they fail fast
+    with the exact fix command instead of hanging on stdin.
+  - The MCP server can't prompt mid-tool-call (an agent isn't a human at a
+    terminal), so `start_session` degrades to the same `error_code: "other"`
+    payload every other MCP failure uses, with the fix command in the
+    message text.
+  - README's Install section leads with a single copy-paste line
+    (`pip install clickcast && clickcast install --with-deps chromium &&
+    clickcast doctor`) instead of three separate steps.
 
 ## [0.2.9] — 2026-08-07
 
