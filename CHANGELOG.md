@@ -163,6 +163,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `tests/consumer/read_accessibility.py` (mirroring #99's
     `read_sidecar.py`) proves the block is parseable by a standalone
     consumer that never imports `clickcast`.
+- **Official GitHub Action** wrapping `install` -> `run`/`auto` ->
+  `assertions --baseline` -> `diff` -> a PR comment (closes [#206],
+  [#207], [#208], [#209], [#210]). The README's "CI: 2-line regression
+  gate" was copy-paste shell with no packaged, versioned, reusable form
+  and no way to see the reel without leaving CI logs; downstream repos
+  now get `uses: AlexKay28/clickcast/.github/actions/clickcast@<ref>`
+  instead. Depends on the pixel-diff CLI added above ([#201]-[#205],
+  PR #211) for its visual-diff half.
+  - New composite action `.github/actions/clickcast/action.yml`:
+    installs a pinned `clickcast` version, caches Playwright/Chromium
+    (keyed on the resolved playwright version, mirroring `ci.yml`'s own
+    strategy — see its #43 item 3 comment), runs a scenario (`run`) or
+    URL tour (`auto`), and gates on a committed `assertions` baseline
+    and/or a committed raw baseline sidecar + frames (`diff`). A
+    nonzero gate doesn't abort the job outright — the result is
+    captured so the PR comment can still report it before a final step
+    fails the Action for real. Outputs: `sidecar-path`, `reel-path`,
+    `assertions-passed`, `diff-summary-path`, `diff-worst-pct`,
+    `diff-passed`.
+  - Posts/updates a single PR comment (`actions/github-script` +
+    `.github/actions/clickcast/scripts/post_comment.js`, upserted by a
+    hidden HTML-comment marker so re-runs update it in place rather
+    than spamming new comments) with the reel GIF and a markdown table
+    of per-step assertions status and visual-diff percent-changed.
+    Degrades gracefully to whichever of assertions/diff was actually
+    configured. Since there is no public REST/GraphQL endpoint to
+    attach a binary file to a comment the way the web UI's
+    drag-and-drop does, the reel is published to an orphan
+    `clickcast-media` branch and linked via a raw-content URL, which
+    GitHub renders inline — falling back to a workflow-artifact link
+    (with a `::warning::`, not a failure) on fork PRs, whose
+    `GITHUB_TOKEN` can't push.
+  - `docs/ci/README.md`: full example workflow, an inputs/outputs
+    reference, why `assertions`' distilled baseline and `diff`'s raw
+    baseline-sidecar-plus-frames are different committed files, how the
+    reel gets embedded, and the versioning/Marketplace decision (stays
+    in-repo under `.github/actions/clickcast/` for now — Marketplace
+    listing needs the action at a repo root and is a manual,
+    owner-only step no CI tooling can complete).
+  - Dogfooded in this repo's own CI:
+    `.github/workflows/clickcast-self-check.yml` runs the Action
+    against `docs/scenarios/spa.yml` (served locally via
+    `tests/fixtures/site/`, no external-network dependency) on every
+    PR against a committed baseline + frames
+    (`tests/fixtures/ci-baseline/`), installing clickcast from source
+    (`install: 'false'`) rather than PyPI since `diff` hasn't shipped
+    in a release yet. Exercises both the `assertions` and `diff` gates,
+    not just a bare run — this is the regression guard for the Action
+    itself.
 
 ## [0.2.9] — 2026-08-07
 
@@ -1370,4 +1419,7 @@ Initial public release.
 [#204]: https://github.com/AlexKay28/clickcast/issues/204
 [#205]: https://github.com/AlexKay28/clickcast/issues/205
 [#206]: https://github.com/AlexKay28/clickcast/issues/206
+[#207]: https://github.com/AlexKay28/clickcast/issues/207
 [#208]: https://github.com/AlexKay28/clickcast/issues/208
+[#209]: https://github.com/AlexKay28/clickcast/issues/209
+[#210]: https://github.com/AlexKay28/clickcast/issues/210
