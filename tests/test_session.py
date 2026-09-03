@@ -2,9 +2,50 @@ from __future__ import annotations
 
 import pytest
 
-from clickcast.core.session import Session, hostname_matches
+from clickcast.core.session import EngineNotInstalledError, Session, hostname_matches
 
 pytestmark = pytest.mark.unit
+
+
+async def test_aenter_raises_clear_error_when_engine_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pre-flight check (see clickcast.core.engines) must fire before
+    Playwright even starts, so a missing browser never surfaces as a raw
+    "Executable doesn't exist" traceback — every entry point (CLI, Python
+    API, MCP server) goes through Session.__aenter__, so this one check
+    covers all of them."""
+    monkeypatch.setattr("clickcast.core.session.find_installed_engine", lambda engine: None)
+    with pytest.raises(EngineNotInstalledError, match="chromium isn't installed"):
+        async with Session(engine="chromium"):
+            pass
+
+
+async def test_aenter_proceeds_past_preflight_when_engine_is_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When the engine IS found, __aenter__ must not raise
+    EngineNotInstalledError — proven by mocking Playwright's own startup to
+    raise a distinct sentinel, so a real browser is never needed here (real
+    end-to-end launch coverage lives in TestSessionIntegration below)."""
+    from pathlib import Path
+
+    class _Sentinel(Exception):
+        pass
+
+    monkeypatch.setattr(
+        "clickcast.core.session.find_installed_engine",
+        lambda engine: (Path("/fake/chrome"), "executable"),
+    )
+
+    def _boom() -> None:
+        raise _Sentinel
+
+    monkeypatch.setattr("clickcast.core.session.async_playwright", _boom)
+    with pytest.raises(_Sentinel):
+        async with Session(engine="chromium"):
+            pass
+
 
 # `_parse_viewport` was removed in the #96 refactor — parsing lives in
 # `clickcast.core.viewport.Viewport.parse` now, covered by
