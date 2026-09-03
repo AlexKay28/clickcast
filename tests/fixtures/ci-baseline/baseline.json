@@ -1,0 +1,209 @@
+{
+  "schema_version": 3,
+  "clickcast_version": "0.2.9",
+  "url": null,
+  "engine": "chromium",
+  "viewport": [
+    1280,
+    800
+  ],
+  "started_at": "2026-09-03T11:12:13.334104+00:00",
+  "duration_s": 9.607892478001304,
+  "media": {
+    "path": "frames",
+    "format": "frames",
+    "size_bytes": 2163343,
+    "frame_count": 64,
+    "duration_s": 5.333333333333333,
+    "fps": 12
+  },
+  "discovered_elements": [],
+  "steps": [
+    {
+      "index": 0,
+      "action": "goto",
+      "args": {
+        "timeout_ms": null,
+        "url": "http://127.0.0.1:8931/",
+        "wait": "load",
+        "retries": 0
+      },
+      "status": "ok",
+      "duration_ms": 26.811598014319316,
+      "frames": [
+        "frame-0000-001.png",
+        "frame-0000-002.png",
+        "frame-0000-003.png",
+        "frame-0000-004.png",
+        "frame-0000-005.png",
+        "frame-0000-006.png",
+        "frame-0000-007.png",
+        "frame-0000-008.png",
+        "frame-0000-009.png",
+        "frame-0000-010.png",
+        "frame-0000-011.png",
+        "frame-0000-012.png"
+      ],
+      "label": "Open landing page",
+      "cursor_xy": null,
+      "page_state": {
+        "title": "Clickcast Fixture Site",
+        "url_after": "http://127.0.0.1:8931/",
+        "console_errors": [],
+        "page_errors": [],
+        "network_failed": []
+      },
+      "error": null,
+      "skip_reason": null,
+      "error_code": null
+    },
+    {
+      "index": 1,
+      "action": "click",
+      "args": {
+        "timeout_ms": null,
+        "selector": "#btn-3d"
+      },
+      "status": "ok",
+      "duration_ms": 1609.5009990094695,
+      "frames": [
+        "frame-0001-001.png",
+        "frame-0001-002.png",
+        "frame-0001-003.png",
+        "frame-0001-004.png",
+        "frame-0001-005.png",
+        "frame-0001-006.png",
+        "frame-0001-007.png",
+        "frame-0001-008.png",
+        "frame-0001-009.png",
+        "frame-0001-010.png",
+        "frame-0001-011.png",
+        "frame-0001-012.png",
+        "frame-0001-013.png",
+        "frame-0001-014.png",
+        "frame-0001-015.png",
+        "frame-0001-016.png",
+        "frame-0001-017.png",
+        "frame-0001-018.png"
+      ],
+      "label": "Click 3D",
+      "cursor_xy": [
+        55,
+        208
+      ],
+      "page_state": {
+        "title": "Clickcast Fixture Site",
+        "url_after": "http://127.0.0.1:8931/",
+        "console_errors": [],
+        "page_errors": [],
+        "network_failed": []
+      },
+      "error": null,
+      "skip_reason": null,
+      "error_code": null
+    },
+    {
+      "index": 2,
+      "action": "click",
+      "args": {
+        "timeout_ms": null,
+        "selector": "#btn-compare"
+      },
+      "status": "ok",
+      "duration_ms": 1545.632060006028,
+      "frames": [
+        "frame-0002-001.png",
+        "frame-0002-002.png",
+        "frame-0002-003.png",
+        "frame-0002-004.png",
+        "frame-0002-005.png",
+        "frame-0002-006.png",
+        "frame-0002-007.png",
+        "frame-0002-008.png",
+        "frame-0002-009.png",
+        "frame-0002-010.png",
+        "frame-0002-011.png",
+        "frame-0002-012.png",
+        "frame-0002-013.png",
+        "frame-0002-014.png",
+        "frame-0002-015.png",
+        "frame-0002-016.png",
+        "frame-0002-017.png",
+        "frame-0002-018.png"
+      ],
+      "label": "Click Compare",
+      "cursor_xy": [
+        168,
+        208
+      ],
+      "page_state": {
+        "title": "Clickcast Fixture Site",
+        "url_after": "http://127.0.0.1:8931/",
+        "console_errors": [],
+        "page_errors": [],
+        "network_failed": []
+      },
+      "error": null,
+      "skip_reason": null,
+      "error_code": null
+    },
+    {
+      "index": 3,
+      "action": "click",
+      "args": {
+        "timeout_ms": null,
+        "selector": "#btn-reset"
+      },
+      "status": "ok",
+      "duration_ms": 1028.0752810067497,
+      "frames": [
+        "frame-0003-001.png",
+        "frame-0003-002.png",
+        "frame-0003-003.png",
+        "frame-0003-004.png",
+        "frame-0003-005.png",
+        "frame-0003-006.png",
+        "frame-0003-007.png",
+        "frame-0003-008.png",
+        "frame-0003-009.png",
+        "frame-0003-010.png",
+        "frame-0003-011.png",
+        "frame-0003-012.png"
+      ],
+      "label": "Click Reset",
+      "cursor_xy": [
+        292,
+        208
+      ],
+      "page_state": {
+        "title": "Clickcast Fixture Site",
+        "url_after": "http://127.0.0.1:8931/",
+        "console_errors": [],
+        "page_errors": [],
+        "network_failed": []
+      },
+      "error": null,
+      "skip_reason": null,
+      "error_code": null
+    }
+  ],
+  "warnings": [],
+  "errors": [],
+  "feedback": null,
+  "graph": {
+    "nodes": [
+      {
+        "id": "n1",
+        "kind": "page",
+        "url": "http://127.0.0.1:8931/",
+        "title": "Clickcast Fixture Site",
+        "dom_signature": "",
+        "first_seen_step": 0,
+        "last_seen_step": 3,
+        "components": []
+      }
+    ],
+    "edges": []
+  },
+  "annotate": null
+}

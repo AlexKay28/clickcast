@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "step_count": 4,
+  "steps": [
+    {
+      "action": "goto",
+      "label": "Open landing page",
+      "status": "ok",
+      "console_error_count": 0,
+      "page_error_count": 0,
+      "network_failed_count": 0,
+      "skip_reason": null,
+      "error_code": null
+    },
+    {
+      "action": "click",
+      "label": "Click 3D",
+      "status": "ok",
+      "console_error_count": 0,
+      "page_error_count": 0,
+      "network_failed_count": 0,
+      "skip_reason": null,
+      "error_code": null
+    },
+    {
+      "action": "click",
+      "label": "Click Compare",
+      "status": "ok",
+      "console_error_count": 0,
+      "page_error_count": 0,
+      "network_failed_count": 0,
+      "skip_reason": null,
+      "error_code": null
+    },
+    {
+      "action": "click",
+      "label": "Click Reset",
+      "status": "ok",
+      "console_error_count": 0,
+      "page_error_count": 0,
+      "network_failed_count": 0,
+      "skip_reason": null,
+      "error_code": null
+    }
+  ]
+}

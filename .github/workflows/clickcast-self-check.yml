@@ -1,0 +1,122 @@
+name: clickcast self-check
+
+# Dogfoods `.github/actions/clickcast` (the Action from #206/#207/#208)
+# against this repo's own fixture scenario on every PR, so a `cli.py` or
+# `feedback/*` regression that breaks the run -> assertions -> diff pipeline
+# the Action wraps gets caught here, by the same mechanism a downstream
+# user relies on -- before it reaches them. See #210.
+#
+# Unlike a downstream consumer, this workflow installs clickcast FROM
+# SOURCE (`pip install -e .`, this checkout) rather than a published PyPI
+# release -- `install: 'false'` tells the Action to skip its own
+# pip-install/playwright-cache steps and use whatever's already on PATH.
+# That matters right now in particular: this branch is stacked on the
+# still-unmerged `feat/visual-diff` (#211), so the `clickcast diff` command
+# this workflow exercises doesn't exist on PyPI yet under any version
+# number.
+
+on:
+  pull_request:
+    paths-ignore: &docs-ignore
+      - '**.md'
+      - 'LICENSE'
+      - '.gitignore'
+      - 'docs/*.md'
+      - 'demo/**'
+  workflow_dispatch: {}
+
+concurrency:
+  group: clickcast-self-check-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  self-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write       # publish the reel GIF to the `clickcast-media` branch
+      pull-requests: write  # post/update the summary comment
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test PR-comment helper
+        run: node --test .github/actions/clickcast/scripts/post_comment.test.js
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install clickcast from source
+        run: pip install -e ".[dev]"
+
+      # Same cache-key strategy as ci.yml (see its comment re #43 item 3).
+      - name: Resolve Playwright version
+        id: pw-version
+        run: |
+          v=$(python -c "from importlib.metadata import version; print(version('playwright'))")
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
+
+      - name: Install Playwright system deps (cache hit)
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: playwright install-deps chromium
+
+      - name: Install Playwright chromium (cache miss)
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: playwright install --with-deps chromium
+
+      # `docs/scenarios/spa.yml` drives `tests/fixtures/site/` (the same
+      # fixture the test suite uses) via a `{{ base_url }}` variable --
+      # serve it locally so the self-check has no external-network
+      # dependency and is fully deterministic.
+      - name: Serve fixture site
+        run: |
+          set -euo pipefail
+          nohup python3 -m http.server 8091 --directory tests/fixtures/site --bind 127.0.0.1 \
+            > /tmp/clickcast-fixture-server.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8091/ > /dev/null; then
+              echo "fixture site up after ${i} attempt(s)"
+              exit 0
+            fi
+            sleep 0.2
+          done
+          echo "::error::fixture site never came up"
+          cat /tmp/clickcast-fixture-server.log
+          exit 1
+
+      # Exercises BOTH the structural (`assertions`) and visual (`diff`)
+      # gates against a committed baseline + frames
+      # (tests/fixtures/ci-baseline/), plus the PR-comment path -- the
+      # actual acceptance bar for #210. `diff-fail-above: '5'` matches the
+      # threshold this baseline was captured and hand-verified against (see
+      # tests/fixtures/ci-baseline/ generation notes in docs/ci/README.md).
+      - name: clickcast dogfood run
+        id: clickcast
+        uses: ./.github/actions/clickcast
+        with:
+          install: 'false'
+          scenario: docs/scenarios/spa.yml
+          vars: base_url=http://127.0.0.1:8091
+          out: reel-spa.gif
+          baseline: tests/fixtures/ci-baseline/assertions-baseline.json
+          baseline-sidecar: tests/fixtures/ci-baseline/baseline.json
+          diff-fail-above: '5'
+
+      - name: Report outputs
+        if: always()
+        run: |
+          echo "sidecar-path: ${{ steps.clickcast.outputs.sidecar-path }}"
+          echo "reel-path: ${{ steps.clickcast.outputs.reel-path }}"
+          echo "assertions-passed: ${{ steps.clickcast.outputs.assertions-passed }}"
+          echo "diff-passed: ${{ steps.clickcast.outputs.diff-passed }}"
+          echo "diff-worst-pct: ${{ steps.clickcast.outputs.diff-worst-pct }}"
