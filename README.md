@@ -7,7 +7,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/AlexKay28/clickcast/ci.yml?branch=main)](https://github.com/AlexKay28/clickcast/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
-> **What's new** — see [`CHANGELOG.md`](CHANGELOG.md) for the latest release notes.
+> **What's new (v0.3.0)** — live agent control via a new [MCP server](docs/mcp.md), pixel-level `clickcast diff`, accessibility semantics fused with the pixel-grid overlay, an official CI GitHub Action, day-one Homebrew/apt packaging, and a self-healing first run. See [`CHANGELOG.md`](CHANGELOG.md) for the full notes.
 
 ![clickcast · scripted tour of tailwindcss.com — sticky A→B arrow, actions panel bottom-right, symmetric open/close pairs](docs/demo.gif)
 
