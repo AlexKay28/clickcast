@@ -563,6 +563,88 @@ class TestOutputFiles:
 
 
 # ------------------------------------------------------------------
+# Frame resolution for `--format frames` sidecars (media.format == "frames")
+# ------------------------------------------------------------------
+
+
+def _write_frames_format_sidecar(
+    tmp_path: Path,
+    subdir: str,
+    *,
+    media_path: str,
+    rect: tuple[int, int, int, int] | None,
+) -> Path:
+    """Build a `--format frames`-shaped sidecar matching real CLI output:
+    the sidecar lives at ``<out_dir>/<basename(media_path)>.json``, and the
+    frame lives under ``<out_dir>/<basename(media_path)>/`` — a sibling
+    directory named after the `--out` argument's basename, regardless of
+    what directory components `media_path` itself carries (real capture-time
+    CWD-relative `--out` value, per Media.path's actual semantics).
+    """
+    out_dir = tmp_path / subdir
+    frame_dir = out_dir / Path(media_path).name
+    _draw_frame(frame_dir / "frame-0000-000.png", rect=rect)
+    report = Report(
+        clickcast_version="0.1.0",
+        started_at="2026-01-01T00:00:00+00:00",
+        duration_s=1.0,
+        media=Media(
+            path=media_path,
+            format="frames",
+            size_bytes=1024,
+            frame_count=1,
+            duration_s=1.0,
+            fps=12,
+        ),
+        steps=[
+            StepReport(
+                index=0,
+                action="click",
+                args={},
+                status="ok",
+                duration_ms=10.0,
+                frames=["frame-0000-000.png"],
+                label="Open",
+                page_state=PageState(),
+            )
+        ],
+    )
+    return write(report, out_dir / f"{Path(media_path).name}.json")
+
+
+class TestFramesFormatResolution:
+    """Regression coverage: `_resolve_frame` must find real `--format frames`
+    output regardless of how many directory components the sidecar's
+    `media.path` carries — found while dogfooding `clickcast diff` against a
+    real multi-segment `--out demo/pixel-visual-diff/run.gif` capture, where
+    every existing test's `media.path` was a bare single-segment filename
+    (e.g. "tour.gif") and so never exercised this branch at all."""
+
+    def test_resolves_multi_segment_relative_media_path(self, tmp_path: Path) -> None:
+        run = _write_frames_format_sidecar(
+            tmp_path, "run", media_path="demo/pixel-visual-diff/run.gif", rect=SAFE_RECT_A
+        )
+        base = _write_frames_format_sidecar(
+            tmp_path, "base", media_path="demo/pixel-visual-diff/baseline.gif", rect=SAFE_RECT_B
+        )
+        report = visual_diff(run, base, out_dir=tmp_path / "diff")
+        assert report.unmatched_steps == [], (
+            "frame should resolve, not be flagged 'missing frame' by a stale double-joined path"
+        )
+        assert report.steps[0].changed_pct > 0
+
+    def test_resolves_bare_single_segment_media_path(self, tmp_path: Path) -> None:
+        """The pre-existing, already-covered-elsewhere shape — locks in that
+        the fix doesn't regress the simple case."""
+        run = _write_frames_format_sidecar(tmp_path, "run", media_path="run.gif", rect=SAFE_RECT_A)
+        base = _write_frames_format_sidecar(
+            tmp_path, "base", media_path="run.gif", rect=SAFE_RECT_B
+        )
+        report = visual_diff(run, base, out_dir=tmp_path / "diff")
+        assert report.unmatched_steps == []
+
+
+# ------------------------------------------------------------------
 # Reel.visual_diff()
 # ------------------------------------------------------------------
 

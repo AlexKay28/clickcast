@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`clickcast diff` couldn't find real `--format frames` output whenever
+  `--out` had directory components** (e.g. `--out demo/pixel-visual-diff/run.gif`)
+  — `_resolve_frame` double-joined the sidecar's `media.path` against its
+  own directory, producing a stale nonexistent path and silently reporting
+  every step as `unmatched (missing frame)` instead of diffing anything.
+  Every existing test used a bare single-segment `media.path` (`"tour.gif"`),
+  so the bug was invisible until a real multi-segment `--out` path was
+  exercised — found while building the `demo/pixel-visual-diff/` example
+  below. Fixed by resolving the frames directory from the sidecar's real
+  on-disk location plus `media.path`'s basename, not its full (possibly
+  stale) relative path. New `TestFramesFormatResolution` regression tests
+  cover both the multi-segment case and the pre-existing bare-filename case.
+
+### Added
+- **4 new `demo/` examples ablating v0.3.0 capabilities** the existing 8
+  demos (#66) never covered:
+  - `demo/spatial-grid-overlay/` — `--grid` pixel-coordinate targeting.
+  - `demo/pixel-visual-diff/` — `clickcast diff` against a real dark-mode
+    toggle regression on react.dev (81% changed, 2 highlighted regions),
+    including the click step correctly landing in `unmatched_steps` rather
+    than mis-pairing against the wrong baseline step.
+  - `demo/accessible-element-targeting/` — the accessibility+grid fusion
+    (`elements --json --grid`), contrasted with the audit-focused
+    `accessibility-preflight/`.
+  - `demo/live-mcp-session/` — a real live `clickcast mcp` session (four
+    real tool calls against react.dev via the in-process MCP test harness),
+    with the reel assembled from the session's own returned frames and
+    `close_session`'s `save_transcript` producing a genuine schema-v4
+    sidecar from a live session.
+
 ## [0.3.0] — 2026-09-03
 
 Agent-autonomy release. Backwards-compatible with 0.2.9. The biggest

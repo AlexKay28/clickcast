@@ -1,0 +1,158 @@
+{
+  "schema_version": 4,
+  "clickcast_version": "0.3.0",
+  "url": null,
+  "engine": "chromium",
+  "viewport": [
+    1280,
+    800
+  ],
+  "started_at": "2026-09-03T19:12:50.624418+00:00",
+  "duration_s": 1.9516821799916215,
+  "media": {
+    "path": "",
+    "format": "none",
+    "size_bytes": 0,
+    "frame_count": 3,
+    "duration_s": 0.0,
+    "fps": 1
+  },
+  "discovered_elements": [],
+  "steps": [
+    {
+      "index": 0,
+      "action": "goto",
+      "args": {
+        "timeout_ms": null,
+        "url": "https://react.dev/",
+        "wait": "networkidle",
+        "retries": 0
+      },
+      "status": "ok",
+      "duration_ms": 1098.4272010391578,
+      "frames": [],
+      "label": null,
+      "cursor_xy": null,
+      "page_state": {
+        "title": "React",
+        "url_after": "https://react.dev/",
+        "console_errors": [],
+        "page_errors": [],
+        "network_failed": [
+          "https://region1.google-analytics.com/g/collect?v=2&tid=G-B1E83PJ3RT&gtm=45je6920v9119811439za200zd9119811439&_p=1788462770807&gcd=13l3lPl2l1l1&npa=1&dma_cps=a&dma=1&are=1&cid=856319829.1788462771&frm=0&ngs=1&pscdl=noapi&rcb=15&sr=1280x800&uaa=x86&uab=64&uafvl=Not%253DA%253FBrand%3B99.0.0.0%7CHeadlessChrome%3B151.0.7922.34%7CChromium%3B151.0.7922.34&uam=&uamb=0&uap=Linux&uapv=&uaw=0&ul=en-us&_s=1&tag_exp=115938466~115938468~118897920~118897930~120213116~120385422~120469145~120469153&sid=1788462771&sct=1&seg=0&dl=https%3A%2F%2Freact.dev%2F&dt=React&en=page_view&_fv=1&_nsi=1&_ss=1&_ee=1&tfd=569"
+        ]
+      },
+      "error": null,
+      "skip_reason": null,
+      "error_code": null
+    },
+    {
+      "index": 1,
+      "action": "click",
+      "args": {
+        "timeout_ms": null,
+        "selector": "role=link[name=\"Learn\"]"
+      },
+      "status": "ok",
+      "duration_ms": 169.92796101840213,
+      "frames": [],
+      "label": null,
+      "cursor_xy": [
+        783,
+        32
+      ],
+      "page_state": {
+        "title": "React",
+        "url_after": "https://react.dev/learn",
+        "console_errors": [],
+        "page_errors": [],
+        "network_failed": []
+      },
+      "error": null,
+      "skip_reason": null,
+      "error_code": null
+    },
+    {
+      "index": 2,
+      "action": "click",
+      "args": {
+        "timeout_ms": null,
+        "selector": "role=link[name=\"Reference\"]"
+      },
+      "status": "ok",
+      "duration_ms": 63.39607900008559,
+      "frames": [],
+      "label": null,
+      "cursor_xy": [
+        872,
+        32
+      ],
+      "page_state": {
+        "title": "Quick Start \u2013 React",
+        "url_after": "https://react.dev/reference/react",
+        "console_errors": [],
+        "page_errors": [],
+        "network_failed": [
+          "https://react.dev/_next/data/tmJ9HFCJxwD00mANbOpHk/learn.json?markdownPath=learn"
+        ]
+      },
+      "error": null,
+      "skip_reason": null,
+      "error_code": null
+    }
+  ],
+  "warnings": [],
+  "errors": [],
+  "feedback": null,
+  "graph": {
+    "nodes": [
+      {
+        "id": "n1",
+        "kind": "page",
+        "url": "https://react.dev/",
+        "title": "React",
+        "dom_signature": "",
+        "first_seen_step": 0,
+        "last_seen_step": 0,
+        "components": []
+      },
+      {
+        "id": "n2",
+        "kind": "page",
+        "url": "https://react.dev/learn",
+        "title": "React",
+        "dom_signature": "",
+        "first_seen_step": 1,
+        "last_seen_step": 1,
+        "components": []
+      },
+      {
+        "id": "n3",
+        "kind": "page",
+        "url": "https://react.dev/reference/react",
+        "title": "Quick Start \u2013 React",
+        "dom_signature": "",
+        "first_seen_step": 2,
+        "last_seen_step": 2,
+        "components": []
+      }
+    ],
+    "edges": [
+      {
+        "from": "n1",
+        "to": "n2",
+        "via_step": 1,
+        "selector": "role=link[name=\"Learn\"]",
+        "transition_kind": "navigation"
+      },
+      {
+        "from": "n2",
+        "to": "n3",
+        "via_step": 2,
+        "selector": "role=link[name=\"Reference\"]",
+        "transition_kind": "navigation"
+      }
+    ]
+  },
+  "annotate": null
+}

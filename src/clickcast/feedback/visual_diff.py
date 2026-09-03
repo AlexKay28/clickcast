@@ -403,7 +403,17 @@ def _resolve_frame(sidecar_path: Path, report: Report, step: StepReport) -> Path
     candidates: list[Path] = []
     media_path = Path(report.media.path) if report.media.path else None
     if media_path is not None and report.media.format == "frames":
-        media_dir = media_path if media_path.is_absolute() else base / media_path
+        # `media.path` is stored exactly as the `--out` argument was given at
+        # capture time (e.g. "demo/pixel-visual-diff/run.gif" if that's what
+        # `--out` was) -- relative to whatever the CWD was THEN, not
+        # necessarily relative to the sidecar's own directory. But the
+        # frames dir is always a sibling of the sidecar on disk (the CLI
+        # writes `<out>.json` right next to `<out>/`), so for a relative
+        # path use only its final component against the sidecar's real
+        # directory rather than re-joining the whole (possibly stale) path,
+        # which double-nests when `--out` had directory components and
+        # `diff` runs from a different CWD than the original capture.
+        media_dir = media_path if media_path.is_absolute() else base / media_path.name
         candidates.append(media_dir / filename)
     candidates.append(base / filename)
     candidates.append(base / "frames" / filename)

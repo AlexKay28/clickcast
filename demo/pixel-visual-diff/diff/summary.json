@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "threshold": 24.0,
+  "exclude_overlays": true,
+  "steps": [
+    {
+      "run_index": 0,
+      "baseline_index": 0,
+      "label": "Open homepage",
+      "changed_pct": 0.0,
+      "regions": [],
+      "diff_image_path": null,
+      "run_frame": "demo/pixel-visual-diff/run.gif/frame-0000-012.png",
+      "baseline_frame": "demo/pixel-visual-diff/baseline.gif/frame-0000-012.png"
+    },
+    {
+      "run_index": 2,
+      "baseline_index": 2,
+      "label": null,
+      "changed_pct": 81.31806640625,
+      "regions": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 680
+        },
+        {
+          "x": 0,
+          "y": 769,
+          "width": 1280,
+          "height": 23
+        }
+      ],
+      "diff_image_path": "demo/pixel-visual-diff/diff/step-0002.diff.png",
+      "run_frame": "demo/pixel-visual-diff/run.gif/frame-0002-012.png",
+      "baseline_frame": "demo/pixel-visual-diff/baseline.gif/frame-0002-012.png"
+    },
+    {
+      "run_index": 3,
+      "baseline_index": 1,
+      "label": null,
+      "changed_pct": 81.31806640625,
+      "regions": [
+        {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 680
+        },
+        {
+          "x": 0,
+          "y": 769,
+          "width": 1280,
+          "height": 23
+        }
+      ],
+      "diff_image_path": "demo/pixel-visual-diff/diff/step-0003.diff.png",
+      "run_frame": "demo/pixel-visual-diff/run.gif/frame-0003-012.png",
+      "baseline_frame": "demo/pixel-visual-diff/baseline.gif/frame-0001-012.png"
+    }
+  ],
+  "unmatched_steps": [
+    {
+      "side": "run",
+      "index": 1,
+      "label": "Toggle dark mode (the \"regression\")",
+      "reason": "no baseline counterpart"
+    }
+  ]
+}
