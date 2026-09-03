@@ -55,6 +55,9 @@ from clickcast.encode import EncodeResult, Format, encode
 from clickcast.feedback import Media, Report, ReportBuilder
 from clickcast.feedback import write as write_report
 from clickcast.feedback.assertions import build_assertions, diff_assertions, load_assertions
+from clickcast.feedback.models import VisualDiffReport
+from clickcast.feedback.visual_diff import DEFAULT_THRESHOLD
+from clickcast.feedback.visual_diff import visual_diff as _visual_diff
 from clickcast.scenario import Meta, Scenario
 from clickcast.scenario import run as run_scenario
 from clickcast.serving import serve_directory
@@ -419,6 +422,44 @@ class _BaseReel:
         current = self.assertions()
         baseline = load_assertions(baseline_path)
         return diff_assertions(current, baseline)
+
+    def visual_diff(
+        self,
+        run_sidecar_path: str | Path,
+        baseline_sidecar_path: str | Path,
+        *,
+        threshold: float = DEFAULT_THRESHOLD,
+        out_dir: str | Path | None = None,
+        exclude_overlays: bool = True,
+    ) -> VisualDiffReport:
+        """Pixel-diff ``run_sidecar_path``'s frames against ``baseline_sidecar_path``'s.
+
+        :meth:`assertions_diff`'s sibling (#201/#204): same "committed
+        baseline" ergonomics, but a pixel-level regression signal instead of
+        a structural one. Unlike :meth:`assertions`, this does NOT read
+        ``self``'s in-memory last report — pixel diffing needs the actual
+        frame PNGs the sidecars point at, and those aren't retained on the
+        ``Reel`` instance after :meth:`save` returns (the recorder's temp
+        frame directory is cleaned up once the reel is encoded). Pass the
+        paths of two already-saved sidecars instead:
+
+        .. code-block:: python
+
+            Reel(url).goto().click(".cta").save("reel.gif")
+            report = reel.visual_diff("reel.gif.json", "tests/golden-tour.gif.json")
+            if any(s.changed_pct > 5 for s in report.steps):
+                raise SystemExit("visual regression detected")
+
+        See :func:`clickcast.feedback.visual_diff.visual_diff` for the full
+        contract (frame pairing, threshold semantics, overlay exclusion).
+        """
+        return _visual_diff(
+            run_sidecar_path,
+            baseline_sidecar_path,
+            threshold=threshold,
+            out_dir=out_dir,
+            exclude_overlays=exclude_overlays,
+        )
 
 
 # --------------------------------------------------------------------------
