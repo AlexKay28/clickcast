@@ -53,6 +53,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - README's CI regression-gate section now covers `diff` alongside
     `assertions` — when to reach for structural vs. visual, and how the
     two compose.
+- **`clickcast mcp`** (closes [#191], [#192], [#193], [#194], [#195]).
+  Live-agent-control, backwards-compatible and additive-only: an MCP
+  (Model Context Protocol) server wrapping clickcast's existing
+  session/action engine so an AI agent can drive a live browser one
+  action at a time and react to what it sees, instead of only
+  recording a whole tour up front.
+  New optional extra `clickcast[mcp]` (the official `mcp` Python SDK,
+  pinned `<2` — see below) and a new `clickcast mcp` command that starts
+  a stdio MCP server exposing 12 tools:
+  - `start_session` / `close_session` — open/close the one live
+    `Session` the server process holds (v1 is single-session,
+    single-process; see #191's "Out of scope"). `start_session` mirrors
+    `core/opts.py`'s `BrowserOpts` fields (engine/viewport/device/
+    headful/lang/dark) plus the grid overlay knobs, defaulting to
+    whatever `clickcast mcp --engine ...` was started with.
+    `close_session` optionally flushes the session's accumulated
+    sidecar-shaped transcript to disk via `save_transcript: PATH`.
+  - `goto`, `click`, `dblclick`, `hover`, `type`, `press`, `select`,
+    `scroll`, `wait`, `screenshot` — one tool per `core/actions.py` step
+    type, each a thin wrapper around the same `execute(step, session)`
+    dispatcher scenarios and `auto` already call. Nothing about how an
+    action resolves, times out, or classifies its failure differs
+    between a batch scenario and a live MCP call.
+
+  Every action tool returns clickcast's per-action payload instead of a
+  bare screenshot: an annotated PNG frame (cursor + click ripple +
+  label + the `--grid` overlay when enabled, reusing
+  `annotate/annotator.py` directly), a `page_state` block (same fields
+  as the sidecar's `feedback/models.py::PageState`), and — on failure —
+  an `error_code` from the exact same enum the sidecar uses
+  (`timeout` | `locator_missing` | `cross_origin` | `navigation_error`
+  | `selector_ambiguous` | `other`). One classification table, two
+  consumers; no parallel model, no drifting error-text regex.
+
+  New docs: [`docs/mcp-tool-schema.md`](docs/mcp-tool-schema.md) (the
+  full per-tool design contract — args, return shape, error modes) and
+  [`docs/mcp.md`](docs/mcp.md) (what it is, when to reach for it vs.
+  batch `auto`/`run`, copy-pasteable Claude Code / Claude Desktop client
+  config — verified against a real stdio MCP round-trip, not just
+  described). README gained a "Live agent control (MCP)" section;
+  `docs/for-agents.md` gained a "Live session" pointer;
+  `clickcast skill --json` gained an `mcp` command entry.
+
+  Tests under `tests/mcp/`: an in-process MCP client
+  (`mcp.shared.memory.create_connected_server_and_client_session`)
+  against a real Chromium session driving the existing
+  `tests/fixtures/site/` fixture — happy path for all 12 tools, plus
+  failure-mode coverage for `timeout` (a real unresolved-selector
+  click) and `locator_missing` (mirrors how `tests/test_actions.py`
+  already tests that classification — a direct, non-timeout exception,
+  since a real browser 0-match click universally times out first) and
+  usage errors (`other`) for calling an action tool before
+  `start_session` / double-`start_session` / acting after
+  `close_session`.
+
+  The `mcp` extra is pinned `mcp>=1.9.0,<2` — the `mcp` package's 2.x
+  line renamed `FastMCP` to `MCPServer` with a breaking API change;
+  `src/clickcast/mcp/` targets the widely-deployed 1.x `FastMCP` API
+  every current Claude Code / Claude Desktop MCP config is written
+  against. The base `pip install clickcast` is unaffected — `mcp` is
+  opt-in via `pip install 'clickcast[mcp]'`.
 
 ## [0.2.9] — 2026-08-07
 
@@ -1244,6 +1305,11 @@ Initial public release.
 [#177]: https://github.com/AlexKay28/clickcast/issues/177
 [#178]: https://github.com/AlexKay28/clickcast/issues/178
 [#171]: https://github.com/AlexKay28/clickcast/issues/171
+[#191]: https://github.com/AlexKay28/clickcast/issues/191
+[#192]: https://github.com/AlexKay28/clickcast/issues/192
+[#193]: https://github.com/AlexKay28/clickcast/issues/193
+[#194]: https://github.com/AlexKay28/clickcast/issues/194
+[#195]: https://github.com/AlexKay28/clickcast/issues/195
 [#201]: https://github.com/AlexKay28/clickcast/issues/201
 [#202]: https://github.com/AlexKay28/clickcast/issues/202
 [#203]: https://github.com/AlexKay28/clickcast/issues/203
