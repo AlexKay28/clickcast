@@ -10,6 +10,7 @@ brief in #205 ("a blank image vs. one with a shifted rectangle").
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -713,7 +714,12 @@ class TestCLI:
         assert "baseline not found" in result.output
 
     def test_help_lists_contract_flags(self) -> None:
-        result = self.runner.invoke(app, ["diff", "--help"])
+        result = self.runner.invoke(app, ["diff", "--help"], env={"NO_COLOR": "1", "TERM": "dumb"})
         assert result.exit_code == 0
+        # Typer's rich renderer wraps long flag lists across lines and injects
+        # ANSI codes on CI even when NO_COLOR is set (see test_cli_run_url.py).
+        # Strip ANSI + collapse whitespace so the check is layout-agnostic.
+        plain = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+        collapsed = re.sub(r"\s+", " ", plain)
         for flag in ("--out", "--threshold", "--no-exclude-overlays", "--fail-above"):
-            assert flag in result.output
+            assert flag in collapsed
