@@ -1430,6 +1430,58 @@ async def _do_elements(*, url: str, limit: int, session_kwargs: dict[str, Any]) 
 
 
 # ==========================================================================
+# clickcast mcp  (#191)
+# ==========================================================================
+
+
+@app.command(
+    "mcp",
+    help="Start an MCP server exposing clickcast sessions for live agent control.",
+    epilog=_FEEDBACK_EPILOG,
+)
+def mcp_cmd(
+    viewport: ViewportArg = "1280x800",
+    device: Device = None,
+    engine: Engine = "chromium",
+    headful: Headful = False,
+    lang: Lang = None,
+    dark: Dark = False,
+    grid: Grid = False,
+    grid_pitch: GridPitch = 100,
+    grid_color: GridColor = "#FFFFFF33",
+    grid_style: GridStyle = "full",
+    verbose: Verbose = 0,
+) -> None:
+    """Run the stdio MCP server (see docs/mcp.md).
+
+    Every browser-behaviour flag here is the DEFAULT for `start_session`
+    when the connecting agent doesn't override it — the same "CLI flag as
+    fallback" precedence every other clickcast command uses over `Config`
+    (`CLICKCAST_*` env vars / TOML). Reads the same layered `Config` as
+    `auto`/`run`; no new config surface.
+    """
+    _setup_logging(verbose)
+    try:
+        from clickcast.mcp import serve_stdio
+    except ImportError as e:
+        _die(
+            "`clickcast mcp` requires the `mcp` extra — install with "
+            f"`pip install 'clickcast[mcp]'` ({e})"
+        )
+        return
+    grid_cfg = _build_grid_config(grid, grid_pitch, grid_color, grid_style)
+    browser_opts = BrowserOpts(
+        engine=engine,
+        viewport=Viewport.parse(viewport),
+        device=device,
+        headful=headful,
+        lang=lang,
+        dark=dark,
+    )
+    serve_stdio(default_browser=browser_opts, default_grid=grid_cfg)
+
+
+# ==========================================================================
 # clickcast doctor
 # ==========================================================================
 

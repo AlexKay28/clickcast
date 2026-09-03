@@ -102,6 +102,26 @@ Once the agent has this, ask it something concrete like *"run clickcast auto aga
 
 ---
 
+## Live agent control (MCP)
+
+Everything above is batch mode: record a whole tour, then read back a GIF + sidecar. `clickcast mcp` is the live counterpart — an MCP server that drives one action at a time (`goto`/`click`/`type`/`scroll`/...) and hands back clickcast's richer per-call payload (annotated frame, `page_state`, grid coordinates, an enumerated `error_code`) instead of a bare screenshot, so an agent can react before deciding the next step.
+
+```bash
+pip install 'clickcast[mcp]'
+```
+
+```json
+{
+  "mcpServers": {
+    "clickcast": { "command": "clickcast", "args": ["mcp"] }
+  }
+}
+```
+
+Reach for `mcp` when an agent needs to explore and react live; reach for `auto`/`run` for a repeatable, one-shot artifact (CI, docs, release notes). Full tool reference, client config for Claude Code / Claude Desktop, and the schema doc: [`docs/mcp.md`](docs/mcp.md) · [`docs/mcp-tool-schema.md`](docs/mcp-tool-schema.md).
+
+---
+
 ## First run — 30 seconds
 
 ```bash
@@ -237,6 +257,16 @@ clickcast install                        # chromium only
 clickcast install firefox webkit         # add more
 clickcast install --with-deps chromium   # Linux: pull system libs (needs sudo)
 ```
+
+### `mcp`
+
+Start a stdio MCP server for live agent control — see [Live agent control (MCP)](#live-agent-control-mcp) above and [`docs/mcp.md`](docs/mcp.md). Requires `pip install 'clickcast[mcp]'`.
+
+```bash
+clickcast mcp --grid   # every action tool's returned frame carries the coordinate overlay
+```
+
+Flags: `--engine`, `--viewport`, `--device`, `--headful`, `--lang`, `--dark`, `--grid`/`--grid-pitch`/`--grid-color`/`--grid-style` — all defaults for `start_session` when the connecting agent doesn't override them.
 
 ---
 
