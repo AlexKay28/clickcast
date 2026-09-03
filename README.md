@@ -437,6 +437,35 @@ query-string tokens), `cursor_xy`. If you need those in your gate too,
 diff the raw sidecar with your own tooling — the assertion set is the
 narrow "did the UI still behave" contract, not the wire-level snapshot.
 
+### Its visual companion: `clickcast diff`
+
+`assertions` is structural — it never looks at a pixel. `clickcast diff`
+(and `Reel.visual_diff()`) is the pixel-level companion: it pairs up two
+sidecars' steps and pixel-diffs their frames, reporting a percent-changed
+and a list of changed bounding regions per step, plus region-highlighted
+diff images. Reach for `assertions` to catch "the flow broke" (wrong step
+count, a step that started failing); reach for `diff` to catch "the flow
+ran fine but the button moved / the color changed / the layout shifted."
+The two compose — run both in CI for full coverage, or `diff` alone if
+pixel drift is your only concern.
+
+```bash
+clickcast diff reel.gif.json tests/golden-tour.gif.json \
+  --out diff-report --fail-above 5
+```
+
+Exits non-zero when any step's changed pixel percentage exceeds
+`--fail-above`, or when a step couldn't be paired with its baseline
+counterpart at all (mismatched step counts fall back to label matching;
+anything still unmatched is flagged rather than silently skipped).
+`--out` collects the region-highlighted diff images plus a `summary.json`
+for CI artifacts; `--threshold` tunes the per-pixel noise floor. Clickcast's
+own overlays (progress bar, action label, actions panel, cursor + ripple)
+are excluded from the diff by default — otherwise every run would flag its
+own chrome as a regression — pass `--no-exclude-overlays` for a strict
+raw-pixel diff. Same signal from Python via `reel.visual_diff(run_path,
+baseline_path)`.
+
 ---
 
 ## Configuration

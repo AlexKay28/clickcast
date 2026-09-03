@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Pixel-level visual diff between two runs** (closes [#201], [#202],
+  [#203], [#204], [#205]). `clickcast assertions --baseline` ([#112]) is
+  structural-only — it never looks at a pixel. This adds a real
+  pixel-level companion: pair up two sidecars' steps, pixel-diff the
+  paired frames, and report a percent-changed + a list of changed
+  bounding regions per step, plus region-highlighted diff images.
+  - New `src/clickcast/feedback/visual_diff.py`:
+    `visual_diff(run_sidecar_path, baseline_sidecar_path, *, threshold=,
+    out_dir=, exclude_overlays=) -> VisualDiffReport`. Pairs steps by
+    index first, falling back to label matching when the two sidecars'
+    step counts differ; a step that still can't be paired (or whose
+    frame is missing from disk) is flagged in `unmatched_steps` rather
+    than silently skipped. Pixel diff is Pillow's
+    `ImageChops.difference` collapsed to a per-pixel max across R/G/B,
+    thresholded (`--threshold`, default 24/255) to ignore
+    anti-aliasing/re-encoding noise, then grouped into bounding regions
+    via a tiled connected-component pass (no numpy — matches the
+    `annotate/grid.py` "pure-Pillow, no dependency changes" pattern from
+    [#171]).
+  - New `BBox` / `UnmatchedStep` / `StepVisualDiff` / `VisualDiffReport`
+    pydantic models (`extra="forbid"`) in `feedback/models.py`, mirroring
+    `Assertions`' contract-freezing style.
+  - Clickcast's own annotator overlays (progress bar, action label,
+    actions panel, cursor + ripple) are excluded from the diff by
+    default, computed from `AnnotateConfig`'s default layout constants
+    plus each paired step's real `cursor_xy` — otherwise diffing two
+    runs of an identical page would flag clickcast's own chrome as a
+    regression on every step. `--no-exclude-overlays` opts out for
+    strict raw-pixel diffing.
+  - `clickcast diff <run>.gif.json <baseline>.gif.json` CLI command:
+    `--out DIR` (diff images + `summary.json`, default a `.diff/`
+    directory next to the run sidecar), `--threshold FLOAT`,
+    `--no-exclude-overlays`, `--fail-above PCT` (nonzero exit when any
+    step's `changed_pct` exceeds the gate, or when a step is
+    unmatched — omit the flag to report only). This CLI contract (name,
+    `--out`, `--fail-above`) is depended on by the forthcoming CI Action
+    ([#206]/[#208]).
+  - `Reel.visual_diff(run_sidecar_path, baseline_sidecar_path, ...)` —
+    `assertions_diff()`'s sibling for Python API callers. Unlike
+    `assertions()`, it reads both sidecars from disk rather than the
+    in-memory last report, since pixel diffing needs the frame PNGs the
+    recorder's temp directory no longer holds once `save()` returns.
+  - README's CI regression-gate section now covers `diff` alongside
+    `assertions` — when to reach for structural vs. visual, and how the
+    two compose.
+
 ## [0.2.9] — 2026-08-07
 
 Agent-spatial-reasoning release. Backwards-compatible. Adds a
@@ -1197,3 +1244,10 @@ Initial public release.
 [#177]: https://github.com/AlexKay28/clickcast/issues/177
 [#178]: https://github.com/AlexKay28/clickcast/issues/178
 [#171]: https://github.com/AlexKay28/clickcast/issues/171
+[#201]: https://github.com/AlexKay28/clickcast/issues/201
+[#202]: https://github.com/AlexKay28/clickcast/issues/202
+[#203]: https://github.com/AlexKay28/clickcast/issues/203
+[#204]: https://github.com/AlexKay28/clickcast/issues/204
+[#205]: https://github.com/AlexKay28/clickcast/issues/205
+[#206]: https://github.com/AlexKay28/clickcast/issues/206
+[#208]: https://github.com/AlexKay28/clickcast/issues/208
