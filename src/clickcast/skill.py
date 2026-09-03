@@ -227,6 +227,26 @@ COMMAND_BRIEFS: tuple[CommandBrief, ...] = (
         example="clickcast report-bug reel.gif.json --json",
     ),
     CommandBrief(
+        name="mcp",
+        summary="Start an MCP server (stdio) for live, one-action-at-a-time agent control.",
+        when_to_use=(
+            "You want to react to what you see before deciding the next action, "
+            "instead of recording a whole tour up front — like `auto`/`run` but "
+            "interactive. Point your MCP client at `clickcast mcp`, call "
+            "start_session, then goto/click/type/... Each call returns the same "
+            "annotated-frame + page_state + error_code shape the sidecar uses. "
+            "See docs/mcp.md (client config) and docs/mcp-tool-schema.md (tool contract)."
+        ),
+        key_flags=(
+            FlagBrief(
+                "--engine/--viewport/--device/--headful/--lang/--dark",
+                "defaults for start_session when the agent omits them",
+            ),
+            FlagBrief("--grid", "default pixel-grid overlay for every returned frame"),
+        ),
+        example="clickcast mcp --grid",
+    ),
+    CommandBrief(
         name="doctor",
         summary="Diagnose the local environment (Python, playwright, engines, ffmpeg).",
         when_to_use=(

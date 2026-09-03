@@ -10,6 +10,10 @@ clickcast auto https://example.com --out tour.gif --with-feedback
 
 Produces `tour.gif` + `tour.gif.json`. The sidecar is the machine contract: schema at [`src/clickcast/feedback/schema/v3.json`](../src/clickcast/feedback/schema/v3.json). With `--with-feedback`, the sidecar also carries a `feedback` block with pointers back here.
 
+## Live session
+
+Everything above is batch: record a whole tour, then read back a GIF + sidecar. When you need to react to what you see before deciding the next action — instead of scripting the whole tour up front — reach for the live counterpart: [`clickcast mcp`](mcp.md), an MCP server exposing `goto`/`click`/`type`/`scroll`/... as individual tool calls, each returning the same annotated-frame + `page_state` + `error_code` shape the sidecar uses. Tool-by-tool contract: [`mcp-tool-schema.md`](mcp-tool-schema.md).
+
 ## Report bugs
 
 When something looks off — a stalled tour, a missing selector, an unexpected sidecar shape — run:
