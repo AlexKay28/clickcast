@@ -19,7 +19,7 @@ import pytest
 from PIL import Image
 from typer.testing import CliRunner
 
-from clickcast.annotate.grid import GridConfig, draw_grid, parse_rgba_hex
+from clickcast.annotate.grid import GridConfig, draw_grid, grid_cell, parse_rgba_hex
 
 # Rich (bundled with Typer) inserts ANSI SGR escapes between color runs, and
 # under `GITHUB_ACTIONS=true` it splits those runs at hyphen boundaries in
@@ -83,6 +83,44 @@ class TestParseRgbaHex:
     def test_non_hex_raises(self) -> None:
         with pytest.raises(ValueError, match="RGBA hex"):
             parse_rgba_hex("#ZZZZZZ")
+
+
+# ---------------------------------------------------------------------------
+# grid_cell — the pitch math shared with discovery.accessibility (#198)
+# ---------------------------------------------------------------------------
+
+
+class TestGridCell:
+    def test_origin_is_cell_zero_zero(self) -> None:
+        assert grid_cell(0, 0, 100) == (0, 0)
+
+    def test_point_before_first_major_line_is_cell_zero(self) -> None:
+        assert grid_cell(99, 50, 100) == (0, 0)
+
+    def test_point_at_major_line_starts_next_cell(self) -> None:
+        # The label at x=100 marks the START of cell col=1 — matches how a
+        # human reads "this element sits at/after the x=100 gridline".
+        assert grid_cell(100, 0, 100) == (1, 0)
+
+    def test_independent_col_and_row(self) -> None:
+        assert grid_cell(250, 430, 100) == (2, 4)
+
+    def test_matches_rendered_label_positions(self) -> None:
+        # Spot-check against the label coordinates draw_grid's `_draw_labels`
+        # would actually render for pitch=50 on a 220x220 image: labels at
+        # x/y = 50, 100, 150, 200. An element whose top-left sits at
+        # (160, 55) — between the 150 and 200 labels, just past the 50
+        # label — reads as "col 3, row 1" off the image the same way
+        # grid_cell reports it.
+        assert grid_cell(160, 55, 50) == (3, 1)
+
+    def test_zero_pitch_raises(self) -> None:
+        with pytest.raises(ValueError, match="pitch"):
+            grid_cell(10, 10, 0)
+
+    def test_negative_pitch_raises(self) -> None:
+        with pytest.raises(ValueError, match="pitch"):
+            grid_cell(10, 10, -5)
 
 
 # ---------------------------------------------------------------------------

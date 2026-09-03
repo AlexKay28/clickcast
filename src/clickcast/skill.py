@@ -46,7 +46,7 @@ SKILL_SCHEMA_VERSION = 1
 
 SIDECAR_SCHEMA_URL = (
     "https://raw.githubusercontent.com/AlexKay28/clickcast/main/"
-    "src/clickcast/feedback/schema/v3.json"
+    "src/clickcast/feedback/schema/v4.json"
 )
 
 SUMMARY = (

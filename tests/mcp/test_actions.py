@@ -61,7 +61,7 @@ class TestSessionLifecycle:
         assert payload["transcript_path"] == str(out)
         assert out.exists()
         data = json.loads(out.read_text())
-        assert data["schema_version"] == 3
+        assert data["schema_version"] == 4
         assert len(data["steps"]) == 1
         assert data["steps"][0]["action"] == "goto"
         assert data["media"]["format"] == "none"

@@ -35,7 +35,7 @@ from typing import Literal
 
 from PIL import Image, ImageDraw, ImageFont
 
-__all__ = ["GridConfig", "draw_grid", "parse_rgba_hex"]
+__all__ = ["GridConfig", "draw_grid", "grid_cell", "parse_rgba_hex"]
 
 _BUNDLED_FONT = "DejaVuSans.ttf"
 
@@ -91,6 +91,26 @@ def parse_rgba_hex(value: str) -> tuple[int, int, int, int]:
     except ValueError as e:
         raise ValueError(f"invalid RGBA hex {value!r}: {e}") from e
     return (r, g, b, a)
+
+
+def grid_cell(x: int, y: int, pitch: int) -> tuple[int, int]:
+    """Return the ``(col, row)`` major-line cell that pixel ``(x, y)`` falls in.
+
+    This is the single source of truth for the pitch math used to lay out
+    gridlines/labels in :func:`draw_grid` — ``col``/``row`` count how many
+    full ``pitch``-sized cells lie to the left of / above the point, which
+    is exactly the major-line index a human reads off the rendered overlay
+    (the labels at ``x=pitch, 2*pitch, ...`` mark the boundary between cell
+    ``N-1`` and cell ``N``). Used by ``discovery.accessibility`` (#198) to
+    fuse an element's bbox with the grid coordinate system without
+    reimplementing this division.
+
+    Raises :class:`ValueError` when ``pitch <= 0``, mirroring
+    :func:`draw_grid`'s validation.
+    """
+    if pitch <= 0:
+        raise ValueError(f"grid pitch must be > 0, got {pitch}")
+    return (x // pitch, y // pitch)
 
 
 def _load_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:

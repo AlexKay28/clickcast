@@ -62,8 +62,52 @@ class Media(BaseModel):
     fps: int = Field(ge=1)
 
 
+class AccessibilityState(BaseModel):
+    """Interactive ARIA states for one element — v4 additive (#196/#197).
+
+    Mirrors :class:`clickcast.discovery.accessibility.AccessibilityState`.
+    Each field defaults ``None`` — Playwright's ARIA snapshot only reports
+    a state when it can positively confirm it, so ``None`` means "not
+    applicable / unknown", not "false". ``checked`` can be the literal
+    string ``"mixed"`` for tri-state checkboxes.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    disabled: bool | None = None
+    checked: bool | str | None = None
+    expanded: bool | None = None
+    pressed: bool | None = None
+    selected: bool | None = None
+
+
+class ElementAccessibility(BaseModel):
+    """Fused accessibility node + grid cell for one ``DiscoveredElement``.
+
+    v4 additive block (#196/#198): ``role``/``name`` come from Playwright's
+    accessibility resolution (distinct from the DOM-heuristic
+    ``DiscoveredElement.role``/``.text`` fields, which are unchanged).
+    ``grid_cell`` is the element's top-left ``[col, row]`` in the pixel-grid
+    overlay's coordinate system (#171) — populated only when the reel/run
+    that produced this sidecar had a grid config active; ``null``
+    otherwise, matching how ``annotate.grid`` itself is optional.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    role: str | None = None
+    name: str | None = None
+    state: AccessibilityState = Field(default_factory=AccessibilityState)
+    grid_cell: list[int] | None = Field(default=None, min_length=2, max_length=2)
+
+
 class DiscoveredElement(BaseModel):
-    """A single element returned by ``discover()`` at capture time."""
+    """A single element returned by ``discover()`` at capture time.
+
+    ``accessibility`` is the v4 additive block (#196/#199): ``None`` for
+    v3-and-earlier sidecars and for any run that couldn't/didn't capture
+    it — every other field is unchanged from v3.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -73,6 +117,7 @@ class DiscoveredElement(BaseModel):
     bbox: list[int] = Field(min_length=4, max_length=4)
     score: float | int
     source: str
+    accessibility: ElementAccessibility | None = None
 
 
 class PageState(BaseModel):
@@ -286,11 +331,17 @@ class Report(BaseModel):
     v3 also gained an optional :attr:`annotate` block carrying the grid
     overlay's render params (#171). Absent when the grid was off, so v1
     / v2 sidecars still round-trip.
+
+    v4 (this release, #196/#199) adds one optional per-element field:
+    :attr:`DiscoveredElement.accessibility` — Playwright's own role/name/
+    interactive-state resolution fused with the element's grid cell (see
+    :class:`ElementAccessibility`). Defaults ``None``, so v1/v2/v3
+    sidecars round-trip through the v4 model unchanged.
     """
 
     # No extra="forbid" here — see docstring above.
 
-    schema_version: int = 3
+    schema_version: int = 4
     clickcast_version: str
     url: str | None = None
     engine: str = "chromium"

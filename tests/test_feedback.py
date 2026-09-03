@@ -9,7 +9,9 @@ import pytest
 from pydantic import ValidationError
 
 from clickcast.feedback import (
+    AccessibilityState,
     DiscoveredElement,
+    ElementAccessibility,
     Media,
     PageState,
     Report,
@@ -20,7 +22,8 @@ from clickcast.feedback import (
 )
 
 REPO_ROOT = Path(__file__).parent.parent
-SCHEMA_PATH = REPO_ROOT / "src" / "clickcast" / "feedback" / "schema" / "v3.json"
+SCHEMA_PATH = REPO_ROOT / "src" / "clickcast" / "feedback" / "schema" / "v4.json"
+V3_SCHEMA_PATH = REPO_ROOT / "src" / "clickcast" / "feedback" / "schema" / "v3.json"
 V2_SCHEMA_PATH = REPO_ROOT / "src" / "clickcast" / "feedback" / "schema" / "v2.json"
 
 
@@ -76,12 +79,12 @@ class TestModels:
         with pytest.raises(ValidationError):
             StepReport(index=0, action="goto", duration_ms=1.0)  # type: ignore[call-arg]
 
-    def test_report_default_schema_version_is_3(self) -> None:
-        # Bumped to 3 in #151 (AI-2, AI-5): the optional `skip_reason` and
-        # `error_code` gates ship on `StepReport`. v1 and v2 sidecars still
+    def test_report_default_schema_version_is_4(self) -> None:
+        # Bumped to 4 in #196/#199: the optional `elements[].accessibility`
+        # block ships on `DiscoveredElement`. v1/v2/v3 sidecars still
         # validate under this model (see the forward-compat test below and
-        # the v1/v2-backcompat tests further down).
-        assert _valid_report().schema_version == 3
+        # the v1/v2/v3-backcompat tests further down).
+        assert _valid_report().schema_version == 4
 
     def test_report_defaults_are_forward_compatible(self) -> None:
         # Roadmap #29 Track C adds a top-level `graph` block. The base model
@@ -135,6 +138,89 @@ class TestModels:
         assert report.steps[0].skip_reason is None
         assert report.steps[0].error_code is None
 
+    def test_v3_sidecar_validates_under_v4_model(self) -> None:
+        # See #196/#199: a v3 sidecar (no `discovered_elements[].accessibility`,
+        # no `schema_version` bump) must round-trip cleanly through the v4
+        # model — the new field is optional and defaults to `None`.
+        v3_payload = {
+            "schema_version": 3,
+            "clickcast_version": "0.2.9",
+            "started_at": "2026-08-07T15:00:00+00:00",
+            "duration_s": 5.5,
+            "media": {
+                "path": "tour.gif",
+                "format": "gif",
+                "size_bytes": 1024,
+                "frame_count": 12,
+                "duration_s": 1.0,
+                "fps": 12,
+            },
+            "discovered_elements": [
+                {
+                    "selector": 'role=button[name="Get started"]',
+                    "role": "button",
+                    "text": "Get started",
+                    "bbox": [10, 10, 100, 30],
+                    "score": 3,
+                    "source": "dom-heuristic",
+                }
+            ],
+            "steps": [
+                {
+                    "index": 0,
+                    "action": "goto",
+                    "args": {"url": "https://x"},
+                    "status": "ok",
+                    "duration_ms": 1200.0,
+                    "frames": ["frame-0000-000.png"],
+                }
+            ],
+        }
+        # Should NOT raise — the new accessibility field defaults to None.
+        report = Report.model_validate(v3_payload)
+        assert report.schema_version == 3  # writer's value preserved
+        assert report.discovered_elements[0].accessibility is None
+
+    def test_discovered_element_accessibility_defaults_none(self) -> None:
+        el = DiscoveredElement(
+            selector="s", role="button", text="t", bbox=[0, 0, 1, 1], score=1, source="x"
+        )
+        assert el.accessibility is None
+
+    def test_discovered_element_accessibility_populated(self) -> None:
+        el = DiscoveredElement(
+            selector='role=button[name="Get started"]',
+            role="button",
+            text="Get started",
+            bbox=[10, 10, 100, 30],
+            score=3,
+            source="dom-heuristic",
+            accessibility=ElementAccessibility(
+                role="button",
+                name="Get started",
+                state=AccessibilityState(disabled=False),
+                grid_cell=[1, 0],
+            ),
+        )
+        assert el.accessibility is not None
+        assert el.accessibility.role == "button"
+        assert el.accessibility.name == "Get started"
+        assert el.accessibility.state.disabled is False
+        assert el.accessibility.grid_cell == [1, 0]
+
+    def test_accessibility_state_checked_accepts_mixed_string(self) -> None:
+        # Tri-state checkboxes report `checked="mixed"` — not a plain bool.
+        state = AccessibilityState(checked="mixed")
+        assert state.checked == "mixed"
+
+    def test_element_accessibility_grid_cell_needs_2(self) -> None:
+        with pytest.raises(ValidationError):
+            ElementAccessibility(grid_cell=[1])
+
+    def test_element_accessibility_forbids_extra_fields(self) -> None:
+        with pytest.raises(ValidationError):
+            ElementAccessibility(role="button", bogus="nope")  # type: ignore[call-arg]
+
 
 # ------------------------------------------------------------------
 # JSON Schema — model_json_schema() must match the committed file
@@ -153,17 +239,31 @@ class TestJsonSchema:
             "and commit the update"
         )
 
-    def test_schema_advertises_v3(self) -> None:
+    def test_schema_advertises_v4(self) -> None:
         schema = json.loads(SCHEMA_PATH.read_text())
-        # schema_version has default 3 in the model — check the default made it
-        assert schema["properties"]["schema_version"]["default"] == 3
+        # schema_version has default 4 in the model — check the default made it
+        assert schema["properties"]["schema_version"]["default"] == 4
 
-    def test_v2_and_v1_schemas_preserved(self) -> None:
-        # Both older snapshots stay on disk verbatim — downstream consumers
-        # that bookmarked those URLs must keep working. See #151.
+    def test_schema_carries_element_accessibility_block(self) -> None:
+        schema = json.loads(SCHEMA_PATH.read_text())
+        defs = schema["$defs"]
+        assert "ElementAccessibility" in defs
+        assert "AccessibilityState" in defs
+        discovered_props = defs["DiscoveredElement"]["properties"]
+        assert "accessibility" in discovered_props
+
+    def test_v1_v2_v3_schemas_preserved(self) -> None:
+        # All three older snapshots stay on disk verbatim — downstream
+        # consumers that bookmarked those URLs must keep working. See
+        # #151 (v1→v2, v2→v3) and #196 (v3→v4).
         v1_path = REPO_ROOT / "src" / "clickcast" / "feedback" / "schema" / "v1.json"
         assert v1_path.exists(), "v1.json must never be deleted (historical contract)"
         assert V2_SCHEMA_PATH.exists(), "v2.json must never be deleted (historical contract)"
+        assert V3_SCHEMA_PATH.exists(), "v3.json must never be deleted (historical contract)"
+        v3_schema = json.loads(V3_SCHEMA_PATH.read_text())
+        # v3.json must NOT carry the v4 accessibility block — it's a frozen
+        # snapshot of the schema BEFORE #196 landed.
+        assert "ElementAccessibility" not in v3_schema.get("$defs", {})
 
 
 # ------------------------------------------------------------------
@@ -182,7 +282,7 @@ class TestRoundTrip:
         path = write(_valid_report(), tmp_path / "tour.gif.json")
         # Must be valid JSON with predictable indentation
         payload = json.loads(path.read_text())
-        assert payload["schema_version"] == 3
+        assert payload["schema_version"] == 4
         assert payload["media"]["format"] == "gif"
 
     def test_load_missing_file_raises(self, tmp_path: Path) -> None:
@@ -261,3 +361,56 @@ class TestConsumerExample:
         # Consumer prints: "<index> <action> -> <frames_csv>" per failed step
         assert "1 click" in result.stdout
         assert "frame-0001-000.png,frame-0001-001.png" in result.stdout
+
+    def test_consumer_reads_accessibility_block(self, tmp_path: Path) -> None:
+        # #196/#200: a standalone (no `clickcast` import) consumer must be
+        # able to read the v4 `discovered_elements[].accessibility` block.
+        # Mirrors `read_sidecar.py`'s pattern — build+write a report here
+        # (no browser needed for this shape-level contract test), then
+        # invoke the consumer script as a real subprocess.
+        report = Report(
+            clickcast_version="0.2.9",
+            started_at="2026-09-03T15:00:00+00:00",
+            duration_s=1.0,
+            media=_valid_media(),
+            discovered_elements=[
+                DiscoveredElement(
+                    selector='role=button[name="Get started"]',
+                    role="button",
+                    text="Get started",
+                    bbox=[10, 20, 100, 30],
+                    score=3,
+                    source="dom-heuristic",
+                    accessibility=ElementAccessibility(
+                        role="button",
+                        name="Get started",
+                        state=AccessibilityState(disabled=False),
+                        grid_cell=[0, 0],
+                    ),
+                ),
+                DiscoveredElement(
+                    selector="#unlabeled",
+                    role="button",
+                    text="",
+                    bbox=[10, 60, 40, 20],
+                    score=1,
+                    source="dom-heuristic",
+                    # No accessibility captured for this one — null, additive.
+                    accessibility=None,
+                ),
+            ],
+        )
+        sidecar = write(report, tmp_path / "tour.gif.json")
+        script = REPO_ROOT / "tests" / "consumer" / "read_accessibility.py"
+        result = subprocess.run(
+            [sys.executable, str(script), str(sidecar)],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        assert (
+            'role=button[name="Get started"] role=button name=Get started '
+            "disabled=False grid_cell=0,0" in result.stdout
+        )
+        # The null-accessibility element produced no output line.
+        assert "#unlabeled" not in result.stdout

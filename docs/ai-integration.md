@@ -43,10 +43,13 @@ everything from the schema in [feedback-schema.md](feedback-schema.md).
 ## Reading the sidecar without the package
 
 The sidecar is plain JSON validated against
-`src/clickcast/feedback/schema/v3.json`. See
+`src/clickcast/feedback/schema/v4.json`. See
 [`tests/consumer/read_sidecar.py`](../tests/consumer/read_sidecar.py) for
-a standalone consumer that doesn't import `clickcast`. Consumers
-targeting the earlier schemas can pin
-[`v2.json`](../src/clickcast/feedback/schema/v2.json) (pre-#151 gates)
-or [`v1.json`](../src/clickcast/feedback/schema/v1.json) (pre-#107
-graph block), both preserved verbatim — v3 is strictly additive.
+a standalone consumer that doesn't import `clickcast`, and
+[`tests/consumer/read_accessibility.py`](../tests/consumer/read_accessibility.py)
+for the same pattern applied to the v4 `discovered_elements[].accessibility`
+block (#196). Consumers targeting the earlier schemas can pin
+[`v3.json`](../src/clickcast/feedback/schema/v3.json) (pre-#196
+accessibility+grid block), [`v2.json`](../src/clickcast/feedback/schema/v2.json)
+(pre-#151 gates), or [`v1.json`](../src/clickcast/feedback/schema/v1.json)
+(pre-#107 graph block), all preserved verbatim — v4 is strictly additive.

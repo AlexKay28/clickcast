@@ -1,0 +1,826 @@
+{
+  "$defs": {
+    "AccessibilityState": {
+      "additionalProperties": false,
+      "description": "Interactive ARIA states for one element \u2014 v4 additive (#196/#197).\n\nMirrors :class:`clickcast.discovery.accessibility.AccessibilityState`.\nEach field defaults ``None`` \u2014 Playwright's ARIA snapshot only reports\na state when it can positively confirm it, so ``None`` means \"not\napplicable / unknown\", not \"false\". ``checked`` can be the literal\nstring ``\"mixed\"`` for tri-state checkboxes.",
+      "properties": {
+        "disabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Disabled"
+        },
+        "checked": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Checked"
+        },
+        "expanded": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expanded"
+        },
+        "pressed": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pressed"
+        },
+        "selected": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Selected"
+        }
+      },
+      "title": "AccessibilityState",
+      "type": "object"
+    },
+    "AnnotateMetadata": {
+      "additionalProperties": false,
+      "description": "Annotator-side render params attached to the sidecar (#171).\n\nCurrently carries only :attr:`grid` \u2014 the pixel-grid overlay's params.\nKept as its own model so future annotator features (highlight, cursor\nstyle, etc.) can grow a peer field without another top-level break.",
+      "properties": {
+        "grid": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GridMetadata"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "AnnotateMetadata",
+      "type": "object"
+    },
+    "ComponentNode": {
+      "additionalProperties": false,
+      "description": "A stable DOM subtree that appears on \u2265 2 ``PageNode`` entries.\n\nDeduped across pages by ``dom_signature`` \u2014 same primary-nav rendered on\n/pricing and /docs surfaces exactly one ``ComponentNode``. Empty list in\nthe v2-shipped-first slice (see :class:`PageNode.components`).",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "component",
+          "default": "component",
+          "title": "Kind",
+          "type": "string"
+        },
+        "role": {
+          "title": "Role",
+          "type": "string"
+        },
+        "selector": {
+          "default": "",
+          "title": "Selector",
+          "type": "string"
+        },
+        "bbox": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Bbox",
+          "type": "array"
+        },
+        "dom_signature": {
+          "title": "Dom Signature",
+          "type": "string"
+        },
+        "seen_on_nodes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Seen On Nodes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "role",
+        "dom_signature"
+      ],
+      "title": "ComponentNode",
+      "type": "object"
+    },
+    "DiscoveredElement": {
+      "additionalProperties": false,
+      "description": "A single element returned by ``discover()`` at capture time.\n\n``accessibility`` is the v4 additive block (#196/#199): ``None`` for\nv3-and-earlier sidecars and for any run that couldn't/didn't capture\nit \u2014 every other field is unchanged from v3.",
+      "properties": {
+        "selector": {
+          "title": "Selector",
+          "type": "string"
+        },
+        "role": {
+          "title": "Role",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "bbox": {
+          "items": {
+            "type": "integer"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "title": "Bbox",
+          "type": "array"
+        },
+        "score": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "title": "Score"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "accessibility": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ElementAccessibility"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "selector",
+        "role",
+        "text",
+        "bbox",
+        "score",
+        "source"
+      ],
+      "title": "DiscoveredElement",
+      "type": "object"
+    },
+    "Edge": {
+      "additionalProperties": false,
+      "description": "A transition between two ``PageNode`` entries.\n\nOnly ``transition_kind: \"navigation\"`` ships in the v2-first slice \u2014 the\nclick caused ``page_state.url_after`` to change. ``reveal`` and\n``dismiss`` classification requires DOM diffing across step boundaries\nand is deferred to a follow-up.",
+      "properties": {
+        "from": {
+          "title": "From",
+          "type": "string"
+        },
+        "to": {
+          "title": "To",
+          "type": "string"
+        },
+        "via_step": {
+          "minimum": 0,
+          "title": "Via Step",
+          "type": "integer"
+        },
+        "selector": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Selector"
+        },
+        "transition_kind": {
+          "const": "navigation",
+          "default": "navigation",
+          "title": "Transition Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from",
+        "to",
+        "via_step"
+      ],
+      "title": "Edge",
+      "type": "object"
+    },
+    "ElementAccessibility": {
+      "additionalProperties": false,
+      "description": "Fused accessibility node + grid cell for one ``DiscoveredElement``.\n\nv4 additive block (#196/#198): ``role``/``name`` come from Playwright's\naccessibility resolution (distinct from the DOM-heuristic\n``DiscoveredElement.role``/``.text`` fields, which are unchanged).\n``grid_cell`` is the element's top-left ``[col, row]`` in the pixel-grid\noverlay's coordinate system (#171) \u2014 populated only when the reel/run\nthat produced this sidecar had a grid config active; ``null``\notherwise, matching how ``annotate.grid`` itself is optional.",
+      "properties": {
+        "role": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Role"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "state": {
+          "$ref": "#/$defs/AccessibilityState"
+        },
+        "grid_cell": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "integer"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Grid Cell"
+        }
+      },
+      "title": "ElementAccessibility",
+      "type": "object"
+    },
+    "Feedback": {
+      "additionalProperties": false,
+      "description": "Machine-discoverable pointer for downstream AI agents (and humans) to\nfile a GitHub issue about a tour that went wrong or a rough edge worth\nimproving. Populated only when the writer is asked for it; absent from\nthe sidecar otherwise.\n\n``report_url`` / ``schema_url`` / ``docs_url`` / ``diagnostics_command``\nare the four fields specified by #40 for the AI-agent feedback loop.\n``message`` / ``repo`` / ``issues_url`` / ``new_issue_url`` / ``template``\nare additive human-friendly context.",
+      "properties": {
+        "report_url": {
+          "title": "Report Url",
+          "type": "string"
+        },
+        "schema_url": {
+          "title": "Schema Url",
+          "type": "string"
+        },
+        "docs_url": {
+          "title": "Docs Url",
+          "type": "string"
+        },
+        "diagnostics_command": {
+          "title": "Diagnostics Command",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "repo": {
+          "title": "Repo",
+          "type": "string"
+        },
+        "issues_url": {
+          "title": "Issues Url",
+          "type": "string"
+        },
+        "new_issue_url": {
+          "title": "New Issue Url",
+          "type": "string"
+        },
+        "template": {
+          "$ref": "#/$defs/FeedbackTemplate"
+        }
+      },
+      "required": [
+        "report_url",
+        "schema_url",
+        "docs_url",
+        "diagnostics_command",
+        "message",
+        "repo",
+        "issues_url",
+        "new_issue_url",
+        "template"
+      ],
+      "title": "Feedback",
+      "type": "object"
+    },
+    "FeedbackTemplate": {
+      "additionalProperties": false,
+      "description": "Prompts that go into the prefilled issue body.",
+      "properties": {
+        "problem": {
+          "title": "Problem",
+          "type": "string"
+        },
+        "resolution_plan": {
+          "title": "Resolution Plan",
+          "type": "string"
+        }
+      },
+      "required": [
+        "problem",
+        "resolution_plan"
+      ],
+      "title": "FeedbackTemplate",
+      "type": "object"
+    },
+    "Graph": {
+      "additionalProperties": false,
+      "description": "Structural summary of the app the tour uncovered \u2014 v2 additive block.\n\nAttached to :class:`Report.graph` when the builder can extract at least\none page node. Consumed by LLM agents to reason about \"the shape of this\napp\" rather than \"what happened in this specific sequence\".",
+      "properties": {
+        "nodes": {
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/PageNode"
+              },
+              {
+                "$ref": "#/$defs/ComponentNode"
+              }
+            ]
+          },
+          "title": "Nodes",
+          "type": "array"
+        },
+        "edges": {
+          "items": {
+            "$ref": "#/$defs/Edge"
+          },
+          "title": "Edges",
+          "type": "array"
+        }
+      },
+      "title": "Graph",
+      "type": "object"
+    },
+    "GridMetadata": {
+      "additionalProperties": false,
+      "description": "Coordinate-grid render params carried on the sidecar (#171).\n\nWhen the reel was rendered with the ``--grid`` overlay, the sidecar\nsurfaces the parameters the grid was drawn with so agents parsing the\nreel know the coordinate system (pitch = major-line spacing, style =\n``\"full\"`` vs ``\"ruler\"``, color = the RGBA hex used for the major\nlines and labels). Absent from the sidecar when the grid was off.",
+      "properties": {
+        "pitch": {
+          "minimum": 1,
+          "title": "Pitch",
+          "type": "integer"
+        },
+        "style": {
+          "default": "full",
+          "enum": [
+            "full",
+            "ruler"
+          ],
+          "title": "Style",
+          "type": "string"
+        },
+        "color": {
+          "title": "Color",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pitch",
+        "color"
+      ],
+      "title": "GridMetadata",
+      "type": "object"
+    },
+    "Media": {
+      "additionalProperties": false,
+      "description": "Encoded reel metadata.",
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "format": {
+          "title": "Format",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "title": "Size Bytes",
+          "type": "integer"
+        },
+        "frame_count": {
+          "minimum": 0,
+          "title": "Frame Count",
+          "type": "integer"
+        },
+        "duration_s": {
+          "minimum": 0,
+          "title": "Duration S",
+          "type": "number"
+        },
+        "fps": {
+          "minimum": 1,
+          "title": "Fps",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "format",
+        "size_bytes",
+        "frame_count",
+        "duration_s",
+        "fps"
+      ],
+      "title": "Media",
+      "type": "object"
+    },
+    "PageNode": {
+      "additionalProperties": false,
+      "description": "A distinct URL visited during the tour \u2014 a node in the app graph.\n\nIdentified by URL (canonical). ``first_seen_step`` / ``last_seen_step``\nspan the index range in ``Report.steps`` during which the URL was the\nactive page \u2014 lets a consumer find the frames + actions that touched it\nwithout re-scanning the whole step list.\n\n``components`` names the ids of ``ComponentNode`` entries that were\ndetected on this page. Empty in the v2-shipped-first slice \u2014 the\nlandmark-detection pass that fingerprints reusable subtrees (nav,\nfooter, sidebar) ships as a follow-up.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "page",
+          "default": "page",
+          "title": "Kind",
+          "type": "string"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        },
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string"
+        },
+        "dom_signature": {
+          "default": "",
+          "title": "Dom Signature",
+          "type": "string"
+        },
+        "first_seen_step": {
+          "minimum": 0,
+          "title": "First Seen Step",
+          "type": "integer"
+        },
+        "last_seen_step": {
+          "minimum": 0,
+          "title": "Last Seen Step",
+          "type": "integer"
+        },
+        "components": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Components",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "url",
+        "first_seen_step",
+        "last_seen_step"
+      ],
+      "title": "PageNode",
+      "type": "object"
+    },
+    "PageState": {
+      "additionalProperties": false,
+      "description": "Post-action snapshot of the browser page.",
+      "properties": {
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string"
+        },
+        "url_after": {
+          "default": "",
+          "title": "Url After",
+          "type": "string"
+        },
+        "console_errors": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 50,
+          "title": "Console Errors",
+          "type": "array"
+        },
+        "page_errors": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 50,
+          "title": "Page Errors",
+          "type": "array"
+        },
+        "network_failed": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 50,
+          "title": "Network Failed",
+          "type": "array"
+        }
+      },
+      "title": "PageState",
+      "type": "object"
+    },
+    "StepReport": {
+      "additionalProperties": false,
+      "description": "One step's outcome + metadata.\n\n``skip_reason`` (see #151 AI-2) and ``error_code`` (see #151 AI-5) are\nthe v3 additions. Both default ``None`` so v2 sidecars round-trip\nthrough the v3 model unchanged; both populate at the corresponding\nwrite sites in :mod:`clickcast.core.actions` and :mod:`clickcast.auto`.",
+      "properties": {
+        "index": {
+          "minimum": 0,
+          "title": "Index",
+          "type": "integer"
+        },
+        "action": {
+          "title": "Action",
+          "type": "string"
+        },
+        "args": {
+          "additionalProperties": true,
+          "title": "Args",
+          "type": "object"
+        },
+        "status": {
+          "title": "Status",
+          "type": "string"
+        },
+        "duration_ms": {
+          "minimum": 0,
+          "title": "Duration Ms",
+          "type": "number"
+        },
+        "frames": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Frames",
+          "type": "array"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "cursor_xy": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cursor Xy"
+        },
+        "page_state": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PageState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "skip_reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "optional_no_reaction",
+                "pre_action_failed",
+                "element_vanished",
+                "cross_origin_bounce"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Skip Reason"
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "enum": [
+                "timeout",
+                "locator_missing",
+                "cross_origin",
+                "navigation_error",
+                "selector_ambiguous",
+                "other"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error Code"
+        }
+      },
+      "required": [
+        "index",
+        "action",
+        "status",
+        "duration_ms"
+      ],
+      "title": "StepReport",
+      "type": "object"
+    }
+  },
+  "description": "AI-feedback sidecar \u2014 the primary contract for downstream agents.\n\nDeliberately does NOT set ``extra=\"forbid\"`` at the top level so #29 Track\nC can add a ``graph`` block without a breaking schema change. The nested\nmodels above DO forbid extras \u2014 those shapes are stable.\n\nv2 added the optional ``graph`` block. v3 (this release) adds two\noptional per-step gates: :attr:`StepReport.skip_reason` (see #151 AI-2)\nand :attr:`StepReport.error_code` (see #151 AI-5). Both default to\n``None`` so v1 / v2 sidecars round-trip through the v3 model\nunchanged: every added field is optional, no shape was removed.\n\nv3 also gained an optional :attr:`annotate` block carrying the grid\noverlay's render params (#171). Absent when the grid was off, so v1\n/ v2 sidecars still round-trip.\n\nv4 (this release, #196/#199) adds one optional per-element field:\n:attr:`DiscoveredElement.accessibility` \u2014 Playwright's own role/name/\ninteractive-state resolution fused with the element's grid cell (see\n:class:`ElementAccessibility`). Defaults ``None``, so v1/v2/v3\nsidecars round-trip through the v4 model unchanged.",
+  "properties": {
+    "schema_version": {
+      "default": 4,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "clickcast_version": {
+      "title": "Clickcast Version",
+      "type": "string"
+    },
+    "url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Url"
+    },
+    "engine": {
+      "default": "chromium",
+      "title": "Engine",
+      "type": "string"
+    },
+    "viewport": {
+      "items": {
+        "type": "integer"
+      },
+      "title": "Viewport",
+      "type": "array"
+    },
+    "started_at": {
+      "title": "Started At",
+      "type": "string"
+    },
+    "duration_s": {
+      "minimum": 0,
+      "title": "Duration S",
+      "type": "number"
+    },
+    "media": {
+      "$ref": "#/$defs/Media"
+    },
+    "discovered_elements": {
+      "items": {
+        "$ref": "#/$defs/DiscoveredElement"
+      },
+      "title": "Discovered Elements",
+      "type": "array"
+    },
+    "steps": {
+      "items": {
+        "$ref": "#/$defs/StepReport"
+      },
+      "title": "Steps",
+      "type": "array"
+    },
+    "warnings": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+    },
+    "errors": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Errors",
+      "type": "array"
+    },
+    "feedback": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Feedback"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "graph": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Graph"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "annotate": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AnnotateMetadata"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "clickcast_version",
+    "started_at",
+    "duration_s",
+    "media"
+  ],
+  "title": "Report",
+  "type": "object"
+}

@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, replace
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from clickcast.core.session import Session
+from clickcast.discovery.accessibility import AccessibleElement, capture_accessibility_batch
 
-__all__ = ["Element", "discover"]
+if TYPE_CHECKING:
+    from clickcast.annotate.grid import GridConfig
+
+__all__ = ["Element", "discover", "discover_with_accessibility"]
 
 
 @dataclass(slots=True, frozen=True)
@@ -267,3 +271,30 @@ async def discover(
             await sess.goto(target, wait="networkidle")
             return await _discover_on_page(sess, interactive=interactive, limit=limit)
     return await _discover_on_page(target, interactive=interactive, limit=limit)
+
+
+async def discover_with_accessibility(
+    target: Session | str,
+    *,
+    interactive: bool = True,
+    limit: int = 20,
+    grid: GridConfig | None = None,
+) -> list[AccessibleElement]:
+    """Like :func:`discover`, but each returned element also carries its
+    Playwright accessibility node (role/name/state, #197) and, when
+    ``grid`` is an enabled :class:`~clickcast.annotate.grid.GridConfig`,
+    its top-left grid cell (#198) — one fused payload instead of a
+    selector/bbox list a caller has to cross-reference against a separate
+    accessibility-tree call.
+
+    Runs :func:`discover` unchanged (same selector/score output, same
+    ranking) then captures accessibility for the resulting pool via
+    :func:`~clickcast.discovery.accessibility.capture_accessibility_batch`.
+    """
+    if isinstance(target, str):
+        async with Session() as sess:
+            await sess.goto(target, wait="networkidle")
+            elements = await _discover_on_page(sess, interactive=interactive, limit=limit)
+            return await capture_accessibility_batch(sess, elements, grid=grid)
+    elements = await _discover_on_page(target, interactive=interactive, limit=limit)
+    return await capture_accessibility_batch(target, elements, grid=grid)

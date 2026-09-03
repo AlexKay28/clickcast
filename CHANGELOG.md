@@ -114,6 +114,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   every current Claude Code / Claude Desktop MCP config is written
   against. The base `pip install clickcast` is unaffected — `mcp` is
   opt-in via `pip install 'clickcast[mcp]'`.
+- **Accessibility-node capture fused with grid coordinates** (closes
+  [#196], [#197], [#198], [#199], [#200]). Fuses Playwright's own
+  accessibility tree (ARIA role, accessible name, interactive state)
+  with the pixel-grid overlay's coordinate system ([#171]) for every
+  element clickcast discovers, so an agent reading `elements --json`
+  or the sidecar gets "this is a `button` named 'Get started',
+  disabled=false, at grid cell (4, 2)" in one payload instead of
+  stitching together a separate accessibility-tree call and a
+  screenshot. Sidecar bumps v3 → v4 additively: new optional
+  `discovered_elements[].accessibility` block.
+  - `discovery/accessibility.py`: `capture_accessibility` /
+    `capture_accessibility_batch` resolve each discovered element's
+    `role`, accessible `name`, and interactive `state`
+    (`disabled` / `checked` / `expanded` / `pressed` / `selected`) via
+    Playwright's `Locator.aria_snapshot()` — the modern, still-supported
+    replacement for the removed `page.accessibility` tree API. Any
+    Playwright resolution failure (vanished selector, ambiguous match,
+    timeout) degrades to a fully-null role/name/state rather than
+    failing discovery; `discover()`'s own selector/score output is
+    unchanged.
+  - New `AccessibleElement` model carries the existing
+    selector/bbox/score fields plus the resolved role/name/state and a
+    `grid_cell` (`[col, row]`) computed via a new
+    `annotate.grid.grid_cell()` helper — the same pitch math `draw_grid`
+    renders gridlines/labels with, so an element's cell matches what a
+    human reads off the rendered `--grid` overlay image. `grid_cell` is
+    `null` unless a grid config was passed, matching how the grid
+    overlay itself is opt-in (#171).
+  - `discovery.discover_with_accessibility()`: one-call convenience that
+    runs `discover()` then fuses accessibility for the resulting pool.
+  - Sidecar schema bumped v3 → v4 (strictly additive): new optional
+    `discovered_elements[].accessibility: {role, name, state, grid_cell}`
+    block on `feedback/models.py`'s `DiscoveredElement`, wired through
+    `ReportBuilder.set_discovered(elements, accessibility=...)` and
+    `clickcast auto`'s per-page discovery pass (first page only, mirroring
+    the existing `discovered_elements` pin). `v3.json` / `v2.json` /
+    `v1.json` stay frozen verbatim; `v4.json` is the new committed
+    snapshot at `src/clickcast/feedback/schema/v4.json`.
+  - `clickcast elements` gains `--grid` / `--grid-pitch` / `--grid-color`
+    / `--grid-style` (mirroring `auto` / `run` / `shot`) and every
+    `--json` entry gains the same `accessibility` block; text-mode
+    output appends a compact `a11y(role=... name=... cell=...)` summary
+    per element.
+  - Docs: `README.md`'s `elements` flag table and
+    `docs/feedback-schema.md` document the new block at the same depth
+    as existing fields; a new
+    `tests/consumer/read_accessibility.py` (mirroring #99's
+    `read_sidecar.py`) proves the block is parseable by a standalone
+    consumer that never imports `clickcast`.
 
 ## [0.2.9] — 2026-08-07
 
@@ -1310,6 +1359,11 @@ Initial public release.
 [#193]: https://github.com/AlexKay28/clickcast/issues/193
 [#194]: https://github.com/AlexKay28/clickcast/issues/194
 [#195]: https://github.com/AlexKay28/clickcast/issues/195
+[#196]: https://github.com/AlexKay28/clickcast/issues/196
+[#197]: https://github.com/AlexKay28/clickcast/issues/197
+[#198]: https://github.com/AlexKay28/clickcast/issues/198
+[#199]: https://github.com/AlexKay28/clickcast/issues/199
+[#200]: https://github.com/AlexKay28/clickcast/issues/200
 [#201]: https://github.com/AlexKay28/clickcast/issues/201
 [#202]: https://github.com/AlexKay28/clickcast/issues/202
 [#203]: https://github.com/AlexKay28/clickcast/issues/203

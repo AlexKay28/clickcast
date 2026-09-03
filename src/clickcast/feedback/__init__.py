@@ -17,12 +17,14 @@ from clickcast.feedback.builder import ReportBuilder
 from clickcast.feedback.collector import PageStateCollector
 from clickcast.feedback.graph import build_graph, dom_signature
 from clickcast.feedback.models import (
+    AccessibilityState,
     AnnotateMetadata,
     Assertions,
     BBox,
     ComponentNode,
     DiscoveredElement,
     Edge,
+    ElementAccessibility,
     Feedback,
     FeedbackTemplate,
     Graph,
@@ -45,6 +47,7 @@ from clickcast.feedback.visual_diff import VISUAL_DIFF_SCHEMA_VERSION, visual_di
 __all__ = [
     "ASSERTIONS_SCHEMA_VERSION",
     "VISUAL_DIFF_SCHEMA_VERSION",
+    "AccessibilityState",
     "Advisory",
     "AnnotateMetadata",
     "Assertions",
@@ -52,6 +55,7 @@ __all__ = [
     "ComponentNode",
     "DiscoveredElement",
     "Edge",
+    "ElementAccessibility",
     "Feedback",
     "FeedbackTemplate",
     "Graph",
