@@ -1,0 +1,259 @@
+name: Build + publish apt package
+
+# Fires after `release.yml`'s `gh-release` job creates a real (non-prerelease)
+# GitHub release. Always builds a `.deb` (amd64 only for v1 -- see
+# docs/packaging/apt.md) and attaches it, unsigned, to the GitHub release as
+# a day-one fallback that works with zero manual setup.
+#
+# If the `APT_SIGNING_KEY` secret is configured (see docs/packaging/apt.md's
+# "One-time bootstrap" section), it additionally assembles a proper signed
+# apt repository (Packages/Release/InRelease) and publishes it to the
+# `apt-repo` branch, which GitHub Pages serves so `apt install clickcast`
+# works against `https://alexkay28.github.io/clickcast/apt`.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "clickcast version to package (e.g. 0.3.0). Defaults to the triggering release's tag."
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  build-deb:
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # gh release upload
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      has_apt_signing_key: ${{ steps.check-secret.outputs.has_key }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The `secrets` context isn't available in `if:` conditionals at all
+      # (job- or step-level) -- https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability.
+      # Route it through a job output instead, and gate the downstream jobs
+      # on `needs.build-deb.outputs.has_apt_signing_key`.
+      - name: Check for apt signing key
+        id: check-secret
+        env:
+          APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
+        run: |
+          if [ -n "$APT_SIGNING_KEY" ]; then
+            echo "has_key=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_key=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Resolve version
+        id: version
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          VERSION="$INPUT_VERSION"
+          if [ -z "$VERSION" ]; then
+            VERSION="${RELEASE_TAG#v}"
+          fi
+          if [ -z "$VERSION" ]; then
+            echo "::error::no version resolved -- pass workflow_dispatch input 'version' or trigger via a release"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for PyPI to serve this version
+        # scripts/build_deb.sh installs `clickcast==$VERSION` from PyPI into
+        # the bundled venv. Same polling shape as release.yml's smoke-test.
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 20); do
+            if curl -sf "https://pypi.org/pypi/clickcast/${VERSION}/json" >/dev/null; then
+              echo "clickcast==${VERSION} visible on PyPI after ${i} attempts"
+              exit 0
+            fi
+            echo "attempt $i/20: clickcast==${VERSION} not yet on PyPI; sleeping 5s..."
+            sleep 5
+          done
+          echo "::error::PyPI never served clickcast==${VERSION} within 100s"
+          exit 1
+
+      # amd64 only for v1 (issue #170 asks for amd64 "at minimum", arm64 "if
+      # not meaningfully more work" -- cross-building it correctly needs
+      # either an arm64 runner or careful `pip install --platform` wheel
+      # selection, deferred as a documented follow-up; see docs/packaging/apt.md).
+      - name: Build .deb (amd64)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: bash scripts/build_deb.sh "$VERSION" amd64 dist-deb
+
+      - name: Verify package metadata
+        run: |
+          set -euo pipefail
+          DEB=$(ls dist-deb/*.deb)
+          echo "== dpkg-deb --info =="
+          dpkg-deb --info "$DEB"
+          echo "== dpkg-deb --contents (first 20 lines) =="
+          dpkg-deb --contents "$DEB" | head -20
+          echo "== sanity: /usr/bin/clickcast symlink present =="
+          dpkg-deb --contents "$DEB" | grep -q "usr/bin/clickcast -> /opt/clickcast/venv/bin/clickcast"
+
+      - name: Install and run in a clean container (real smoke test)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          DEB_NAME=$(basename "$(ls dist-deb/*.deb)")
+          cat > /tmp/deb-smoke-test.sh <<'SCRIPT'
+          set -euo pipefail
+          apt-get update -qq
+          apt-get install -y -qq python3 python3-venv >/dev/null
+          dpkg -i "/pkg/${DEB_NAME}"
+          got=$(clickcast --version)
+          if [ "$got" != "$VERSION" ]; then
+            echo "clickcast --version returned $got, expected $VERSION" >&2
+            exit 1
+          fi
+          clickcast --help >/dev/null
+          echo "clickcast==$VERSION installed and runs correctly from the .deb"
+          SCRIPT
+          docker run --rm \
+            -v "$PWD/dist-deb:/pkg:ro" \
+            -v /tmp/deb-smoke-test.sh:/deb-smoke-test.sh:ro \
+            -e VERSION="$VERSION" -e DEB_NAME="$DEB_NAME" \
+            ubuntu:24.04 bash /deb-smoke-test.sh
+
+      - name: lintian (informational -- expected findings from bundling a venv under /opt)
+        run: |
+          sudo apt-get install -y -qq lintian >/dev/null
+          lintian dist-deb/*.deb || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: clickcast-deb-${{ steps.version.outputs.version }}
+          path: dist-deb/*.deb
+
+      - name: Attach unsigned .deb to the GitHub release
+        # Works with zero manual setup -- the day-one fallback install path
+        # documented in docs/packaging/apt.md ("download + dpkg -i") even
+        # before the self-hosted apt repo is bootstrapped.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" dist-deb/*.deb --clobber
+
+  publish-apt-repo:
+    needs: build-deb
+    if: ${{ !github.event.release.prerelease && needs.build-deb.outputs.has_apt_signing_key == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: clickcast-deb-${{ needs.build-deb.outputs.version }}
+          path: dist-deb
+
+      - name: Import signing key
+        run: |
+          set -euo pipefail
+          echo "$APT_SIGNING_KEY" | gpg --batch --import
+          KEYID=$(gpg --list-secret-keys --with-colons | awk -F: '/^sec/ {print $5; exit}')
+          echo "KEYID=$KEYID" >> "$GITHUB_ENV"
+        env:
+          APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
+
+      - name: Check out existing apt repo (or start a fresh one)
+        # `git worktree add` (not a bare `git init`) matters here: it shares
+        # this checkout's .git, so it inherits the `origin` remote and the
+        # push credentials actions/checkout@v4 persisted from `github.token`
+        # -- a standalone `git init` in /tmp would have neither, and the
+        # later `git push origin HEAD:apt-repo` would fail outright.
+        run: |
+          set -euo pipefail
+          git fetch origin apt-repo || true
+          if git show-ref --verify --quiet refs/remotes/origin/apt-repo; then
+            git worktree add -B apt-repo /tmp/apt-repo origin/apt-repo
+          else
+            git worktree add --detach /tmp/apt-repo HEAD
+            git -C /tmp/apt-repo checkout --orphan apt-repo
+            git -C /tmp/apt-repo rm -rf . >/dev/null
+          fi
+
+      - name: Assemble repo tree
+        env:
+          VERSION: ${{ needs.build-deb.outputs.version }}
+        run: |
+          set -euo pipefail
+          REPO=/tmp/apt-repo
+          DEB=$(ls dist-deb/*.deb)
+          DEB_NAME=$(basename "$DEB")
+
+          mkdir -p "$REPO/pool/main/c/clickcast" "$REPO/dists/stable/main/binary-amd64"
+          cp "$DEB" "$REPO/pool/main/c/clickcast/$DEB_NAME"
+
+          python3 scripts/apt_package.py packages-entry \
+            --deb "$REPO/pool/main/c/clickcast/$DEB_NAME" \
+            --version "$VERSION" --arch amd64 \
+            > "$REPO/dists/stable/main/binary-amd64/Packages"
+          gzip -9 -k -f "$REPO/dists/stable/main/binary-amd64/Packages"
+
+          # Single-line -- a multi-line `python3 -c "..."` here would make
+          # the first statement start with leading whitespace (from this
+          # YAML block's own indentation), which is an IndentationError.
+          PKG_SIZE_SHA=$(python3 -c "import hashlib; d = open('$REPO/dists/stable/main/binary-amd64/Packages', 'rb').read(); print(len(d), hashlib.sha256(d).hexdigest())")
+          GZ_SIZE_SHA=$(python3 -c "import hashlib; d = open('$REPO/dists/stable/main/binary-amd64/Packages.gz', 'rb').read(); print(len(d), hashlib.sha256(d).hexdigest())")
+          read -r PKG_SIZE PKG_SHA <<< "$PKG_SIZE_SHA"
+          read -r GZ_SIZE GZ_SHA <<< "$GZ_SIZE_SHA"
+
+          python3 scripts/apt_package.py release \
+            --codename stable --component main --arch amd64 \
+            --entry "main/binary-amd64/Packages:${PKG_SIZE}:${PKG_SHA}" \
+            --entry "main/binary-amd64/Packages.gz:${GZ_SIZE}:${GZ_SHA}" \
+            > "$REPO/dists/stable/Release"
+
+          gpg --export --armor "$KEYID" > "$REPO/clickcast-archive-keyring.asc"
+
+      - name: Sign the repo
+        run: |
+          set -euo pipefail
+          REPO=/tmp/apt-repo
+          gpg --batch --yes --clearsign -o "$REPO/dists/stable/InRelease" "$REPO/dists/stable/Release"
+          gpg --batch --yes -abs -o "$REPO/dists/stable/Release.gpg" "$REPO/dists/stable/Release"
+
+      - name: Commit and push
+        env:
+          VERSION: ${{ needs.build-deb.outputs.version }}
+        run: |
+          set -euo pipefail
+          cd /tmp/apt-repo
+          git config user.name "clickcast-release-bot"
+          git config user.email "actions@github.com"
+          git add -A
+          git commit -m "clickcast ${VERSION}" --allow-empty
+          git push origin HEAD:apt-repo
+
+  apt-repo-not-bootstrapped:
+    needs: build-deb
+    if: ${{ !github.event.release.prerelease && needs.build-deb.outputs.has_apt_signing_key == 'false' }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "::warning::APT_SIGNING_KEY is not set -- skipping the signed self-hosted apt repo publish."
+          echo "The unsigned .deb was still attached to the GitHub release as a fallback."
+          echo "See docs/packaging/apt.md for the one-time bootstrap steps."
