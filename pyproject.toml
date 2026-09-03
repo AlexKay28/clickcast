@@ -52,11 +52,22 @@ test = [
 # `.[dev]` remains the one-stop install for maintainers.
 dev = [
     "clickcast[test]",
+    "clickcast[mcp]",
     "ruff>=0.5",
     "mypy>=1.10",
     "pre-commit>=3.7",
     "types-PyYAML",
     "build>=1.0",
+]
+# `mcp` — the official Model Context Protocol Python SDK, only needed for
+# `clickcast mcp` (#191). Kept as its own extra so `pip install clickcast`
+# doesn't grow for users who never touch MCP. Pinned below `2.0` — the `mcp`
+# package's 2.x line renamed `FastMCP` to `MCPServer` with a breaking API
+# (see the package's own ModuleNotFoundError message); `src/clickcast/mcp/`
+# targets the widely-deployed, well-documented 1.x `FastMCP` API that every
+# current MCP client config (Claude Code / Claude Desktop) is written against.
+mcp = [
+    "mcp>=1.9.0,<2",
 ]
 # `publish` is release-only: what the release workflow needs to build
 # and upload a wheel, without pulling in test or lint tooling.
