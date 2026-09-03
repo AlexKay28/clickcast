@@ -219,12 +219,32 @@ Flags: `--url`, `--name`, `--out`, `--from-auto`, `--force`.
 ### `elements <url>`
 
 Dump the discovered interactive elements — useful for authoring selectors.
+Each entry additionally carries an `accessibility` block (Playwright's own
+`role` / accessible `name` / interactive `state`, fused with the pixel-grid
+overlay's `grid_cell` when `--grid` is on) — see
+[docs/feedback-schema.md](docs/feedback-schema.md#discovered_elements).
 
 ```bash
 clickcast elements https://example.com --json > elements.json
+clickcast elements https://example.com --grid --grid-pitch 50 --json
 ```
 
-Flags: `--limit`, `--json`, `--viewport`, `--engine`.
+| Flag | Default | Notes |
+|---|---|---|
+| `--limit N` | `20` | Cap on returned elements. |
+| `--json` | off | Emit machine-readable JSON on stdout. |
+| `--viewport WxH` | `1280x800` | |
+| `--device NAME` | – | Playwright preset (e.g. `"iPhone 15"`, `"Pixel 8"`). |
+| `--engine E` | `chromium` | `chromium` / `firefox` / `webkit`. |
+| `--headful` | off | Show a real browser window. |
+| `--lang LOCALE` | – | e.g. `en-US`. |
+| `--dark` | off | Emulate `prefers-color-scheme: dark`. |
+| `--slowmo MS` | `0` | Delay each Playwright op by N ms. |
+| `-v` / `--verbose` | – | Repeatable. |
+| `--grid` | off | Populate each element's `accessibility.grid_cell` (#196). |
+| `--grid-pitch N` | `100` | Major-line spacing in px, used for `grid_cell`. |
+| `--grid-color HEX` | `#FFFFFF33` | Unused by `elements` beyond validation — kept symmetric with `auto`/`run`/`shot`. |
+| `--grid-style full\|ruler` | `full` | Unused by `elements` beyond validation — kept symmetric with `auto`/`run`/`shot`. |
 
 ### `doctor`
 

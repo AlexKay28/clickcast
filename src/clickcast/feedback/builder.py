@@ -12,8 +12,10 @@ from clickcast.core.actions import ActionResult, BaseStep
 from clickcast.feedback.collector import PageStateCollector
 from clickcast.feedback.graph import build_graph
 from clickcast.feedback.models import (
+    AccessibilityState,
     AnnotateMetadata,
     DiscoveredElement,
+    ElementAccessibility,
     ErrorCode,
     Graph,
     GridMetadata,
@@ -34,7 +36,7 @@ def _package_version() -> str:
 if TYPE_CHECKING:
     from clickcast.annotate.grid import GridConfig
     from clickcast.core.session import Session
-    from clickcast.discovery import Element
+    from clickcast.discovery import AccessibleElement, Element
 
 
 __all__ = ["ReportBuilder"]
@@ -92,7 +94,25 @@ class ReportBuilder:
         style: Literal["full", "ruler"] = "ruler" if grid.style == "ruler" else "full"
         self._grid = GridMetadata(pitch=grid.pitch, style=style, color=grid.color)
 
-    def set_discovered(self, elements: list[Element]) -> None:
+    def set_discovered(
+        self,
+        elements: list[Element],
+        accessibility: list[AccessibleElement] | None = None,
+    ) -> None:
+        """Record the discovery pool, optionally fused with per-element
+        accessibility nodes (#196/#199).
+
+        ``accessibility`` — when passed — must be positionally aligned with
+        ``elements`` (the shape :func:`~clickcast.discovery.capture_accessibility_batch`
+        already returns for a given ``elements`` list). ``None`` (the
+        default) leaves every ``DiscoveredElement.accessibility`` at its
+        model default (``None``) — the pre-v4 behaviour, unchanged.
+        """
+        if accessibility is not None and len(accessibility) != len(elements):
+            raise ValueError(
+                "accessibility list must be positionally aligned with elements "
+                f"(got {len(accessibility)} accessibility entries for {len(elements)} elements)"
+            )
         self._discovered = [
             DiscoveredElement(
                 selector=e.selector,
@@ -101,8 +121,28 @@ class ReportBuilder:
                 bbox=list(e.bbox),
                 score=e.score,
                 source=e.source,
+                accessibility=(
+                    ElementAccessibility(
+                        role=a.role,
+                        name=a.name,
+                        state=AccessibilityState(
+                            disabled=a.state.disabled,
+                            checked=a.state.checked,
+                            expanded=a.state.expanded,
+                            pressed=a.state.pressed,
+                            selected=a.state.selected,
+                        ),
+                        grid_cell=list(a.grid_cell) if a.grid_cell is not None else None,
+                    )
+                    if a is not None
+                    else None
+                ),
             )
-            for e in elements
+            for e, a in zip(
+                elements,
+                accessibility if accessibility is not None else [None] * len(elements),
+                strict=True,
+            )
         ]
 
     async def record_step(

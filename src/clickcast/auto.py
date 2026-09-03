@@ -37,6 +37,7 @@ import typer
 from clickcast.annotate import (
     AnnotateConfig,
     CardStyle,
+    GridConfig,
     StepAnnotation,
     SummaryStats,
     annotate_frames_dir,
@@ -48,7 +49,7 @@ from clickcast.annotate import (
 from clickcast.capture import Recorder
 from clickcast.core.actions import ClickStep, GotoStep, ScrollStep, execute
 from clickcast.core.session import Session
-from clickcast.discovery import Element, discover
+from clickcast.discovery import Element, capture_accessibility_batch, discover
 from clickcast.discovery.urlutil import is_same_origin, normalize_url
 from clickcast.encode import encode
 from clickcast.feedback import Media, ReportBuilder, StepReport, build_advisories
@@ -216,6 +217,7 @@ async def _goto_and_discover(
     step_annotations: dict[int, StepAnnotation],
     page_label: str,
     discovery_cache: dict[str, list[Element]] | None = None,
+    grid: GridConfig | None = None,
 ) -> tuple[int, bool, list[Element]]:
     """Goto ``url``, record the open frame, then discover clickable elements.
 
@@ -240,6 +242,15 @@ async def _goto_and_discover(
       i.e. when the caller passes ``step_index == 0`` and the goto
       succeeds — matching the shipped ``if step_index == 1`` guard after
       the increment).
+
+    ``grid`` (#196/#198): when the tour is running with an enabled
+    :class:`~clickcast.annotate.grid.GridConfig`, the elements pinned to
+    ``builder.set_discovered`` also carry their accessibility node +
+    computed grid cell (via
+    :func:`~clickcast.discovery.capture_accessibility_batch`). ``None``
+    (the default — no grid) still captures accessibility, just without a
+    grid cell, so ``discovered_elements[].accessibility.role/name/state``
+    populate on every sidecar, grid or not.
     """
     goto = GotoStep(url=url, wait="networkidle", dwell=dwell)
     await rec.pre_action(sess)
@@ -267,7 +278,19 @@ async def _goto_and_discover(
         "%s · discovered %d elements, click budget: %d", page_label, len(elements), click_budget
     )
     if builder and step_index == 1:
-        builder.set_discovered(elements[:click_budget])
+        pinned = elements[:click_budget]
+        # #196/#197/#198: best-effort accessibility capture for the exact
+        # pool the sidecar pins. Never fails the tour — any per-element
+        # Playwright error already degrades to a null role/name/state
+        # inside capture_accessibility_batch; a batch-level failure (e.g.
+        # the page navigated away between discover() and here) is caught
+        # here so a flaky a11y pass never costs the whole sidecar.
+        accessibility = None
+        try:
+            accessibility = await capture_accessibility_batch(sess, pinned, grid=grid)
+        except Exception as exc:  # pragma: no cover — defensive
+            log.warning("%s · accessibility capture failed: %r", page_label, exc)
+        builder.set_discovered(pinned, accessibility)
     return step_index, True, elements
 
 
@@ -451,6 +474,7 @@ async def explore_page(
     page_label: str,
     target_highlight: bool = False,
     pre_click_highlight_frames: int = 0,
+    grid: GridConfig | None = None,
 ) -> tuple[int, int, list[str]]:
     """Goto ``url``, discover, click up to ``click_budget`` elements, scroll.
 
@@ -484,6 +508,7 @@ async def explore_page(
         step_annotations=step_annotations,
         page_label=page_label,
         discovery_cache=discovery_cache,
+        grid=grid,
     )
     if not ok:
         return step_index, 0, []
@@ -650,6 +675,7 @@ async def run_tour(cfg: AutoConfig) -> None:
                     pre_click_highlight_frames=(
                         cfg.pre_click_highlight_frames if cfg.target_highlight else 0
                     ),
+                    grid=cfg.annotate.grid,
                 )
                 clicks_remaining -= clicks_used
 

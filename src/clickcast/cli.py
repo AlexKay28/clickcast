@@ -46,7 +46,7 @@ from clickcast.core.actions import set_dump_elements
 from clickcast.core.opts import BrowserOpts
 from clickcast.core.session import Session
 from clickcast.core.viewport import Viewport
-from clickcast.discovery import Element, discover
+from clickcast.discovery import AccessibleElement, Element, capture_accessibility_batch, discover
 from clickcast.encode import encode
 from clickcast.feedback import Media, ReportBuilder, feedback_pointer_lines
 from clickcast.feedback import write as write_report
@@ -1393,9 +1393,14 @@ def elements(
     insecure: Insecure = False,
     header: Header = None,
     header_host: HeaderHost = None,
+    grid: Grid = False,
+    grid_pitch: GridPitch = 100,
+    grid_color: GridColor = "#FFFFFF33",
+    grid_style: GridStyle = "full",
 ) -> None:
     _setup_logging(verbose)
-    result_elements = asyncio.run(
+    grid_cfg = _build_grid_config(grid, grid_pitch, grid_color, grid_style)
+    result_elements, accessibility = asyncio.run(
         _do_elements(
             url=url,
             limit=limit,
@@ -1411,22 +1416,48 @@ def elements(
                 extra_headers=_parse_header_flags(header),
                 header_host=header_host,
             ),
+            grid=grid_cfg,
         )
     )
     if as_json:
-        typer.echo(json.dumps([e.to_dict() for e in result_elements], indent=2, ensure_ascii=False))
+        payload = []
+        for e, a in zip(result_elements, accessibility, strict=True):
+            d = e.to_dict()
+            d["accessibility"] = a.to_dict()
+            payload.append(d)
+        typer.echo(json.dumps(payload, indent=2, ensure_ascii=False))
         return
-    for e in result_elements:
+    for e, a in zip(result_elements, accessibility, strict=True):
+        # #196: append the accessibility fusion (role/name/state/grid cell)
+        # after the pre-existing heuristic line rather than replacing it —
+        # the DOM-heuristic role/text keep driving selector authoring, the
+        # accessibility fields are the additive "what Playwright itself
+        # resolved" cross-check.
+        a11y_bits = [f"role={a.role or '—'}", f"name={a.name or '—'}"]
+        state_bits = [f"{k}={v}" for k, v in a.state.to_dict().items() if v is not None]
+        if state_bits:
+            a11y_bits.append(",".join(state_bits))
+        if a.grid_cell is not None:
+            a11y_bits.append(f"cell={a.grid_cell[0]},{a.grid_cell[1]}")
         typer.echo(
-            f"  [{e.role:>10}] {(e.text or '<no name>')[:40]:<40}  {e.selector}  (score={e.score})"
+            f"  [{e.role:>10}] {(e.text or '<no name>')[:40]:<40}  {e.selector}  "
+            f"(score={e.score})  a11y({' '.join(a11y_bits)})"
         )
     typer.echo(f"\n{len(result_elements)} elements")
 
 
-async def _do_elements(*, url: str, limit: int, session_kwargs: dict[str, Any]) -> list[Element]:
+async def _do_elements(
+    *,
+    url: str,
+    limit: int,
+    session_kwargs: dict[str, Any],
+    grid: GridConfig | None = None,
+) -> tuple[list[Element], list[AccessibleElement]]:
     async with Session(**session_kwargs) as sess:
         await sess.goto(url, wait="networkidle")
-        return await discover(sess, limit=limit)
+        found = await discover(sess, limit=limit)
+        accessibility = await capture_accessibility_batch(sess, found, grid=grid)
+        return found, accessibility
 
 
 # ==========================================================================
