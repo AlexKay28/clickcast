@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] — 2026-09-04
+
+Patch release. Backwards-compatible with 0.3.0. One real bug fix in
+`clickcast diff`'s frame resolution, plus 4 new `demo/` examples (not
+shipped in the package itself) that found it.
+
 ### Fixed
 - **`clickcast diff` couldn't find real `--format frames` output whenever
   `--out` had directory components** (e.g. `--out demo/pixel-visual-diff/run.gif`)
