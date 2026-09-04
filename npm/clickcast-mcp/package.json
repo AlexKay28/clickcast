@@ -1,0 +1,45 @@
+{
+  "name": "clickcast-mcp",
+  "version": "0.3.1",
+  "description": "npx-first MCP (Model Context Protocol) server for clickcast -- browser sessions for AI agents. Wraps `clickcast mcp` via an isolated, auto-provisioned Python venv.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "clickcast",
+    "playwright",
+    "browser-automation",
+    "ai-agent",
+    "screenshot"
+  ],
+  "homepage": "https://github.com/AlexKay28/clickcast#readme",
+  "bugs": "https://github.com/AlexKay28/clickcast/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AlexKay28/clickcast.git",
+    "directory": "npm/clickcast-mcp"
+  },
+  "license": "MIT",
+  "author": "Alex Kay",
+  "bin": {
+    "clickcast-mcp": "bin/clickcast-mcp.js"
+  },
+  "files": [
+    "bin/",
+    "vendor/",
+    "postinstall.js",
+    "README.md"
+  ],
+  "scripts": {
+    "postinstall": "node postinstall.js",
+    "prepare": "node ../shared/vendor-sync.js",
+    "prepack": "node ../shared/vendor-sync.js"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ]
+}

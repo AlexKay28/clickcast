@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# npm packaging (npm/clickcast, npm/clickcast-mcp -- #222)
+npm/**/node_modules/
+npm/**/vendor/
+npm/**/*.tgz
+npm/**/.venv/

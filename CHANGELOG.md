@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **npm distribution: `clickcast` (general CLI) + `clickcast-mcp` (npx-first
+  MCP entry point)** (closes [#222]). `pip install clickcast` was the only
+  fully-live install path; the MCP ecosystem's dominant client-config
+  pattern is `npx -y <package>`, so a Python-only install was real friction
+  for exactly the audience #212's `clickcast mcp` server targets. Two new
+  npm packages under `npm/`, day-one distribution per this issue (same
+  "verify what's live vs. what needs owner bootstrap" structure #215's
+  Homebrew/apt work established):
+  - **`npm/clickcast-mcp/`** — `bin/clickcast-mcp` execs straight into
+    `clickcast mcp`, forwarding any trailing flags (`--grid`,
+    `--viewport ...`) through, for a one-line MCP client config:
+    `{"command": "npx", "args": ["-y", "clickcast-mcp"]}` — matching the
+    exact shape every other MCP server's README shows.
+  - **`npm/clickcast/`** — `bin/clickcast` forwards argv/stdio/exit-code
+    into the full wrapped Python CLI.
+  - Both share one provisioning module, `npm/shared/provision.js`: on
+    `npm install`, `postinstall.js` looks for a system Python >= 3.10
+    (`python3`/`python`/`py -3` on Windows), fails loudly with a specific
+    fix command if none is found or it's too old (mirrors #216's
+    missing-engine UX bar — never a silently broken `bin/` shim), then
+    provisions an **isolated venv** under the npm package's own install
+    directory (`node_modules/<pkg>/.venv`, never the user's global Python
+    — same isolation principle `pipx` uses) and pip-installs an exact-pinned
+    `clickcast==<version>` (`clickcast[mcp]==<version>` for the MCP
+    package) into it. Chromium is still never bundled (~180MB, versioned
+    independently, same reasoning as #170) — the `bin/*.js` shims use
+    `stdio: "inherit"` so the underlying CLI's own #216 self-heal prompt
+    passes through untouched rather than being captured or buffered.
+  - Since both packages are published independently to the npm registry, a
+    `file:` dependency between them would resolve fine in this monorepo but
+    break for a real end user installing either package alone. Each
+    package's `prepare`/`prepack` lifecycle script instead vendors a copy of
+    `npm/shared/provision.js` into its own `vendor/provision.js` before
+    packing/publishing, so every published tarball is genuinely
+    self-contained — see `docs/packaging/npm.md` for the full rationale.
+  - New `.github/workflows/npm-release.yml` builds, real-installs, and
+    smoke-tests both packages against the real, already-published PyPI
+    `clickcast==<version>` on every GitHub release (attaching the `.tgz`s to
+    the release as a zero-setup fallback), and publishes both to the npm
+    registry once an `NPM_TOKEN` secret exists — same
+    `secrets`-not-available-in-`if:` workaround `apt-release.yml` and
+    `homebrew-tap.yml` already use, validated clean with `actionlint`.
+  - New `docs/packaging/npm.md` (mirrors `docs/packaging/homebrew.md`'s
+    structure) plus a README "npm" install subsection.
+
 ## [0.3.1] — 2026-09-04
 
 Patch release. Backwards-compatible with 0.3.0. One real bug fix in
@@ -1536,3 +1582,4 @@ Initial public release.
 [#208]: https://github.com/AlexKay28/clickcast/issues/208
 [#209]: https://github.com/AlexKay28/clickcast/issues/209
 [#210]: https://github.com/AlexKay28/clickcast/issues/210
+[#222]: https://github.com/AlexKay28/clickcast/issues/222

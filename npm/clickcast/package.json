@@ -1,0 +1,45 @@
+{
+  "name": "clickcast",
+  "version": "0.3.1",
+  "description": "Drive a browser through a website and hand back a reel + AI-readable feedback sidecar -- npm wrapper around the clickcast Python CLI, provisioned into an isolated venv on install.",
+  "keywords": [
+    "clickcast",
+    "playwright",
+    "screenshot",
+    "gif",
+    "browser-automation",
+    "ai-agent",
+    "mcp"
+  ],
+  "homepage": "https://github.com/AlexKay28/clickcast#readme",
+  "bugs": "https://github.com/AlexKay28/clickcast/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AlexKay28/clickcast.git",
+    "directory": "npm/clickcast"
+  },
+  "license": "MIT",
+  "author": "Alex Kay",
+  "bin": {
+    "clickcast": "bin/clickcast.js"
+  },
+  "files": [
+    "bin/",
+    "vendor/",
+    "postinstall.js",
+    "README.md"
+  ],
+  "scripts": {
+    "postinstall": "node postinstall.js",
+    "prepare": "node ../shared/vendor-sync.js",
+    "prepack": "node ../shared/vendor-sync.js"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ]
+}
