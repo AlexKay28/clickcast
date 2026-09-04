@@ -383,21 +383,35 @@ def create_server(
     @_safe_tool
     async def click(
         selector: str,
+        wait: WaitArg | None = None,
         timeout_ms: int | None = None,
         label: str | None = None,
     ) -> mcp_types.CallToolResult:
-        """Click the first element matching ``selector``."""
-        return await _run_step(ClickStep(selector=selector, timeout_ms=timeout_ms, label=label))
+        """Click the first element matching ``selector``.
+
+        Pass ``wait`` (a load state like "networkidle", a selector, or a
+        number of seconds) when the click triggers client-side (SPA)
+        navigation — the response otherwise reflects the page mid-transition
+        rather than settled, since a route change with no full page load
+        gives no other signal that it's still in flight (#226).
+        """
+        return await _run_step(
+            ClickStep(selector=selector, wait=wait, timeout_ms=timeout_ms, label=label)
+        )
 
     @server.tool()
     @_safe_tool
     async def dblclick(
         selector: str,
+        wait: WaitArg | None = None,
         timeout_ms: int | None = None,
         label: str | None = None,
     ) -> mcp_types.CallToolResult:
-        """Double-click the first element matching ``selector``."""
-        return await _run_step(DblClickStep(selector=selector, timeout_ms=timeout_ms, label=label))
+        """Double-click the first element matching ``selector``. See
+        ``click``'s ``wait`` for triggering client-side navigation."""
+        return await _run_step(
+            DblClickStep(selector=selector, wait=wait, timeout_ms=timeout_ms, label=label)
+        )
 
     @server.tool()
     @_safe_tool

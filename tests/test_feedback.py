@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from clickcast.core.actions import ActionResult, ClickStep, GotoStep
 from clickcast.feedback import (
     AccessibilityState,
     DiscoveredElement,
@@ -313,6 +314,124 @@ class TestBuilder:
         report = builder.build(_valid_media())
         assert report.warnings == ["hydration was slow"]
         assert report.errors == ["goto returned 500"]
+
+
+class _FakeCollector:
+    """Hands back a fixed queue of :class:`PageState` snapshots, one per
+    `record_step` call — enough of `PageStateCollector`'s surface for
+    `ReportBuilder.record_step` without a real Session/browser."""
+
+    def __init__(self, states: list[PageState]) -> None:
+        self._states = list(states)
+
+    async def snapshot_and_clear(self) -> PageState:
+        return self._states.pop(0)
+
+
+def _ok_result(*, cursor: tuple[int, int] | None = (10, 10)) -> ActionResult:
+    return ActionResult(ok=True, status="ok", action="click", cursor_xy=cursor)
+
+
+class TestRecordStepOptionalNoReaction:
+    """#227: an optional click/dblclick that ran clean but changed nothing
+    observable should be downgraded to status="skipped",
+    skip_reason="optional_no_reaction" — the case the schema documents but
+    (before this fix) no code path ever actually produced."""
+
+    async def test_optional_click_with_no_reaction_is_downgraded(self) -> None:
+        builder = ReportBuilder(engine="chromium")
+        same = PageState(url_after="https://x/", title="Home")
+        builder._collector = _FakeCollector([same, same])  # type: ignore[assignment]
+
+        await builder.record_step(index=0, step=GotoStep(url="https://x/"), result=_ok_result())
+        await builder.record_step(
+            index=1,
+            step=ClickStep(selector="#maybe", optional=True),
+            result=_ok_result(),
+        )
+
+        step = builder.steps[1]
+        assert step.status == "skipped"
+        assert step.skip_reason == "optional_no_reaction"
+        assert step.error is not None
+
+    async def test_optional_click_that_navigates_is_not_downgraded(self) -> None:
+        builder = ReportBuilder(engine="chromium")
+        before = PageState(url_after="https://x/", title="Home")
+        after = PageState(url_after="https://x/next", title="Next")
+        builder._collector = _FakeCollector([before, after])  # type: ignore[assignment]
+
+        await builder.record_step(index=0, step=GotoStep(url="https://x/"), result=_ok_result())
+        await builder.record_step(
+            index=1,
+            step=ClickStep(selector="#nav", optional=True),
+            result=_ok_result(),
+        )
+
+        step = builder.steps[1]
+        assert step.status == "ok"
+        assert step.skip_reason is None
+
+    async def test_non_optional_click_with_no_reaction_is_not_downgraded(self) -> None:
+        """Non-optional clicks keep reporting "ok" — the structured
+        skip_reason is only for `optional: true` steps, per the schema's own
+        documented semantics. The tour-level `click-no-dom-reaction`
+        stderr advisory is the signal for the non-optional case."""
+        builder = ReportBuilder(engine="chromium")
+        same = PageState(url_after="https://x/", title="Home")
+        builder._collector = _FakeCollector([same, same])  # type: ignore[assignment]
+
+        await builder.record_step(index=0, step=GotoStep(url="https://x/"), result=_ok_result())
+        await builder.record_step(
+            index=1,
+            step=ClickStep(selector="#maybe", optional=False),
+            result=_ok_result(),
+        )
+
+        step = builder.steps[1]
+        assert step.status == "ok"
+        assert step.skip_reason is None
+
+    async def test_failed_optional_click_keeps_its_original_skip_reason(self) -> None:
+        """A click that actually raised (locator missing, etc.) already has
+        a skip_reason from execute() — must not be clobbered."""
+        builder = ReportBuilder(engine="chromium")
+        same = PageState(url_after="https://x/", title="Home")
+        builder._collector = _FakeCollector([same, same])  # type: ignore[assignment]
+
+        await builder.record_step(index=0, step=GotoStep(url="https://x/"), result=_ok_result())
+        failed = ActionResult(
+            ok=True,
+            status="skipped",
+            action="click",
+            error="step 1: TimeoutError: ...",
+            error_code="locator_missing",
+            skip_reason="element_vanished",
+        )
+        await builder.record_step(
+            index=1,
+            step=ClickStep(selector="#gone", optional=True),
+            result=failed,
+        )
+
+        step = builder.steps[1]
+        assert step.status == "skipped"
+        assert step.skip_reason == "element_vanished"
+
+    async def test_first_step_has_no_baseline_and_is_not_downgraded(self) -> None:
+        builder = ReportBuilder(engine="chromium")
+        same = PageState(url_after="https://x/", title="Home")
+        builder._collector = _FakeCollector([same])  # type: ignore[assignment]
+
+        await builder.record_step(
+            index=0,
+            step=ClickStep(selector="#first", optional=True),
+            result=_ok_result(),
+        )
+
+        step = builder.steps[0]
+        assert step.status == "ok"
+        assert step.skip_reason is None
 
 
 # ------------------------------------------------------------------

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal, cast
 
 from clickcast.core.actions import ActionResult, BaseStep
+from clickcast.feedback.advisories import no_dom_reaction
 from clickcast.feedback.collector import PageStateCollector
 from clickcast.feedback.graph import build_graph
 from clickcast.feedback.models import (
@@ -20,10 +21,16 @@ from clickcast.feedback.models import (
     Graph,
     GridMetadata,
     Media,
+    PageState,
     Report,
     SkipReason,
     StepReport,
 )
+
+# Step actions a "no DOM reaction" downgrade applies to — a click-shaped
+# action that lands but visibly does nothing. Matches the actions
+# `feedback/advisories.py`'s tour-level advisory considers.
+_REACTION_CHECKED_ACTIONS = frozenset({"click", "dblclick"})
 
 
 def _package_version() -> str:
@@ -64,6 +71,7 @@ class ReportBuilder:
         self._errors: list[str] = []
 
         self._collector: PageStateCollector | None = None
+        self._last_page_state: PageState | None = None
         self._started_at = datetime.now(timezone.utc).isoformat()
         self._start_mono = time.monotonic()
         # #171: grid overlay params (pitch/style/color) recorded when the
@@ -159,27 +167,48 @@ class ReportBuilder:
 
         args = step.model_dump(exclude=_COMMON_STEP_FIELDS)
 
+        # #227: an `optional` click/dblclick that ran clean (execute() never
+        # raised) but produced no observable page reaction is exactly the
+        # case `SkipReason.optional_no_reaction` names — downgrade it here
+        # rather than leaving it reported as a plain "ok" step. Shares the
+        # same conservative url/title comparison as the tour-level
+        # `click-no-dom-reaction` stderr advisory (see `no_dom_reaction`);
+        # non-optional no-reaction clicks are left to that advisory instead.
+        status: Literal["ok", "failed", "skipped"] = result.status
+        skip_reason = result.skip_reason
+        error = result.error
+        if (
+            status == "ok"
+            and step.optional
+            and step.action in _REACTION_CHECKED_ACTIONS
+            and no_dom_reaction(self._last_page_state, page_state)
+        ):
+            status = "skipped"
+            skip_reason = "optional_no_reaction"
+            error = "click produced no observable page reaction (url and title unchanged)"
+
         self._steps.append(
             StepReport(
                 index=index,
                 action=step.action,
                 args=args,
-                status=result.status,
+                status=status,
                 duration_ms=result.duration_ms,
                 frames=[Path(p).name for p in (frames or [])],
                 label=step.label,
                 cursor_xy=list(result.cursor_xy) if result.cursor_xy else None,
                 page_state=page_state,
-                error=result.error,
+                error=error,
                 # See #151 (AI-2, AI-5): schema-v3 gate fields; the action
                 # engine populates them on failed / skipped steps and leaves
                 # them ``None`` on successful ones. Cast because ActionResult
                 # types the fields as ``str | None`` (the enum lives in the
                 # feedback layer, not the action engine).
                 error_code=cast("ErrorCode | None", result.error_code),
-                skip_reason=cast("SkipReason | None", result.skip_reason),
+                skip_reason=cast("SkipReason | None", skip_reason),
             )
         )
+        self._last_page_state = page_state
 
     @property
     def steps(self) -> list[StepReport]:

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from clickcast.annotate import AnnotateConfig, CursorStyle
 from clickcast.feedback import Advisory, Media, PageState, StepReport, build_advisories
+from clickcast.feedback.advisories import no_dom_reaction
 
 
 def _media(*, frame_count: int = 60) -> Media:
@@ -29,6 +30,7 @@ def _click(
     title: str = "T",
     label: str | None = None,
     status: str = "ok",
+    console_errors: list[str] | None = None,
 ) -> StepReport:
     return StepReport(
         index=index,
@@ -37,7 +39,7 @@ def _click(
         status=status,
         duration_ms=100.0,
         label=label,
-        page_state=PageState(url_after=url, title=title),
+        page_state=PageState(url_after=url, title=title, console_errors=console_errors or []),
     )
 
 
@@ -123,6 +125,64 @@ class TestClickNoDomReaction:
         ]
         advs = build_advisories(steps, _media(), total_clicks=0, nav_clicks=0)
         assert "click-no-dom-reaction" not in _ids(advs)
+
+    def test_click_that_logs_a_console_error_does_not_trigger(self) -> None:
+        """#228: same url/title, but a console error fired for this step —
+        direct evidence of a reaction the url/title comparison alone would
+        have missed."""
+        steps = [
+            _goto(0, url="https://example.com/", title="Home"),
+            _click(
+                1,
+                url="https://example.com/",
+                title="Home",
+                console_errors=["Uncaught TypeError: x is not a function"],
+            ),
+        ]
+        advs = build_advisories(steps, _media(), total_clicks=1, nav_clicks=0)
+        assert "click-no-dom-reaction" not in _ids(advs)
+
+
+class TestNoDomReaction:
+    """Direct unit tests for the shared `no_dom_reaction` predicate —
+    reused by both this module's tour-level advisory and
+    `ReportBuilder.record_step`'s per-step `optional_no_reaction` gate."""
+
+    def test_none_on_either_side_is_not_flaggable(self) -> None:
+        same = PageState(url_after="https://x/", title="T")
+        assert no_dom_reaction(None, same) is False
+        assert no_dom_reaction(same, None) is False
+        assert no_dom_reaction(None, None) is False
+
+    def test_identical_url_and_title_is_no_reaction(self) -> None:
+        a = PageState(url_after="https://x/", title="T")
+        b = PageState(url_after="https://x/", title="T")
+        assert no_dom_reaction(a, b) is True
+
+    def test_url_change_is_a_reaction(self) -> None:
+        a = PageState(url_after="https://x/", title="T")
+        b = PageState(url_after="https://x/next", title="T")
+        assert no_dom_reaction(a, b) is False
+
+    def test_title_change_is_a_reaction(self) -> None:
+        a = PageState(url_after="https://x/", title="T")
+        b = PageState(url_after="https://x/", title="T - open")
+        assert no_dom_reaction(a, b) is False
+
+    def test_console_error_on_current_step_is_a_reaction(self) -> None:
+        a = PageState(url_after="https://x/", title="T")
+        b = PageState(url_after="https://x/", title="T", console_errors=["boom"])
+        assert no_dom_reaction(a, b) is False
+
+    def test_page_error_on_current_step_is_a_reaction(self) -> None:
+        a = PageState(url_after="https://x/", title="T")
+        b = PageState(url_after="https://x/", title="T", page_errors=["boom"])
+        assert no_dom_reaction(a, b) is False
+
+    def test_network_failed_on_current_step_is_a_reaction(self) -> None:
+        a = PageState(url_after="https://x/", title="T")
+        b = PageState(url_after="https://x/", title="T", network_failed=["https://x/api"])
+        assert no_dom_reaction(a, b) is False
 
 
 class TestVeryShortReel:

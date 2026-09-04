@@ -179,7 +179,15 @@ the sidecar builder relies on — one classification table, two consumers.
 | Returns | Per-call response shape above; `selector` is `null`. |
 | Errors | `timeout`, `navigation_error`, `cross_origin`, `other`. |
 
-### `click` / `dblclick` / `hover`
+### `click` / `dblclick`
+
+| | |
+|---|---|
+| Args | `selector` (`str`), `wait` (`str \| float \| null`, e.g. `"networkidle"` or seconds — blocks after the click, same semantics as `goto`'s `wait`; use for a click that triggers client-side/SPA navigation with no full page load, #226), `timeout_ms` (`int \| null`), `label` (`str \| null`) |
+| Returns | Per-call response shape; `cursor_xy` is the resolved target's center. |
+| Errors | `timeout`, `locator_missing`, `cross_origin`, `selector_ambiguous`, `other`. |
+
+### `hover`
 
 | | |
 |---|---|

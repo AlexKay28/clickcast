@@ -58,12 +58,12 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
-from clickcast.feedback.models import Media, StepReport
+from clickcast.feedback.models import Media, PageState, StepReport
 
 if TYPE_CHECKING:
     from clickcast.annotate import AnnotateConfig
 
-__all__ = ["Advisory", "build_advisories"]
+__all__ = ["Advisory", "build_advisories", "no_dom_reaction"]
 
 
 # Deep link every advisory to the guide section that names the fix. An AI
@@ -173,32 +173,52 @@ def _check_short_reel(media: Media) -> Advisory | None:
     )
 
 
+def no_dom_reaction(prev: PageState | None, current: PageState | None) -> bool:
+    """True when ``current`` shows no observable change from ``prev``.
+
+    Conservative heuristic: we only compare ``PageState.url_after`` and
+    ``PageState.title`` today — a real reaction that changes neither (an
+    inline validation message, a same-page toggle) won't be caught. See
+    the module docstring for the richer-signal follow-up (#228). ``None``
+    on either side means "no baseline to compare", which is treated as
+    NOT flaggable.
+
+    Shared between :func:`_check_click_no_dom_reaction` (the tour-level
+    stderr advisory, every click) and
+    :meth:`clickcast.feedback.builder.ReportBuilder.record_step` (the
+    per-step ``skip_reason="optional_no_reaction"`` gate, optional clicks
+    only) so the two never drift on what counts as "no reaction".
+    """
+    if prev is None or current is None:
+        return False
+    # #228: a console/page error or failed request recorded *for this step*
+    # is direct evidence something happened even when url/title didn't
+    # change — cheap, zero-schema-change signal using data already
+    # collected per-step. Doesn't catch a purely visual DOM reaction (an
+    # inline validation message with no console signal); that needs a
+    # richer signal (e.g. a body-text hash) and is tracked as a separate,
+    # heavier follow-up rather than folded into this conservative check.
+    if current.console_errors or current.page_errors or current.network_failed:
+        return False
+    return current.url_after == prev.url_after and current.title == prev.title
+
+
 def _check_click_no_dom_reaction(steps: list[StepReport]) -> list[Advisory]:
     """Flag click steps whose ``page_state`` shows no observable change.
 
-    Conservative heuristic: we only have ``PageState.url_after`` and
-    ``PageState.title`` to work with today. If BOTH are identical to the
-    previous step's snapshot AND the click was recorded as ``ok`` (so it
-    actually landed on the target), emit the advisory. The click may have
-    been a no-op — the viewer sees the cursor ripple but nothing else.
-
     Skips clicks that caused a same-page overlay to render (``title``
     change) or navigation (``url_after`` change) — both are visible
-    reactions. See the module docstring for the richer-signal follow-up.
+    reactions. Also skips any step that :class:`ReportBuilder` already
+    downgraded to ``status="skipped"`` / ``skip_reason="optional_no_reaction"``
+    (#227) — that's the same signal, just carried on the step itself
+    instead of as a tour-level warning, so flagging it here too would be
+    redundant.
     """
     out: list[Advisory] = []
     prev_state = None
     for step in steps:
         current = step.page_state
-        if step.action != "click" or step.status != "ok":
-            prev_state = current
-            continue
-        if current is None or prev_state is None:
-            prev_state = current
-            continue
-        same_url = current.url_after == prev_state.url_after
-        same_title = current.title == prev_state.title
-        if same_url and same_title:
+        if step.action == "click" and step.status == "ok" and no_dom_reaction(prev_state, current):
             label = step.label or step.args.get("selector", "step")
             out.append(
                 Advisory(
