@@ -105,6 +105,17 @@ class TestActionsHappyPath:
         assert result.isError is not True
         assert result_json(result)["action"] == "dblclick"
 
+    async def test_click_wait_param_blocks_before_responding(self, fixture_site_url: str) -> None:
+        """#226: `click`'s `wait` arg (a duration here) blocks inside the
+        tool call, so the response reflects a settled page — same purpose
+        as `goto`'s `wait`, for a click that triggers client-side nav."""
+        async with live_session(fixture_site_url=fixture_site_url, goto_home=True) as client:
+            result = await client.call_tool("click", {"selector": "#btn-3d", "wait": 0.2})
+        assert result.isError is not True
+        payload = result_json(result)
+        assert payload["ok"] is True
+        assert payload["duration_ms"] >= 190
+
     async def test_hover(self, fixture_site_url: str) -> None:
         async with live_session(fixture_site_url=fixture_site_url, goto_home=True) as client:
             result = await client.call_tool("hover", {"selector": "#btn-reset"})

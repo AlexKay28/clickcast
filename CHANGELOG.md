@@ -7,7 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`network_failed` false-positives on browser-initiated file downloads**
+  (closes [#224]). A download that the browser's download manager takes
+  over surfaces to Playwright as a failed navigation request
+  (`net::ERR_ABORTED`) even though the file saved fine — `clickcast` was
+  recording every one of these as a real network error in the sidecar.
+  `PageStateCollector` now filters that specific pattern (`ERR_ABORTED` +
+  `is_navigation_request()`) rather than treating every `requestfailed`
+  event as a genuine failure; a real failed navigation (wrong error text,
+  or `ERR_ABORTED` on a non-navigation request) is still captured.
+- **`clickcast doctor` no longer fails over engines you never asked for**
+  (closes [#225]). All three engines (`chromium`/`firefox`/`webkit`) were
+  checked unconditionally and folded into the overall pass/fail — a
+  machine with only the configured engine installed (the common case)
+  still exited 1. `doctor` now only requires the configured engine
+  (`Config.engine`, defaulting to `chromium`); the other two are still
+  reported, just informational.
+
 ### Added
+- **`click`/`dblclick` steps accept `wait`** (closes [#226]), mirroring
+  `goto`'s `wait` field — a load state, selector, or a number of seconds
+  to block on after the click itself succeeds. Unlike `dwell` (a flat
+  sleep), this waits *for* something: a click that triggers client-side
+  (SPA/Next.js-style) navigation with no full page load otherwise returns
+  before the route transition settles, so the recorded `page_state` /
+  screenshot can reflect a mid-transition page. Available in YAML
+  scenarios (`click: {selector: ..., wait: networkidle}`) and as a new
+  `wait` argument on the MCP server's `click`/`dblclick` tools.
+- **`skip_reason: "optional_no_reaction"` is now actually produced**
+  (closes [#227]). The value has been part of the `SkipReason` schema
+  since v3, documented as "click ran but produced no DOM reaction
+  (`optional=True`)" — but no code path ever set it; only a separate
+  stderr advisory (`click-no-dom-reaction`) caught this case, and only
+  for non-optional clicks it happened to also apply to. `ReportBuilder`
+  now downgrades an `optional: true` click/dblclick that ran clean but
+  changed nothing observable (same url, same title, no new console/page
+  error, no new failed request) to `status: "skipped"`,
+  `skip_reason: "optional_no_reaction"` — so a scenario author can mark a
+  "click this if it's there" step `optional: true` and gate on the
+  structured field instead of guessing from `status: "ok"` whether it did
+  anything.
+- **`click-no-dom-reaction` (both the stderr advisory and the new
+  `optional_no_reaction` gate above) also checks for a new console error,
+  page error, or failed request on the step** (closes [#228], partially —
+  the heavier "hash the visible text" follow-up the issue also proposed
+  remains future work). Previously the heuristic only compared
+  `page_state.url_after`/`.title`, so a click producing a real reaction
+  through neither channel (e.g. a validation message with no console
+  signal) was flagged as a possible no-op. This closes the specific,
+  zero-schema-change gap where the reaction manifests as a captured
+  console/page/network signal instead.
 - **npm distribution: `clickcast` (general CLI) + `clickcast-mcp` (npx-first
   MCP entry point)** (closes [#222]). `pip install clickcast` was the only
   fully-live install path; the MCP ecosystem's dominant client-config
@@ -1583,3 +1633,8 @@ Initial public release.
 [#209]: https://github.com/AlexKay28/clickcast/issues/209
 [#210]: https://github.com/AlexKay28/clickcast/issues/210
 [#222]: https://github.com/AlexKay28/clickcast/issues/222
+[#224]: https://github.com/AlexKay28/clickcast/issues/224
+[#225]: https://github.com/AlexKay28/clickcast/issues/225
+[#226]: https://github.com/AlexKay28/clickcast/issues/226
+[#227]: https://github.com/AlexKay28/clickcast/issues/227
+[#228]: https://github.com/AlexKay28/clickcast/issues/228

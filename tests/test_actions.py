@@ -38,6 +38,18 @@ class TestStepModels:
         with pytest.raises(ValidationError):
             ClickStep()  # type: ignore[call-arg]
 
+    def test_click_wait_defaults_to_none(self) -> None:
+        s = ClickStep(selector="#x")
+        assert s.wait is None
+
+    def test_click_accepts_wait(self) -> None:
+        s = ClickStep(selector="#x", wait="networkidle")
+        assert s.wait == "networkidle"
+
+    def test_dblclick_accepts_wait(self) -> None:
+        s = DblClickStep(selector="#x", wait=1.5)
+        assert s.wait == 1.5
+
     def test_extras_forbidden(self) -> None:
         with pytest.raises(ValidationError):
             GotoStep(url="https://x", nonsense="oops")  # type: ignore[call-arg]
@@ -191,6 +203,23 @@ class TestActionIntegration:
         assert r.ok
         marker = await loaded_session.page.locator("#marker").text_content()
         assert marker == "dbl"
+
+    async def test_click_wait_blocks_after_click(self, loaded_session: Session) -> None:
+        """#226: `wait` (a duration here) blocks inside the handler, before
+        `execute()` returns — same as `GotoStep.wait`, but for a click."""
+        r = await execute(ClickStep(selector="#btn1", wait=0.2), loaded_session)
+        assert r.ok
+        assert r.duration_ms >= 190  # ~0.2s, small slack for scheduling jitter
+
+    async def test_click_without_wait_does_not_block(self, loaded_session: Session) -> None:
+        r = await execute(ClickStep(selector="#btn1"), loaded_session)
+        assert r.ok
+        assert r.duration_ms < 190
+
+    async def test_dblclick_wait_blocks_after_click(self, loaded_session: Session) -> None:
+        r = await execute(DblClickStep(selector="#btn1", wait=0.2), loaded_session)
+        assert r.ok
+        assert r.duration_ms >= 190
 
     async def test_hover(self, loaded_session: Session) -> None:
         r = await execute(HoverStep(selector="#btn1"), loaded_session)

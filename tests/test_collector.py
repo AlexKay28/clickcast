@@ -14,8 +14,19 @@ class _FakeConsoleMsg:
 
 
 class _FakeRequest:
-    def __init__(self, url: str) -> None:
+    def __init__(
+        self,
+        url: str,
+        *,
+        failure: str | None = "net::ERR_FAILED",
+        is_navigation: bool = False,
+    ) -> None:
         self.url = url
+        self.failure = failure
+        self._is_navigation = is_navigation
+
+    def is_navigation_request(self) -> bool:
+        return self._is_navigation
 
 
 class _FakePage:
@@ -116,6 +127,57 @@ class TestEventFiltering:
         page.emit("requestfailed", _FakeRequest("https://api.example/500"))
         state = await collector.snapshot_and_clear()
         assert state.network_failed == ["https://api.example/500"]
+
+    async def test_browser_download_abort_not_captured(self) -> None:
+        """#224: a browser-initiated file download that the browser's
+        download manager takes over surfaces to Playwright as a failed
+        navigation request (`net::ERR_ABORTED`) even though the download
+        itself succeeded — must not be recorded as a real network failure."""
+        page = _FakePage()
+        collector = PageStateCollector(page)
+        page.emit(
+            "requestfailed",
+            _FakeRequest(
+                "https://storage.example/archive.tar.gz?token=abc",
+                failure="net::ERR_ABORTED",
+                is_navigation=True,
+            ),
+        )
+        state = await collector.snapshot_and_clear()
+        assert state.network_failed == []
+
+    async def test_err_aborted_non_navigation_still_captured(self) -> None:
+        """A plain in-page request aborted mid-flight (not a navigation) is
+        a real signal and must still be captured, even with the same
+        `net::ERR_ABORTED` text the download filter looks for."""
+        page = _FakePage()
+        collector = PageStateCollector(page)
+        page.emit(
+            "requestfailed",
+            _FakeRequest(
+                "https://api.example/cancelled",
+                failure="net::ERR_ABORTED",
+                is_navigation=False,
+            ),
+        )
+        state = await collector.snapshot_and_clear()
+        assert state.network_failed == ["https://api.example/cancelled"]
+
+    async def test_navigation_failure_with_other_error_still_captured(self) -> None:
+        """A real failed navigation (e.g. DNS failure) isn't ERR_ABORTED,
+        so it must still be captured even though it's a navigation request."""
+        page = _FakePage()
+        collector = PageStateCollector(page)
+        page.emit(
+            "requestfailed",
+            _FakeRequest(
+                "https://broken.example/",
+                failure="net::ERR_NAME_NOT_RESOLVED",
+                is_navigation=True,
+            ),
+        )
+        state = await collector.snapshot_and_clear()
+        assert state.network_failed == ["https://broken.example/"]
 
     async def test_malformed_console_msg_swallowed(self) -> None:
         page = _FakePage()

@@ -104,11 +104,17 @@ class GotoStep(BaseStep):
 class ClickStep(BaseStep):
     action: Literal["click"] = "click"
     selector: str
+    # See #226: unlike `dwell` (a flat sleep), `wait` blocks on a load state /
+    # selector / duration the same way `GotoStep.wait` does — for a click that
+    # triggers client-side (SPA) navigation with no full page load, `execute()`
+    # would otherwise return before the route transition settles.
+    wait: WaitArg | None = None
 
 
 class DblClickStep(BaseStep):
     action: Literal["dblclick"] = "dblclick"
     selector: str
+    wait: WaitArg | None = None
 
 
 class HoverStep(BaseStep):
@@ -423,6 +429,8 @@ async def _handle_click(step: ClickStep, session: Session, out: _StepOutcome) ->
         await loc.click(timeout=timeout)
     else:
         await loc.click()
+    if step.wait is not None:
+        await session.wait(step.wait)
 
 
 async def _handle_dblclick(step: DblClickStep, session: Session, out: _StepOutcome) -> None:
@@ -434,6 +442,8 @@ async def _handle_dblclick(step: DblClickStep, session: Session, out: _StepOutco
         await loc.dblclick(timeout=timeout)
     else:
         await loc.dblclick()
+    if step.wait is not None:
+        await session.wait(step.wait)
 
 
 async def _handle_hover(step: HoverStep, session: Session, out: _StepOutcome) -> None:

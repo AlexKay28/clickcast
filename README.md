@@ -390,8 +390,8 @@ steps:
 | Action | Example | Notes |
 |---|---|---|
 | `goto` | `goto: https://…` | Navigate. Pair with `wait`. |
-| `click` | `click: "text=Compare"` | CSS, `text=…`, or `role=…` selectors — Playwright syntax. |
-| `dblclick` | `dblclick: ".cell"` | |
+| `click` | `click: "text=Compare"` | CSS, `text=…`, or `role=…` selectors — Playwright syntax. Also accepts `click: { selector: ..., wait: networkidle }` — `wait` (same shape as `goto`'s) blocks after the click; pair it with a target that triggers client-side/SPA navigation. |
+| `dblclick` | `dblclick: ".cell"` | Also accepts `wait`, same as `click`. |
 | `hover` | `hover: ".menu"` | Reveals CSS `:hover` state. |
 | `type` | `type: { into: "#q", text: "Japan", delay: 40 }` | `delay` is per-char ms. |
 | `press` | `press: "Enter"` | Or `press: { key: "Ctrl+A", selector: "#in" }`. |

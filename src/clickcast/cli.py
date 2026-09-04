@@ -1574,7 +1574,8 @@ def mcp_cmd(
 def doctor(
     as_json: Annotated[bool, typer.Option("--json", help="Machine-readable output.")] = False,
 ) -> None:
-    report = _run_doctor_checks()
+    cfg = load_config()
+    report = _run_doctor_checks(configured_engine=cfg.engine)
     # #40 Track A: surface the feedback pointers in doctor output so a
     # stranded agent that only ran `clickcast doctor` still finds the loop.
     report["feedback"] = {
@@ -1597,7 +1598,12 @@ def doctor(
         raise typer.Exit(code=1)
 
 
-def _run_doctor_checks() -> dict[str, Any]:
+def _run_doctor_checks(*, configured_engine: str = "chromium") -> dict[str, Any]:
+    """Build the doctor report. `configured_engine` (the CLI/scenario/config
+    default) is the only engine whose absence fails the overall `ok` — the
+    other two are still checked and reported, but as informational (#225):
+    a machine with only chromium installed shouldn't fail `doctor` over
+    firefox/webkit it was never asked to use."""
     checks: list[dict[str, Any]] = []
 
     py_ok = sys.version_info >= (3, 10)
@@ -1628,6 +1634,7 @@ def _run_doctor_checks() -> dict[str, Any]:
                 "name": f"engine.{engine_name}",
                 "ok": found is not None,
                 "detail": detail,
+                "required": engine_name == configured_engine,
             }
         )
 
@@ -1648,7 +1655,7 @@ def _run_doctor_checks() -> dict[str, Any]:
         }
     )
 
-    ok = all(c["ok"] for c in checks)
+    ok = all(c["ok"] for c in checks if c.get("required", True))
     return {"ok": ok, "checks": checks}
 
 

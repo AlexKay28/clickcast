@@ -76,6 +76,15 @@ class PageStateCollector:
         if len(self._network_failed) >= self._MAX:
             return
         with contextlib.suppress(AttributeError):
+            # A browser-initiated file download (Content-Disposition:
+            # attachment) gets taken over by the browser's download manager;
+            # Playwright reports the page's view of that as a failed
+            # navigation request (`net::ERR_ABORTED`) even though the
+            # download itself succeeded. Filter that specific, common
+            # false-positive pattern (#224) rather than treating every
+            # `requestfailed` event as a real network error.
+            if req.failure == "net::ERR_ABORTED" and req.is_navigation_request():
+                return
             self._network_failed.append(str(req.url))
 
     async def snapshot_and_clear(self) -> PageState:

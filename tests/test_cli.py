@@ -153,6 +153,39 @@ class TestDoctor:
         assert isinstance(data["checks"], list)
 
 
+class TestDoctorEngineScoping:
+    """#225: only the configured engine should be load-bearing for `ok` —
+    a machine with just chromium installed shouldn't fail `doctor` over
+    firefox/webkit it was never asked to use."""
+
+    def test_missing_non_configured_engine_does_not_fail_overall_ok(self) -> None:
+        with patch(
+            "clickcast.cli._find_playwright_engine",
+            side_effect=lambda name: (
+                (Path("/fake/chrome"), "executable") if name == "chromium" else None
+            ),
+        ):
+            rep = _run_doctor_checks(configured_engine="chromium")
+        assert rep["ok"] is True
+        firefox = next(c for c in rep["checks"] if c["name"] == "engine.firefox")
+        assert firefox["ok"] is False
+        assert firefox["required"] is False
+        chromium = next(c for c in rep["checks"] if c["name"] == "engine.chromium")
+        assert chromium["required"] is True
+
+    def test_missing_configured_engine_fails_overall_ok(self) -> None:
+        with patch("clickcast.cli._find_playwright_engine", return_value=None):
+            rep = _run_doctor_checks(configured_engine="firefox")
+        assert rep["ok"] is False
+        firefox = next(c for c in rep["checks"] if c["name"] == "engine.firefox")
+        assert firefox["required"] is True
+
+    def test_default_configured_engine_is_chromium(self) -> None:
+        rep = _run_doctor_checks()
+        chromium = next(c for c in rep["checks"] if c["name"] == "engine.chromium")
+        assert chromium["required"] is True
+
+
 # ------------------------------------------------------------------
 # _find_playwright_engine — issue #173: must resolve real executables,
 # not just hand back the version-cache directory.
