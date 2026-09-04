@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-09-04
+
 ### Fixed
 - **Release workflow: `smoke-test`'s TestPyPI install no longer races the
   propagation-wait check** (closes [#231]). The wait step polled `curl`
@@ -1557,7 +1559,8 @@ Initial public release.
 - Automated release pipeline: tag `v*` → TestPyPI → smoke matrix (Linux/macOS
   × Python 3.10–3.13) → PyPI → GitHub release, all via Trusted Publishing.
 
-[Unreleased]: https://github.com/AlexKay28/clickcast/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/AlexKay28/clickcast/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/AlexKay28/clickcast/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/AlexKay28/clickcast/compare/v0.3.1...v0.4.0
 [0.2.1]: https://github.com/AlexKay28/clickcast/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/AlexKay28/clickcast/compare/v0.1.3...v0.2.0
