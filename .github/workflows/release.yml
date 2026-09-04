@@ -122,16 +122,25 @@ jobs:
         # hit in practice on the v0.4.0 release, where 3 of 8 macOS jobs
         # 404'd on `pip install` immediately after the curl-based wait
         # step passed on the same job (#231). Retrying the actual install
-        # command can't have that divergence by construction. Same 150s
-        # budget (30 attempts x 5s) as the wait loop this replaces, which
-        # itself replaced a blind `sleep 30` for the plain propagation-lag
-        # case (#89) — this closes the remaining cross-client-cache gap.
+        # command can't have that divergence by construction.
+        #
+        # Budget is 10 minutes (60 attempts x 10s), not the original 150s
+        # (30 x 5s) — that budget turned out to be too tight on its own
+        # first real exercise (the v0.4.1 release): 6 of 8 matrix jobs
+        # installed within seconds, but 2 failed all 30/30 attempts
+        # uniformly over the full 150s while their siblings succeeded
+        # almost immediately at the same time. That's not the cross-client
+        # race above (this step already retries the single real `pip
+        # install` client) — it's longer-tail edge-cache staleness on
+        # specific runner network paths, and 150s isn't reliably enough
+        # margin for it. 10s between attempts (vs. the original 5s) keeps
+        # the request rate roughly the same despite the longer budget.
         env:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
-          for i in $(seq 1 30); do
+          for i in $(seq 1 60); do
             if python -m pip install \
                  --index-url https://test.pypi.org/simple/ \
                  --extra-index-url https://pypi.org/simple/ \
@@ -139,10 +148,10 @@ jobs:
               echo "installed clickcast==${VERSION} from TestPyPI after ${i} attempt(s)"
               exit 0
             fi
-            echo "attempt $i/30: pip install failed (likely propagation lag); sleeping 5s..."
-            sleep 5
+            echo "attempt $i/60: pip install failed (likely propagation lag); sleeping 10s..."
+            sleep 10
           done
-          echo "::error::pip install of clickcast==${VERSION} from TestPyPI never succeeded within 150s"
+          echo "::error::pip install of clickcast==${VERSION} from TestPyPI never succeeded within 10 minutes"
           exit 1
 
       - name: Verify CLI runs
