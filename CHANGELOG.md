@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-09-04
+
 ### Fixed
 - **`network_failed` false-positives on browser-initiated file downloads**
   (closes [#224]). A download that the browser's download manager takes
@@ -1542,7 +1544,8 @@ Initial public release.
 - Automated release pipeline: tag `v*` → TestPyPI → smoke matrix (Linux/macOS
   × Python 3.10–3.13) → PyPI → GitHub release, all via Trusted Publishing.
 
-[Unreleased]: https://github.com/AlexKay28/clickcast/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/AlexKay28/clickcast/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/AlexKay28/clickcast/compare/v0.3.1...v0.4.0
 [0.2.1]: https://github.com/AlexKay28/clickcast/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/AlexKay28/clickcast/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/AlexKay28/clickcast/compare/v0.1.2...v0.1.3
