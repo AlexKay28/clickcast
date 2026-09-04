@@ -111,37 +111,39 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Wait for TestPyPI to serve this version
-        # Poll TestPyPI's simple index from THIS runner's POP until the freshly-
-        # uploaded version is visible. Cheaper than a blind sleep (early exits
-        # when the edge is fast) and more reliable (curl and pip share the same
-        # Fastly cache, so what curl sees, pip will see too). See #89 — every
-        # release since v0.1.1 hit the flake with the previous `sleep 30`.
+      - name: Install from TestPyPI (retry until it propagates)
+        # Retry `pip install` itself rather than polling `curl` first and
+        # trusting its result to carry over — a prior version of this step
+        # split "wait" (curl) and "install" (pip) into two steps on the
+        # theory that they share the same Fastly cache/edge, so curl seeing
+        # the version meant pip would too. That doesn't hold: pip is a
+        # separate HTTP client and can land on a colder cache / different
+        # edge PoP than the curl check that just passed one step earlier —
+        # hit in practice on the v0.4.0 release, where 3 of 8 macOS jobs
+        # 404'd on `pip install` immediately after the curl-based wait
+        # step passed on the same job (#231). Retrying the actual install
+        # command can't have that divergence by construction. Same 150s
+        # budget (30 attempts x 5s) as the wait loop this replaces, which
+        # itself replaced a blind `sleep 30` for the plain propagation-lag
+        # case (#89) — this closes the remaining cross-client-cache gap.
         env:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
           set -euo pipefail
+          python -m pip install --upgrade pip
           for i in $(seq 1 30); do
-            if curl -sf "https://test.pypi.org/simple/clickcast/" \
-                 | grep -q "clickcast-${VERSION}"; then
-              echo "clickcast==${VERSION} visible on TestPyPI simple index after ${i} attempts"
+            if python -m pip install \
+                 --index-url https://test.pypi.org/simple/ \
+                 --extra-index-url https://pypi.org/simple/ \
+                 "clickcast==${VERSION}"; then
+              echo "installed clickcast==${VERSION} from TestPyPI after ${i} attempt(s)"
               exit 0
             fi
-            echo "attempt $i/30: clickcast==${VERSION} not yet on simple index; sleeping 5s..."
+            echo "attempt $i/30: pip install failed (likely propagation lag); sleeping 5s..."
             sleep 5
           done
-          echo "::error::TestPyPI simple index never returned clickcast==${VERSION} within 150s"
+          echo "::error::pip install of clickcast==${VERSION} from TestPyPI never succeeded within 150s"
           exit 1
-
-      - name: Install from TestPyPI
-        env:
-          VERSION: ${{ needs.build.outputs.version }}
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install \
-            --index-url https://test.pypi.org/simple/ \
-            --extra-index-url https://pypi.org/simple/ \
-            "clickcast==${VERSION}"
 
       - name: Verify CLI runs
         env:
