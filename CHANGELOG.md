@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Release workflow: `smoke-test`'s TestPyPI install no longer races the
+  propagation-wait check** (closes [#231]). The wait step polled `curl`
+  against TestPyPI's simple index and assumed a subsequent `pip install`
+  would see the same result (documented as sharing the same Fastly
+  cache) — didn't hold in practice: `pip` is a separate HTTP client that
+  can land on a colder cache / different edge PoP than the `curl` check
+  that just passed. Hit on the v0.4.0 release itself: 3 of 8 macOS
+  `smoke-test` matrix jobs 404'd on `pip install` immediately after the
+  wait step passed on the same job. The two steps are now one — the
+  retry loop wraps the actual `pip install`, so there's no longer a
+  install/wait split for a cache-propagation gap to open up in.
+
 ## [0.4.0] — 2026-09-04
 
 ### Fixed
@@ -1641,3 +1654,4 @@ Initial public release.
 [#226]: https://github.com/AlexKay28/clickcast/issues/226
 [#227]: https://github.com/AlexKay28/clickcast/issues/227
 [#228]: https://github.com/AlexKay28/clickcast/issues/228
+[#231]: https://github.com/AlexKay28/clickcast/issues/231
