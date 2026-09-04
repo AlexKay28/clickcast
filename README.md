@@ -67,6 +67,31 @@ what's live today vs. what needs one-time bootstrapping, and the exact
 bootstrap steps: [`docs/packaging/homebrew.md`](docs/packaging/homebrew.md),
 [`docs/packaging/apt.md`](docs/packaging/apt.md).
 
+### npm (`clickcast` + `clickcast-mcp`)
+
+Two npm packages -- thin Node wrappers whose `postinstall` provisions an
+isolated Python venv and pip-installs the pinned PyPI `clickcast`, since
+there's no way to ship clickcast's Playwright/Pillow/ffmpeg runtime as pure
+JS. Built specifically because the MCP ecosystem's install pattern is
+`npx <package>`, not `pip install`:
+
+```bash
+npx -y clickcast-mcp                 # MCP entry point -- execs `clickcast mcp`; not published yet, see below
+npx clickcast --version              # general CLI wrapper; not published yet, see below
+```
+
+```bash
+# Works today -- clone this repo, no npm registry needed:
+cd npm/clickcast-mcp && npm pack && npm install -g ./clickcast-mcp-*.tgz && clickcast-mcp --help
+cd npm/clickcast      && npm pack && npm install -g ./clickcast-*.tgz      && clickcast --version
+```
+
+Neither package is published to the real npm registry yet -- `npx -y
+clickcast-mcp` needs the one-time bootstrap below. Full design rationale
+(including why the shared provisioning code is a vendored copy rather than
+a `file:` dependency), what's live today vs. what needs bootstrapping, and
+the exact bootstrap steps: [`docs/packaging/npm.md`](docs/packaging/npm.md).
+
 ---
 
 ## For AI agents — copy this prompt into your chat

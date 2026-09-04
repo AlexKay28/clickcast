@@ -31,6 +31,17 @@ NEXT step depends on what the PREVIOUS one revealed.
 
 ## Install
 
+**Recommended — `npx` (no local Python setup):** the
+[`clickcast-mcp`](https://www.npmjs.com/package/clickcast-mcp) npm package
+is an npx-first entry point built specifically for this — every MCP client
+config example (Claude Desktop, Claude Code, Cursor) is already written as
+`npx -y <package>`, so this needs no separate install step at all (see
+`args` below). Its `postinstall` provisions clickcast into an isolated venv
+under its own install directory automatically, the first time it's used —
+see [`docs/packaging/npm.md`](packaging/npm.md) for how.
+
+**Alternative — `pip`, if you're already in a Python project:**
+
 ```bash
 pip install 'clickcast[mcp]'
 ```
@@ -40,7 +51,8 @@ it's an optional extra so agents that never touch MCP don't pay for the
 dependency. `clickcast mcp` prints a clear "install the `mcp` extra" error
 (not an `ImportError` traceback) if you run it without the extra installed.
 
-You also need a Chromium install, same as every other clickcast command:
+Either way, you also need a Chromium install, same as every other clickcast
+command:
 
 ```bash
 clickcast install --with-deps chromium
@@ -51,7 +63,7 @@ clickcast install --with-deps chromium
 ### Claude Code
 
 ```bash
-claude mcp add clickcast -- clickcast mcp
+claude mcp add clickcast -- npx -y clickcast-mcp
 ```
 
 Or, in `.mcp.json`:
@@ -60,12 +72,16 @@ Or, in `.mcp.json`:
 {
   "mcpServers": {
     "clickcast": {
-      "command": "clickcast",
-      "args": ["mcp"]
+      "command": "npx",
+      "args": ["-y", "clickcast-mcp"]
     }
   }
 }
 ```
+
+Using a `pip install 'clickcast[mcp]'` install instead:
+`claude mcp add clickcast -- clickcast mcp`, or
+`{"command": "clickcast", "args": ["mcp"]}`.
 
 ### Claude Desktop
 
@@ -75,29 +91,31 @@ Add to `claude_desktop_config.json` (Settings → Developer → Edit Config):
 {
   "mcpServers": {
     "clickcast": {
-      "command": "clickcast",
-      "args": ["mcp"]
+      "command": "npx",
+      "args": ["-y", "clickcast-mcp"]
     }
   }
 }
 ```
 
-Restart Claude Desktop after editing. If `clickcast` isn't on the `PATH`
-Claude Desktop launches with (common on macOS — GUI apps don't inherit your
-shell's `PATH`), point `command` at the absolute path from `which clickcast`
-instead.
+Restart Claude Desktop after editing. Using a `pip install` instead:
+`{"command": "clickcast", "args": ["mcp"]}` — if `clickcast` isn't on the
+`PATH` Claude Desktop launches with (common on macOS — GUI apps don't
+inherit your shell's `PATH`), point `command` at the absolute path from
+`which clickcast` instead.
 
 ### Passing default browser options
 
 Any flag `clickcast mcp --help` lists becomes the default for
-`start_session` when the connecting agent's call doesn't override it:
+`start_session` when the connecting agent's call doesn't override it —
+append it after `clickcast-mcp` (npx) or `mcp` (pip):
 
 ```json
 {
   "mcpServers": {
     "clickcast": {
-      "command": "clickcast",
-      "args": ["mcp", "--grid", "--viewport", "1440x900"]
+      "command": "npx",
+      "args": ["-y", "clickcast-mcp", "--grid", "--viewport", "1440x900"]
     }
   }
 }

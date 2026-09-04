@@ -1,0 +1,208 @@
+name: Build + publish npm packages
+
+# Fires after `release.yml`'s `gh-release` job creates a real (non-prerelease)
+# GitHub release. Always builds + smoke-tests both npm packages
+# (npm/clickcast, npm/clickcast-mcp) against the real, already-published
+# PyPI `clickcast==<version>` -- proves the venv-provisioning + bin shim
+# mechanism actually works before anything is published, and uploads the
+# packed tarballs as build artifacts so they can be inspected / published
+# manually even before the bootstrap below.
+#
+# If the `NPM_TOKEN` secret is configured (see docs/packaging/npm.md's
+# "One-time bootstrap" section), it additionally publishes both packages to
+# the real npm registry under the `~alexkay` account. Until that's
+# configured, this workflow still builds and smoke-tests on every release,
+# it just skips the publish step.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "clickcast version to package (e.g. 0.3.1). Defaults to the triggering release's tag."
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-smoke-test:
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # gh release upload
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      has_npm_token: ${{ steps.check-secret.outputs.has_token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The `secrets` context isn't available in `if:` conditionals at all
+      # (job- or step-level) -- https://docs.github.com/en/actions/learn-github-actions/contexts#context-availability.
+      # Route it through a job output instead, and gate the downstream jobs
+      # on `needs.build-and-smoke-test.outputs.has_npm_token`. Same technique
+      # apt-release.yml and homebrew-tap.yml already use for their own
+      # per-channel secrets.
+      - name: Check for npm token
+        id: check-secret
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -n "$NPM_TOKEN" ]; then
+            echo "has_token=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Resolve version
+        id: version
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          VERSION="$INPUT_VERSION"
+          if [ -z "$VERSION" ]; then
+            VERSION="${RELEASE_TAG#v}"
+          fi
+          if [ -z "$VERSION" ]; then
+            echo "::error::no version resolved -- pass workflow_dispatch input 'version' or trigger via a release"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for PyPI to serve this version
+        # postinstall.js pip-installs clickcast==$VERSION from PyPI into the
+        # provisioned venv. Same polling shape as apt-release.yml's and
+        # homebrew-tap.yml's own "wait for PyPI" steps.
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 20); do
+            if curl -sf "https://pypi.org/pypi/clickcast/${VERSION}/json" >/dev/null; then
+              echo "clickcast==${VERSION} visible on PyPI after ${i} attempts"
+              exit 0
+            fi
+            echo "attempt $i/20: clickcast==${VERSION} not yet on PyPI; sleeping 5s..."
+            sleep 5
+          done
+          echo "::error::PyPI never served clickcast==${VERSION} within 100s"
+          exit 1
+
+      - name: Sync npm package versions to the release version
+        # Belt-and-braces: the npm package.json `version` fields are also
+        # meant to be bumped by hand in the same PR that bumps
+        # pyproject.toml (see docs/packaging/npm.md), but this makes the
+        # release itself self-sufficient even if that was missed.
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          for pkg in npm/clickcast npm/clickcast-mcp; do
+            (cd "$pkg" && npm pkg set version="$VERSION")
+          done
+
+      - name: Build both packages (npm pack)
+        run: |
+          set -euo pipefail
+          mkdir -p dist-npm
+          (cd npm/clickcast-mcp && npm pack --pack-destination "$GITHUB_WORKSPACE/dist-npm")
+          (cd npm/clickcast && npm pack --pack-destination "$GITHUB_WORKSPACE/dist-npm")
+          ls -la dist-npm
+
+      - name: Real smoke test -- install each tarball and run the wrapped CLI
+        # Installs each packed tarball in isolation (mirroring a real end
+        # user's `npm install`) and runs it against the real, already-
+        # published PyPI clickcast==$VERSION -- not a mock. Confirms the
+        # postinstall venv provisioning and the bin/ shim's argv/exit-code
+        # forwarding both actually work end to end, the same bar
+        # docs/packaging/apt.md's "installed it in a throwaway container"
+        # step and docs/packaging/homebrew.md's formula review held
+        # themselves to.
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p /tmp/npm-smoke/clickcast /tmp/npm-smoke/clickcast-mcp
+
+          npm install --prefix /tmp/npm-smoke/clickcast \
+            "$GITHUB_WORKSPACE/dist-npm/clickcast-${VERSION}.tgz"
+          got=$(node /tmp/npm-smoke/clickcast/node_modules/clickcast/bin/clickcast.js --version)
+          if [ "$got" != "$VERSION" ]; then
+            echo "clickcast bin --version returned '$got', expected '$VERSION'" >&2
+            exit 1
+          fi
+          node /tmp/npm-smoke/clickcast/node_modules/clickcast/bin/clickcast.js --help >/dev/null
+          echo "clickcast npm package: --version and --help OK"
+
+          npm install --prefix /tmp/npm-smoke/clickcast-mcp \
+            "$GITHUB_WORKSPACE/dist-npm/clickcast-mcp-${VERSION}.tgz"
+          node /tmp/npm-smoke/clickcast-mcp/node_modules/clickcast-mcp/bin/clickcast-mcp.js --help \
+            | grep -q "Start an MCP server"
+          echo "clickcast-mcp npm package: --help forwards into 'clickcast mcp' correctly"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: clickcast-npm-packages-${{ steps.version.outputs.version }}
+          path: dist-npm/*.tgz
+
+      - name: Attach tarballs to the GitHub release
+        # Works with zero manual setup -- an inspectable, installable
+        # fallback (`npm install -g ./clickcast-mcp-<version>.tgz`) even
+        # before the real npm registry publish is bootstrapped.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" dist-npm/*.tgz --clobber
+
+  publish-npm:
+    needs: build-and-smoke-test
+    if: ${{ !github.event.release.prerelease && needs.build-and-smoke-test.outputs.has_npm_token == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Sync npm package versions to the release version
+        env:
+          VERSION: ${{ needs.build-and-smoke-test.outputs.version }}
+        run: |
+          set -euo pipefail
+          for pkg in npm/clickcast npm/clickcast-mcp; do
+            (cd "$pkg" && npm pkg set version="$VERSION")
+          done
+
+      - name: Publish clickcast-mcp
+        working-directory: npm/clickcast-mcp
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public
+
+      - name: Publish clickcast
+        working-directory: npm/clickcast
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public
+
+  npm-not-bootstrapped:
+    needs: build-and-smoke-test
+    if: ${{ !github.event.release.prerelease && needs.build-and-smoke-test.outputs.has_npm_token == 'false' }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "::warning::NPM_TOKEN is not set -- skipping the real npm registry publish."
+          echo "Both packages were still built, smoke-tested, and attached to the GitHub release as .tgz files."
+          echo "See docs/packaging/npm.md for the one-time bootstrap steps."
