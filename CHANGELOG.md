@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`npm-release.yml`'s smoke-test step could fail with zero diagnostic
+  output.** `clickcast-mcp`'s `--help` check piped straight into
+  `grep -q`, which silently discards the piped command's stdout whether
+  it matches or not — so its first two real runs (v0.4.2, following
+  #236's trigger fix) failed instantly with nothing to debug from. Not
+  reproducible locally, including in a clean `ubuntu:24.04` container.
+  Every command's output is now captured and printed on failure instead.
+- Synced `npm/clickcast/package.json` and `npm/clickcast-mcp/package.json`
+  `version` fields to the current release (they'd drifted to `0.3.1`
+  while `pyproject.toml` moved to `0.4.2` — `npm-release.yml`'s own
+  version-sync step covers this at build time regardless, per
+  `docs/packaging/npm.md`, but they're meant to be kept in sync by hand
+  too).
+
 ## [0.4.2] — 2026-09-05
 
 ### Fixed

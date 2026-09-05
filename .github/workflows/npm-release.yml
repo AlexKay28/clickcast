@@ -175,6 +175,17 @@ jobs:
         # docs/packaging/apt.md's "installed it in a throwaway container"
         # step and docs/packaging/homebrew.md's formula review held
         # themselves to.
+        #
+        # Every command's output is captured and printed on failure rather
+        # than piped straight to /dev/null or grep -q -- the first two real
+        # runs of this workflow (v0.4.2, #235/#236) hit an instant,
+        # zero-output failure on the clickcast-mcp step specifically
+        # because `| grep -q` swallows the piped command's stdout whether
+        # it matches or not, so there was nothing to debug from. Not
+        # reproducible locally (including a clean ubuntu:24.04 container --
+        # same Node/Python majors, real PyPI install) even after two
+        # straight CI failures, so this is the fix until it can actually
+        # be diagnosed: never let this step fail silently again.
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
@@ -189,13 +200,25 @@ jobs:
             echo "clickcast bin --version returned '$got', expected '$VERSION'" >&2
             exit 1
           fi
-          node /tmp/npm-smoke/clickcast/node_modules/clickcast/bin/clickcast.js --help >/dev/null
+          if ! help_output=$(node /tmp/npm-smoke/clickcast/node_modules/clickcast/bin/clickcast.js --help 2>&1); then
+            echo "::error::clickcast --help exited non-zero. Full output:"
+            echo "$help_output"
+            exit 1
+          fi
           echo "clickcast npm package: --version and --help OK"
 
           npm install --prefix /tmp/npm-smoke/clickcast-mcp \
             "$GITHUB_WORKSPACE/dist-npm/clickcast-mcp-${VERSION}.tgz"
-          node /tmp/npm-smoke/clickcast-mcp/node_modules/clickcast-mcp/bin/clickcast-mcp.js --help \
-            | grep -q "Start an MCP server"
+          if ! mcp_help_output=$(node /tmp/npm-smoke/clickcast-mcp/node_modules/clickcast-mcp/bin/clickcast-mcp.js --help 2>&1); then
+            echo "::error::clickcast-mcp --help exited non-zero. Full output:"
+            echo "$mcp_help_output"
+            exit 1
+          fi
+          if ! echo "$mcp_help_output" | grep -q "Start an MCP server"; then
+            echo "::error::clickcast-mcp --help succeeded but didn't contain the expected string. Full output:"
+            echo "$mcp_help_output"
+            exit 1
+          fi
           echo "clickcast-mcp npm package: --help forwards into 'clickcast mcp' correctly"
 
       - uses: actions/upload-artifact@v4
