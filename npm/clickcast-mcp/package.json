@@ -1,6 +1,6 @@
 {
   "name": "clickcast-mcp",
-  "version": "0.3.1",
+  "version": "0.4.2",
   "description": "npx-first MCP (Model Context Protocol) server for clickcast -- browser sessions for AI agents. Wraps `clickcast mcp` via an isolated, auto-provisioned Python venv.",
   "keywords": [
     "mcp",
