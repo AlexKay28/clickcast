@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **npm packages (`clickcast`, `clickcast-mcp`) were never actually being
+  built or published — `npm-release.yml`'s trigger never fired**
+  (closes [#235]). The workflow listened for `release: types: [published]`,
+  but `release.yml`'s `gh-release` job creates the GitHub release using the
+  default `GITHUB_TOKEN` — and GitHub Actions deliberately doesn't fire
+  other workflows' event-based triggers off actions taken with that token.
+  The result: zero runs of `npm-release.yml`, ever, across every release
+  from v0.2.9 through v0.4.1 — not "unpublished pending the `NPM_TOKEN`
+  bootstrap" as the README implied, but never even built or smoke-tested.
+  Switched the trigger to `workflow_run` watching `release.yml`'s
+  completion instead, which isn't subject to the `GITHUB_TOKEN`
+  restriction and needs no additional secret.
+
 ## [0.4.1] — 2026-09-04
 
 ### Fixed
@@ -1658,3 +1672,4 @@ Initial public release.
 [#227]: https://github.com/AlexKay28/clickcast/issues/227
 [#228]: https://github.com/AlexKay28/clickcast/issues/228
 [#231]: https://github.com/AlexKay28/clickcast/issues/231
+[#235]: https://github.com/AlexKay28/clickcast/issues/235
