@@ -56,14 +56,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          INPUT_VERSION: ${{ github.event.inputs.version }}
         run: |
           set -euo pipefail
           # `head_branch` is the tag name itself for a tag-push-triggered
           # run (defensively strip a `refs/tags/` prefix in case a future
           # GitHub Actions version ever qualifies it). Empty on
-          # workflow_dispatch -- version then comes from the manual input
-          # instead, same as before this change.
+          # workflow_dispatch -- fall back to deriving it from the manual
+          # `version` input (repo tag convention is always `v<version>`).
+          # Found the hard way: a manual dispatch with a bare empty tag
+          # made "Attach tarballs to the GitHub release" run
+          # `gh release upload ""`, which fails with "release not found" --
+          # nobody had ever actually run workflow_dispatch on this workflow
+          # before, since the whole workflow had zero runs before #236.
           tag="${HEAD_BRANCH#refs/tags/}"
+          if [ -z "$tag" ] && [ -n "$INPUT_VERSION" ]; then
+            tag="v${INPUT_VERSION}"
+          fi
           if [ -n "$tag" ]; then
             prerelease=$(gh api "repos/${{ github.repository }}/releases/tags/$tag" --jq '.prerelease')
           else
