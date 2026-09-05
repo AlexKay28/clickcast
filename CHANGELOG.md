@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **`npm-release.yml`'s `workflow_dispatch` trigger uploaded tarballs to an
+  empty release tag.** The `resolve` job only derived a tag from the
+  triggering `workflow_run`'s ref, leaving it empty on a manual
+  `workflow_dispatch` run — `gh release upload ""` then failed with
+  "release not found". Now falls back to `v<version>` from the manual
+  `version` input. Found by actually running `workflow_dispatch` for the
+  first time (`gh workflow run npm-release.yml -f version=0.4.2`) — this
+  bug predates every change in this session, just never triggered before
+  since the workflow had zero runs of any kind until #236.
 - **`npm-release.yml`'s smoke-test step could fail with zero diagnostic
   output.** `clickcast-mcp`'s `--help` check piped straight into
   `grep -q`, which silently discards the piped command's stdout whether
