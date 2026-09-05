@@ -1,9 +1,9 @@
 name: Build + publish npm packages
 
-# Fires after `release.yml`'s `gh-release` job creates a real (non-prerelease)
-# GitHub release. Always builds + smoke-tests both npm packages
-# (npm/clickcast, npm/clickcast-mcp) against the real, already-published
-# PyPI `clickcast==<version>` -- proves the venv-provisioning + bin shim
+# Fires after `release.yml` (the "Publish release" workflow) completes on a
+# tag push. Always builds + smoke-tests both npm packages (npm/clickcast,
+# npm/clickcast-mcp) against the real, already-published PyPI
+# `clickcast==<version>` -- proves the venv-provisioning + bin shim
 # mechanism actually works before anything is published, and uploads the
 # packed tarballs as build artifacts so they can be inspected / published
 # manually even before the bootstrap below.
@@ -13,9 +13,21 @@ name: Build + publish npm packages
 # the real npm registry under the `~alexkay` account. Until that's
 # configured, this workflow still builds and smoke-tests on every release,
 # it just skips the publish step.
+#
+# Triggered via `workflow_run` rather than `on: release: types: [published]`
+# (#235): `release.yml`'s `gh-release` job creates the GitHub release using
+# the default `GITHUB_TOKEN`, and GitHub Actions deliberately does not fire
+# other workflows' event-based triggers (including `on: release`) off
+# actions taken with that token -- an anti-recursion safeguard, documented
+# at https://docs.github.com/en/actions/using-workflows/triggering-a-workflow#triggering-a-workflow-from-a-workflow.
+# Concretely: this workflow had zero runs, ever, across 5 real releases
+# before this fix. `workflow_run` fires on the *run* completing rather than
+# the release-created event itself, so it isn't subject to that rule, and
+# needs no extra PAT/secret to work around it.
 on:
-  release:
-    types: [published]
+  workflow_run:
+    workflows: ["Publish release (TestPyPI → PyPI → GitHub release)"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       version:
@@ -26,8 +38,43 @@ permissions:
   contents: read
 
 jobs:
+  # `workflow_run` doesn't hand us `github.event.release.*` the way
+  # `on: release` did -- reconstruct the tag + prerelease flag ourselves
+  # from the triggering run's ref, in one place all downstream jobs share
+  # via `needs.resolve.outputs.*` (same job-output pattern this file
+  # already uses for `has_npm_token`, since `secrets`/computed values
+  # aren't available in job-level `if:` conditions directly).
+  resolve:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      prerelease: ${{ steps.resolve.outputs.prerelease }}
+    steps:
+      - name: Resolve the tag + prerelease flag for the release being packaged
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          set -euo pipefail
+          # `head_branch` is the tag name itself for a tag-push-triggered
+          # run (defensively strip a `refs/tags/` prefix in case a future
+          # GitHub Actions version ever qualifies it). Empty on
+          # workflow_dispatch -- version then comes from the manual input
+          # instead, same as before this change.
+          tag="${HEAD_BRANCH#refs/tags/}"
+          if [ -n "$tag" ]; then
+            prerelease=$(gh api "repos/${{ github.repository }}/releases/tags/$tag" --jq '.prerelease')
+          else
+            prerelease="false"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+
   build-and-smoke-test:
-    if: ${{ !github.event.release.prerelease }}
+    needs: resolve
+    if: ${{ needs.resolve.outputs.prerelease != 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write # gh release upload
@@ -66,7 +113,7 @@ jobs:
         id: version
         env:
           INPUT_VERSION: ${{ github.event.inputs.version }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ needs.resolve.outputs.tag }}
         run: |
           set -euo pipefail
           VERSION="$INPUT_VERSION"
@@ -162,11 +209,11 @@ jobs:
         # before the real npm registry publish is bootstrapped.
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" dist-npm/*.tgz --clobber
+        run: gh release upload "${{ needs.resolve.outputs.tag }}" dist-npm/*.tgz --clobber
 
   publish-npm:
-    needs: build-and-smoke-test
-    if: ${{ !github.event.release.prerelease && needs.build-and-smoke-test.outputs.has_npm_token == 'true' }}
+    needs: [resolve, build-and-smoke-test]
+    if: ${{ needs.resolve.outputs.prerelease != 'true' && needs.build-and-smoke-test.outputs.has_npm_token == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -198,8 +245,8 @@ jobs:
         run: npm publish --access public
 
   npm-not-bootstrapped:
-    needs: build-and-smoke-test
-    if: ${{ !github.event.release.prerelease && needs.build-and-smoke-test.outputs.has_npm_token == 'false' }}
+    needs: [resolve, build-and-smoke-test]
+    if: ${{ needs.resolve.outputs.prerelease != 'true' && needs.build-and-smoke-test.outputs.has_npm_token == 'false' }}
     runs-on: ubuntu-latest
     steps:
       - run: |

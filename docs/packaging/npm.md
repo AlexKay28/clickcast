@@ -282,9 +282,10 @@ kind of manual, owner-only step issue #206/#209 established a precedent for
    [`RELEASING.md`](../../RELEASING.md) as usual, with the npm package
    `version` fields bumped to match the new PyPI version (see
    `npm-release.yml`'s own version-sync step, or bump them by hand in the
-   same PR that bumps `pyproject.toml`). Once `release.yml`'s `gh-release`
-   job publishes the GitHub release, `.github/workflows/npm-release.yml`
-   fires automatically and publishes both packages.
+   same PR that bumps `pyproject.toml`). Once `release.yml` finishes
+   (`.github/workflows/npm-release.yml` watches it via `workflow_run`,
+   not `on: release` -- see #235), it fires automatically and publishes
+   both packages.
 
 7. **Smoke-test the real registry install:**
 
