@@ -7,7 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3] — 2026-09-13
+
 ### Fixed
+- **`LICENSE` was the Apache License 2.0 while every other license
+  statement in the project said MIT** (closes [#240]). The classifier, the
+  README badge and footer, `scripts/homebrew_formula.py`, and both npm
+  `package.json` files all declared MIT; the Apache file had sat untouched
+  since the initial commit. Because `pyproject.toml` used
+  `license = { file = "LICENSE" }`, that body became the package metadata —
+  PyPI served 201 lines of Apache text for a package advertising MIT.
+  `LICENSE` is now the MIT text, and the declaration is the PEP 639 form
+  (`license = "MIT"` plus `license-files`), so metadata carries
+  `License-Expression: MIT` instead of the whole file. The redundant
+  `License :: OSI Approved :: MIT License` classifier is gone — PEP 639
+  makes declaring both an error.
+- **`[build-system] requires` raised from `hatchling>=1.24` to
+  `hatchling>=1.27`.** 1.24/1.25 fail outright on `license-files`
+  (`TypeError: Field project.license-files must be a table`), but 1.26.x is
+  the dangerous case: it *builds successfully* while silently emitting
+  `Metadata-Version: 2.3` with a legacy `License:` field and no
+  `License-Expression` at all. A pass/fail build check does not catch that;
+  only pinned-version testing does. The resolver hid it too — the declared
+  floor of 1.24 resolved to 1.32 locally, so isolated builds passed with a
+  broken floor still declared.
 - **`npm-release.yml`'s `workflow_dispatch` trigger uploaded tarballs to an
   empty release tag.** The `resolve` job only derived a tag from the
   triggering `workflow_run`'s ref, leaving it empty on a manual
@@ -30,6 +53,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   version-sync step covers this at build time regardless, per
   `docs/packaging/npm.md`, but they're meant to be kept in sync by hand
   too).
+
+### Changed
+- **Packaging metadata now leads with capability terms rather than
+  project-invented vocabulary** (refs [#241]). The PyPI summary described a
+  "reel" and a "feedback sidecar" — good words in the README, where the
+  reader has already arrived, but they match nothing anyone types into a
+  search box, and the summary is both the highest-weighted field in PyPI's
+  own search and the meta description Google renders. `keywords` grew from
+  7 to 13 (adding `mcp`, `model-context-protocol`, `e2e`,
+  `visual-regression`, `demo-video`, `web-ui`), four classifiers were added
+  (`Environment :: Web Environment`, `Topic :: Internet :: WWW/HTTP ::
+  Browsers`, `Topic :: Software Development :: Quality Assurance`,
+  `Typing :: Typed`), and `[project.urls]` gained `Documentation`,
+  `Source` and `Changelog` — each rendered as a sidebar link on PyPI.
+- The README `<h1>` now pairs the project name with a capability phrase.
+  The bare brand term is saturated by unrelated products, so the page's
+  highest-weighted heading was carrying no searchable signal.
+
+### Added
+- An `<!-- mcp-name: io.github.AlexKay28/clickcast -->` marker in the
+  README, which the official MCP registry uses to verify PyPI ownership.
+  It must be present in a *published* release for that verification to
+  succeed, which is why it lands here rather than alongside the registry
+  submission itself.
 
 ## [0.4.2] — 2026-09-05
 
@@ -1599,7 +1646,8 @@ Initial public release.
 - Automated release pipeline: tag `v*` → TestPyPI → smoke matrix (Linux/macOS
   × Python 3.10–3.13) → PyPI → GitHub release, all via Trusted Publishing.
 
-[Unreleased]: https://github.com/AlexKay28/clickcast/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/AlexKay28/clickcast/compare/v0.4.3...HEAD
+[0.4.3]: https://github.com/AlexKay28/clickcast/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/AlexKay28/clickcast/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/AlexKay28/clickcast/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/AlexKay28/clickcast/compare/v0.3.1...v0.4.0
@@ -1700,3 +1748,5 @@ Initial public release.
 [#228]: https://github.com/AlexKay28/clickcast/issues/228
 [#231]: https://github.com/AlexKay28/clickcast/issues/231
 [#235]: https://github.com/AlexKay28/clickcast/issues/235
+[#240]: https://github.com/AlexKay28/clickcast/issues/240
+[#241]: https://github.com/AlexKay28/clickcast/issues/241

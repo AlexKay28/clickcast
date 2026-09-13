@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "clickcast"
-version = "0.4.2"
+version = "0.4.3"
 description = "Playwright browser automation for AI agents — screenshots, GIF/MP4/WebP recording, JSON feedback sidecar, MCP server."
 readme = "README.md"
 license = "MIT"
