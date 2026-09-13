@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`npm-release.yml`'s "wait for PyPI" gate asked the wrong endpoint, so
+  the npm smoke test raced PyPI's index and lost.** The step polled
+  `/pypi/<name>/<version>/json`, but `postinstall.js` does a real
+  `pip install clickcast==<version>` — and pip resolves against the
+  *simple* index, a separate cache that propagates independently. During
+  v0.4.4's release `/pypi/clickcast/0.4.4/json` already returned 200 while
+  `/simple/` had not caught up, so the gate passed and the smoke test
+  immediately failed with `Could not find a version that satisfies the
+  requirement clickcast==0.4.4 (from versions: ..., 0.4.3)`; a rerun
+  minutes later passed with no code change. The gate now polls
+  `https://pypi.org/simple/clickcast/` — what pip actually reads — and its
+  budget goes from 100s to 600s, since the old one was short enough that a
+  slow-but-healthy propagation would fail a release outright.
+
 ## [0.4.4] — 2026-09-13
 
 ### Fixed
