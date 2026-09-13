@@ -13,8 +13,6 @@
 
 > **See [`docs/ONE_PAGE_NAVIGATION_ORDER_TIPS.md`](docs/ONE_PAGE_NAVIGATION_ORDER_TIPS.md)** for the nine principles behind why this reel reads as legibly as it does — and the scenario template you can copy for your own reels.
 
-> **Not to be confused with [vercel-labs/webreel](https://github.com/vercel-labs/webreel)** — that's a TypeScript tool for authoring polished demo videos. `clickcast` is a Python tool aimed primarily at *AI agents* that need a visual modality onto a live web UI, and secondarily at humans who want reproducible demo reels.
-
 `clickcast` drives a real browser through a website and hands back **two things**:
 
 1. A watchable **reel** — GIF / MP4 / WebP / raw frames.
@@ -698,6 +696,12 @@ Cutting a release is documented in [`RELEASING.md`](RELEASING.md).
 - BFS UI exploration — `clickcast explore <url>` treats the app as a state graph: discover → click → discover the new state → recurse. Bounded, deterministic, with visited-state dedup.
 - Sidecar schema v2 — adds a top-level `graph` block (nodes = distinct page states, edges = `(from, to, action, transition_kind)`).
 - Automatic annotation of `auto` / `run` outputs.
+
+---
+
+## Related projects
+
+**[vercel-labs/webreel](https://github.com/vercel-labs/webreel)** — a TypeScript tool for authoring polished demo videos. Easy to confuse with this project given the similar name and overlapping output, so: `clickcast` is a Python tool aimed primarily at *AI agents* that need a visual modality onto a live web UI, and secondarily at humans who want reproducible demo reels. If you want hand-authored marketing videos, webreel is the better fit.
 
 ---
 
