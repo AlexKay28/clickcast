@@ -137,21 +137,41 @@ jobs:
 
       - name: Wait for PyPI to serve this version
         # postinstall.js pip-installs clickcast==$VERSION from PyPI into the
-        # provisioned venv. Same polling shape as apt-release.yml's and
-        # homebrew-tap.yml's own "wait for PyPI" steps.
+        # provisioned venv, so this gate has to mean "pip can resolve it",
+        # not merely "PyPI has heard of it".
+        #
+        # This polled `/pypi/<name>/<version>/json` until v0.4.4, which was
+        # not the same question. The JSON API and the *simple* index are
+        # separate caches that propagate independently: during v0.4.4's
+        # release `/pypi/clickcast/0.4.4/json` already returned 200 while
+        # `/simple/` had not caught up, so this step passed and the smoke
+        # test immediately failed with "Could not find a version that
+        # satisfies the requirement clickcast==0.4.4 (from versions: ...,
+        # 0.4.3)". A rerun minutes later passed with no code change.
+        #
+        # PEP 503's simple index is what pip actually resolves against, so
+        # poll that. The budget is also raised from 100s to 600s -- the old
+        # one was short enough that a slow-but-healthy propagation would
+        # fail the release outright.
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
-          for i in $(seq 1 20); do
-            if curl -sf "https://pypi.org/pypi/clickcast/${VERSION}/json" >/dev/null; then
-              echo "clickcast==${VERSION} visible on PyPI after ${i} attempts"
+          deadline=$(( SECONDS + 600 ))
+          attempt=0
+          until [ "$SECONDS" -ge "$deadline" ]; do
+            attempt=$(( attempt + 1 ))
+            body=$(curl -sS --max-time 30 "https://pypi.org/simple/clickcast/" || true)
+            if printf '%s' "$body" | grep -qF -- "clickcast-${VERSION}.tar.gz"; then
+              echo "pip can resolve clickcast==${VERSION} (simple index, attempt ${attempt})"
               exit 0
             fi
-            echo "attempt $i/20: clickcast==${VERSION} not yet on PyPI; sleeping 5s..."
-            sleep 5
+            echo "attempt ${attempt}: clickcast ${VERSION} not in PyPI's simple index yet; sleeping 15s..."
+            sleep 15
           done
-          echo "::error::PyPI never served clickcast==${VERSION} within 100s"
+          echo "::error::clickcast ${VERSION} never reached PyPI's simple index within 600s."
+          echo "release.yml reported a successful upload, so this is either an unusually slow"
+          echo "propagation or a genuinely failed publish -- check https://pypi.org/project/clickcast/"
           exit 1
 
       - name: Sync npm package versions to the release version
