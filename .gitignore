@@ -223,3 +223,6 @@ npm/**/node_modules/
 npm/**/vendor/
 npm/**/*.tgz
 npm/**/.venv/
+
+# Claude Code local config + ahood-installed skills
+.claude/
