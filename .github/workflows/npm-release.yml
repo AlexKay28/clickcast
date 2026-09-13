@@ -281,7 +281,31 @@ jobs:
     if: ${{ needs.resolve.outputs.prerelease != 'true' && needs.build-and-smoke-test.outputs.has_npm_token == 'false' }}
     runs-on: ubuntu-latest
     steps:
-      - run: |
+      # A missing NPM_TOKEN is expected *before* the one-time bootstrap, and a
+      # warning is the right response then. Once the packages exist on the
+      # registry it is a regression: the release silently stops publishing
+      # while the workflow stays green, so npm drifts a version behind on
+      # every release until someone checks by hand (#248). Distinguish the
+      # two by asking the registry.
+      - name: Warn, or fail if npm was already bootstrapped
+        env:
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
+          published=0
+          for pkg in clickcast clickcast-mcp; do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/$pkg" || echo 000)
+            echo "registry.npmjs.org/$pkg -> HTTP $code"
+            [ "$code" = "200" ] && published=1
+          done
+
+          if [ "$published" = "1" ]; then
+            echo "::error::NPM_TOKEN is not set, but clickcast/clickcast-mcp are already published on npm."
+            echo "::error::This release ($VERSION) did NOT publish to npm -- the registry is now behind PyPI."
+            echo "Restore the NPM_TOKEN secret (docs/packaging/npm.md) and re-run this workflow."
+            exit 1
+          fi
+
           echo "::warning::NPM_TOKEN is not set -- skipping the real npm registry publish."
           echo "Both packages were still built, smoke-tested, and attached to the GitHub release as .tgz files."
+          echo "Neither package exists on the registry yet, so this is the pre-bootstrap state, not a regression."
           echo "See docs/packaging/npm.md for the one-time bootstrap steps."
