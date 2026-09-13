@@ -64,11 +64,25 @@ comments and TP config on both PyPI sides.
    - `0.1.1rc1` → release candidate (TestPyPI only)
    - `0.1.1a1` / `0.1.1b1` → alpha / beta (TestPyPI only)
    - `0.1.1.dev1` → dev release (TestPyPI only)
-3. Open a `chore/vX.Y.Z` PR with the CHANGELOG + version bump, land it on
+3. **Bump the two `version` fields in [`server.json`](server.json)** — the
+   top-level one and `packages[0].version`. Both must match the release, or
+   the MCP registry entry silently keeps advertising the previous version.
+4. **Bump `version` in both npm `package.json` files** —
+   `npm/clickcast/package.json` and `npm/clickcast-mcp/package.json`.
+   `npm-release.yml` syncs these at build time, but they're kept in sync by
+   hand too (see `docs/packaging/npm.md`); they have drifted before.
+5. Open a `chore/vX.Y.Z` PR with the CHANGELOG + version bumps, land it on
    `main` once CI is green.
-4. `git tag -a v0.1.1 -m "v0.1.1"` — annotated tag; the leading `v` matters.
-5. `git push origin main --tags`
-6. Watch → https://github.com/AlexKay28/clickcast/actions
+6. `git tag -a v0.1.1 -m "v0.1.1"` — annotated tag; the leading `v` matters.
+7. `git push origin main --tags`
+8. Watch → https://github.com/AlexKay28/clickcast/actions
+9. **Republish the MCP registry entry** once PyPI has the new version:
+   `mcp-publisher login github && mcp-publisher publish server.json`.
+   This is a separate, manual step — `release.yml` does not do it. The
+   registry verifies PyPI ownership by finding the literal
+   `mcp-name: io.github.AlexKay28/clickcast` marker in the *rendered* PyPI
+   description, which comes from `README.md`; keep that marker in place or
+   verification fails.
 
 The workflow refuses to run if the tag and `pyproject.toml` version disagree,
 so mismatch errors surface early rather than as a bad PyPI upload.
