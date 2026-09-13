@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **A release that silently skipped the npm publish now fails instead of
+  passing** (refs [#248]). `publish-npm` is gated on `NPM_TOKEN` being set;
+  when it isn't, the `npm-not-bootstrapped` fallback emitted a warning and
+  exited 0, so the whole workflow stayed green while npm quietly fell a
+  version behind PyPI — which is exactly what happened for v0.4.3. The job
+  now asks the registry whether the packages already exist: if they do, a
+  missing token is a regression and the job errors; if they don't, it's the
+  expected pre-bootstrap state and the warning stands.
+- **`README.md` and `docs/packaging/npm.md` claimed the npm packages were
+  unpublished.** Both have been live since v0.4.2. The README is also the
+  PyPI long description, so that claim was shipping to PyPI too.
+
+### Added
+- **`mcpName` in `npm/clickcast-mcp/package.json`** — the field the MCP
+  registry uses to verify npm ownership, the counterpart to the README's
+  `mcp-name` marker for PyPI. It must appear in a *published* npm version
+  before the npm install path can be added to `server.json`.
+
 ### Changed
 - **The `vercel-labs/webreel` disambiguation moved out of the first
   screenful** into a new `## Related projects` section near the bottom
@@ -1770,3 +1789,4 @@ Initial public release.
 [#240]: https://github.com/AlexKay28/clickcast/issues/240
 [#241]: https://github.com/AlexKay28/clickcast/issues/241
 [#246]: https://github.com/AlexKay28/clickcast/issues/246
+[#248]: https://github.com/AlexKay28/clickcast/issues/248

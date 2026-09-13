@@ -74,18 +74,19 @@ JS. Built specifically because the MCP ecosystem's install pattern is
 `npx <package>`, not `pip install`:
 
 ```bash
-npx -y clickcast-mcp                 # MCP entry point -- execs `clickcast mcp`; not published yet, see below
-npx clickcast --version              # general CLI wrapper; not published yet, see below
+npx -y clickcast-mcp                 # MCP entry point -- execs `clickcast mcp`
+npx clickcast --version              # general CLI wrapper
 ```
 
+Both are published on the npm registry. To run against your working copy
+instead of the published version:
+
 ```bash
-# Works today -- clone this repo, no npm registry needed:
 cd npm/clickcast-mcp && npm pack && npm install -g ./clickcast-mcp-*.tgz && clickcast-mcp --help
 cd npm/clickcast      && npm pack && npm install -g ./clickcast-*.tgz      && clickcast --version
 ```
 
-Neither package is published to the real npm registry yet -- `npx -y
-clickcast-mcp` needs the one-time bootstrap below. Full design rationale
+Full design rationale
 (including why the shared provisioning code is a vendored copy rather than
 a `file:` dependency), what's live today vs. what needs bootstrapping, and
 the exact bootstrap steps: [`docs/packaging/npm.md`](docs/packaging/npm.md).

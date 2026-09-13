@@ -12,12 +12,12 @@ rationale.
 | [`clickcast-mcp`](../../npm/clickcast-mcp/) | npx-first MCP entry point. `bin/clickcast-mcp` execs straight into `clickcast mcp` -- the issue's own suggested v1 priority, since it's what unblocks a one-line MCP client config. |
 | [`clickcast`](../../npm/clickcast/) | General CLI wrapper. `bin/clickcast` forwards argv/stdio/exit-code into the full wrapped Python CLI. |
 
-## What's live today vs. what needs bootstrapping
+## Install paths
 
 | Install path | Status |
 | --- | --- |
 | `npm pack` either package (clone this repo first) + `npm install -g ./clickcast-mcp-<version>.tgz` (or `./clickcast-<version>.tgz`) | **Works today** -- verified in this PR, see "Verification performed" below. |
-| `npx -y clickcast-mcp` / `npm install -g clickcast-mcp` / `npm install -g clickcast` from the real npm registry | **Needs the one-time bootstrap below** -- neither package has been published under the `~alexkay` npm account yet. |
+| `npx -y clickcast-mcp` / `npm install -g clickcast-mcp` / `npm install -g clickcast` from the real npm registry | **Live** -- both packages are published under the `~alexkay` npm account (first published alongside v0.4.2). |
 
 ## How it works
 
