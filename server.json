@@ -1,0 +1,35 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.AlexKay28/clickcast",
+  "description": "Drive a real Playwright browser: annotated screenshot + structured page state after every action.",
+  "version": "0.4.3",
+  "repository": {
+    "url": "https://github.com/AlexKay28/clickcast",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "clickcast",
+      "version": "0.4.3",
+      "runtimeHint": "uvx",
+      "runtimeArguments": [
+        {
+          "type": "named",
+          "name": "--from",
+          "value": "clickcast[mcp]"
+        }
+      ],
+      "packageArguments": [
+        {
+          "type": "positional",
+          "valueHint": "subcommand",
+          "value": "mcp"
+        }
+      ],
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

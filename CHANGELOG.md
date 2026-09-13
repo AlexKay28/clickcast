@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`server.json` at the repo root** — the MCP registry manifest for
+  `io.github.AlexKay28/clickcast`, published to
+  `registry.modelcontextprotocol.io`. Keeping it in the repo means a future
+  release is a two-field version bump plus `mcp-publisher publish` rather
+  than reconstructing the manifest from scratch. `RELEASING.md` gained the
+  matching steps, including the npm `package.json` bumps that were only
+  tribal knowledge before.
+
 ## [0.4.3] — 2026-09-13
 
 ### Fixed
