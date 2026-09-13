@@ -5,16 +5,31 @@ build-backend = "hatchling.build"
 [project]
 name = "clickcast"
 version = "0.4.2"
-description = "Drive a browser through a website and hand back a reel + AI-readable feedback sidecar."
+description = "Playwright browser automation for AI agents — screenshots, GIF/MP4/WebP recording, JSON feedback sidecar, MCP server."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.10"
 authors = [{ name = "Alex Kay" }]
-keywords = ["playwright", "screenshot", "gif", "browser", "automation", "ai", "agent"]
+keywords = [
+    "playwright",
+    "screenshot",
+    "gif",
+    "browser",
+    "automation",
+    "ai",
+    "agent",
+    "mcp",
+    "model-context-protocol",
+    "e2e",
+    "visual-regression",
+    "demo-video",
+    "web-ui",
+]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
+    "Environment :: Web Environment",
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
@@ -22,8 +37,11 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Topic :: Internet :: WWW/HTTP :: Browsers",
+    "Topic :: Software Development :: Quality Assurance",
     "Topic :: Software Development :: Testing",
     "Topic :: Multimedia :: Graphics",
+    "Typing :: Typed",
 ]
 dependencies = [
     "playwright>=1.44",
@@ -81,6 +99,9 @@ clickcast = "clickcast.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/AlexKay28/clickcast"
+Documentation = "https://github.com/AlexKay28/clickcast/tree/main/docs"
+Source = "https://github.com/AlexKay28/clickcast"
+Changelog = "https://github.com/AlexKay28/clickcast/blob/main/CHANGELOG.md"
 Issues = "https://github.com/AlexKay28/clickcast/issues"
 
 [tool.hatch.build.targets.wheel]

@@ -1,4 +1,4 @@
-# 🎞️ clickcast
+# 🎞️ clickcast — Playwright browser automation, screenshots, and GIF/MP4/WebP recording for AI agents
 
 > Give AI agents visual + structured feedback about live web UIs — and give humans deterministic demo reels while you're at it.
 
@@ -157,6 +157,8 @@ Once the agent has this, ask it something concrete like *"run clickcast auto aga
 ---
 
 ## Live agent control (MCP)
+
+<!-- mcp-name: io.github.AlexKay28/clickcast -->
 
 Everything above is batch mode: record a whole tour, then read back a GIF + sidecar. `clickcast mcp` is the live counterpart — an MCP server that drives one action at a time (`goto`/`click`/`type`/`scroll`/...) and hands back clickcast's richer per-call payload (annotated frame, `page_state`, grid coordinates, an enumerated `error_code`) instead of a bare screenshot, so an agent can react before deciding the next step.
 
