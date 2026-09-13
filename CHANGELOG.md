@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.4] — 2026-09-13
+
 ### Fixed
 - **A release that silently skipped the npm publish now fails instead of
   passing** (refs [#248]). `publish-npm` is gated on `NPM_TOKEN` being set;
@@ -20,12 +22,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unpublished.** Both have been live since v0.4.2. The README is also the
   PyPI long description, so that claim was shipping to PyPI too.
 
-### Added
-- **`mcpName` in `npm/clickcast-mcp/package.json`** — the field the MCP
-  registry uses to verify npm ownership, the counterpart to the README's
-  `mcp-name` marker for PyPI. It must appear in a *published* npm version
-  before the npm install path can be added to `server.json`.
-
 ### Changed
 - **The `vercel-labs/webreel` disambiguation moved out of the first
   screenful** into a new `## Related projects` section near the bottom
@@ -37,6 +33,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rather than dropping it.
 
 ### Added
+- **`mcpName` in `npm/clickcast-mcp/package.json`** — the field the MCP
+  registry uses to verify npm ownership, the counterpart to the README's
+  `mcp-name` marker for PyPI. It must appear in a *published* npm version
+  before the npm install path can be added to `server.json`.
 - **`server.json` at the repo root** — the MCP registry manifest for
   `io.github.AlexKay28/clickcast`, published to
   `registry.modelcontextprotocol.io`. Keeping it in the repo means a future
@@ -1684,7 +1684,8 @@ Initial public release.
 - Automated release pipeline: tag `v*` → TestPyPI → smoke matrix (Linux/macOS
   × Python 3.10–3.13) → PyPI → GitHub release, all via Trusted Publishing.
 
-[Unreleased]: https://github.com/AlexKay28/clickcast/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/AlexKay28/clickcast/compare/v0.4.4...HEAD
+[0.4.4]: https://github.com/AlexKay28/clickcast/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/AlexKay28/clickcast/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/AlexKay28/clickcast/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/AlexKay28/clickcast/compare/v0.4.0...v0.4.1
