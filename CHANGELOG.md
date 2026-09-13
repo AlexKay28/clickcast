@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **The `vercel-labs/webreel` disambiguation moved out of the first
+  screenful** into a new `## Related projects` section near the bottom
+  (closes [#246]). The note was the fourth thing a reader met — ahead of
+  the paragraph explaining what clickcast actually does — and since the
+  README is also the PyPI long description, its outbound link shipped to
+  both surfaces. The wording is kept essentially intact: the two tools are
+  genuinely confusable and the comparison is useful, so this relocates it
+  rather than dropping it.
+
 ### Added
 - **`server.json` at the repo root** — the MCP registry manifest for
   `io.github.AlexKay28/clickcast`, published to
@@ -1759,3 +1769,4 @@ Initial public release.
 [#235]: https://github.com/AlexKay28/clickcast/issues/235
 [#240]: https://github.com/AlexKay28/clickcast/issues/240
 [#241]: https://github.com/AlexKay28/clickcast/issues/241
+[#246]: https://github.com/AlexKay28/clickcast/issues/246
