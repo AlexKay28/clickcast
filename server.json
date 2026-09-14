@@ -30,6 +30,21 @@
       "transport": {
         "type": "stdio"
       }
+    },
+    {
+      "registryType": "npm",
+      "identifier": "clickcast-mcp",
+      "version": "0.4.4",
+      "runtimeHint": "npx",
+      "runtimeArguments": [
+        {
+          "type": "named",
+          "name": "-y"
+        }
+      ],
+      "transport": {
+        "type": "stdio"
+      }
     }
   ]
 }
