@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **The npm install path is registered in the MCP registry.** `server.json`
+  gains a second `packages[]` entry (`registryType: npm`, `identifier:
+  clickcast-mcp`, `runtimeHint: npx`) alongside the existing PyPI one, so
+  `io.github.AlexKay28/clickcast` now advertises both `uvx --from
+  'clickcast[mcp]' clickcast mcp` and `npx -y clickcast-mcp`. npx is the
+  dominant install pattern in the MCP ecosystem, which is the whole reason
+  the npm packages exist (`docs/packaging/npm.md`). This could only land
+  once `mcpName` reached a *published* npm version — the registry verifies
+  npm ownership against the package on the registry, not the repo.
+
 ### Fixed
 - **`npm-release.yml`'s "wait for PyPI" gate asked the wrong endpoint, so
   the npm smoke test raced PyPI's index and lost.** The step polled
