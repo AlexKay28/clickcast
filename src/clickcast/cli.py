@@ -50,6 +50,7 @@ from clickcast.core.session import Session
 from clickcast.core.viewport import Viewport
 from clickcast.discovery import AccessibleElement, Element, capture_accessibility_batch, discover
 from clickcast.encode import encode
+from clickcast.explore import ExploreConfig, explore_site
 from clickcast.feedback import Media, ReportBuilder, feedback_pointer_lines
 from clickcast.feedback import write as write_report
 from clickcast.feedback.models import VisualDiffReport
@@ -1511,6 +1512,94 @@ async def _do_elements(
         found = await discover(sess, limit=limit)
         accessibility = await capture_accessibility_batch(sess, found, grid=grid)
         return found, accessibility
+
+
+# ==========================================================================
+# clickcast explore  — state-graph site map, fast, no reel
+# ==========================================================================
+
+
+@app.command(
+    help="Explore a site's state graph and emit explore.json — no reel, no encoding.",
+    epilog=_FEEDBACK_EPILOG,
+)
+def explore(
+    url: Annotated[str, typer.Argument(help="Target URL.")],
+    out: Annotated[
+        str, typer.Option("--out", "-o", help="Output JSON path (the exploration map).")
+    ] = "explore.json",
+    max_pages: Annotated[int, typer.Option(help="Cap on pages visited.")] = 10,
+    max_steps: Annotated[
+        int, typer.Option(help="Total click budget across every visited page.")
+    ] = 15,
+    max_duration: Annotated[float, typer.Option(help="Hard wall-time cap, seconds.")] = 120.0,
+    click_timeout: Annotated[float, typer.Option(help="Per-click timeout, seconds.")] = 5.0,
+    initial_wait: Annotated[
+        float, typer.Option(help="Post-networkidle hold for SPA hydration, seconds.")
+    ] = 1.0,
+    traversal: Annotated[
+        str,
+        typer.Option(
+            help="Queue policy: 'bfs' (site-map coverage, default) or 'dfs' (narrative order)."
+        ),
+    ] = "bfs",
+    per_page: Annotated[
+        int, typer.Option(help="Top-N discovered elements pinned per page in the output.")
+    ] = 10,
+    viewport: ViewportArg = "1280x800",
+    device: Device = None,
+    engine: Engine = "chromium",
+    headful: Headful = False,
+    lang: Lang = None,
+    dark: Dark = False,
+    slowmo: Slowmo = 0,
+    verbose: Verbose = 0,
+    insecure: Insecure = False,
+    header: Header = None,
+    header_host: HeaderHost = None,
+) -> None:
+    """Run a bounded exploration and write the map to ``out``.
+
+    Like ``auto --traversal bfs`` minus everything that records: no
+    screenshots, no annotator, no encoder — just the graph, the edges,
+    and each page's top discoveries. Read the JSON (``kind:
+    clickcast/explore``, ``schema_version: 1``) when you only need the
+    app's shape; reach for ``auto`` when you need a reel to watch.
+    """
+    _setup_logging(verbose)
+    cfg = ExploreConfig(
+        url=url,
+        out=out,
+        max_pages=max_pages,
+        max_steps=max_steps,
+        max_duration=max_duration,
+        click_timeout_ms=int(click_timeout * 1000),
+        initial_wait=initial_wait,
+        session_kwargs=_session_kwargs(
+            engine,
+            viewport,
+            device,
+            headful,
+            lang,
+            dark,
+            slowmo,
+            insecure=insecure,
+            extra_headers=_parse_header_flags(header),
+            header_host=header_host,
+        ),
+        traversal=traversal,
+        per_page_discoveries=per_page,
+    )
+    payload = _run(lambda: explore_site(cfg))
+    out_path = Path(out)
+    out_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    graph = payload.get("graph", {})
+    typer.echo(
+        f"✔ {out} ({len(graph.get('nodes', []))} nodes, "
+        f"{len(graph.get('edges', []))} edges, "
+        f"{len(payload.get('pages', []))} page(s) explored, "
+        f"wall {payload.get('wall_s', 0.0)}s)"
+    )
 
 
 # ==========================================================================

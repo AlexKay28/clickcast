@@ -175,6 +175,21 @@ COMMAND_BRIEFS: tuple[CommandBrief, ...] = (
         example="clickcast elements https://example.com --limit 20",
     ),
     CommandBrief(
+        name="explore",
+        summary="Map a site's state graph — explore.json with nodes, edges, discoveries. No reel.",
+        when_to_use=(
+            "You need the app's pages, link targets, and clickable elements "
+            "without recording — `auto --traversal bfs` minus frames and "
+            "encode. Output: docs/explore-schema.md."
+        ),
+        key_flags=(
+            FlagBrief("--max-pages N", "page cap (default 10)"),
+            FlagBrief("--max-steps N", "click budget (default 15)"),
+            FlagBrief("--traversal dfs|bfs", "queue policy; BFS default"),
+        ),
+        example="clickcast explore https://example.com",
+    ),
+    CommandBrief(
         name="assertions",
         summary="Distill a sidecar to its CI-stable assertion set (optionally diff a baseline).",
         when_to_use=(

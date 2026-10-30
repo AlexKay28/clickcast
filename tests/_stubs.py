@@ -98,6 +98,9 @@ class FakeSession:
     async def wait(self, _s: float | None) -> None:
         return None
 
+    async def title(self) -> str:
+        return f"title of {self.page.url}"
+
 
 class FakeRecorder:
     """Bare-bones Recorder that satisfies the auto engine's calls but doesn't
