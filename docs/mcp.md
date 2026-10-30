@@ -138,7 +138,7 @@ Once configured, an agent (or you, via any MCP client) calls:
    the next one.
 3. `close_session` — closes the browser. Pass `save_transcript: "path.json"`
    to flush the accumulated sidecar-shaped transcript of every action taken
-   (same schema-v3 shape `auto`/`run` write, minus `media` — no reel is
+   (same schema-v4 shape `auto`/`run` write, minus `media` — no reel is
    encoded from a live session).
 
 v1 is single-session, single-process: one `clickcast mcp` process holds at

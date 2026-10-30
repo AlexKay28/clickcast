@@ -65,7 +65,7 @@ URL → Session (Playwright) → Actions (auto or YAML) → Recorder (per-step P
 - **`reel.py`** — the fluent Python API (`Reel` / `AsyncReel`), a chainable builder over the same pipeline the CLI uses.
 - **`serving.py`** — `serve_directory` / `Reel.serve_dir`, a context-manager static file server for reeling a local static build before pushing.
 
-Sidecar schema is versioned; the JSON Schema itself lives at `src/clickcast/feedback/schema/v1.json` (shipped in the wheel) and is documented in `docs/feedback-schema.md`. A standalone (no-`clickcast`-import) reference consumer is `tests/consumer/read_sidecar.py`.
+Sidecar schema is versioned; the JSON Schema itself lives at `src/clickcast/feedback/schema/v4.json` (shipped in the wheel) and is documented in `docs/feedback-schema.md`. A standalone (no-`clickcast`-import) reference consumer is `tests/consumer/read_sidecar.py`.
 
 ## Distribution
 

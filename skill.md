@@ -328,11 +328,11 @@ Now every `clickcast auto|shot|elements` call picks these up without flags. `run
 
 ## The sidecar contract
 
-Every reel-producing command emits `<out>.json`. Schema at [`src/clickcast/feedback/schema/v3.json`](src/clickcast/feedback/schema/v3.json). You should think of the reel as the artefact for humans and the sidecar as the artefact for you.
+Every reel-producing command emits `<out>.json`. Schema at [`src/clickcast/feedback/schema/v4.json`](src/clickcast/feedback/schema/v4.json). You should think of the reel as the artefact for humans and the sidecar as the artefact for you.
 
 Top-level fields you'll actually read:
 
-- `schema_version`: `3` at time of writing. Additive changes only (v2 sidecars validate against v3).
+- `schema_version`: `4` at time of writing. Every bump is strictly additive (v3 sidecars validate against v4).
 - `clickcast_version`, `engine`, `viewport`, `url`, `started_at`, `duration_s` — run metadata.
 - `steps`: array of `StepReport` — one per step executed. Each has:
   - `status`: `ok` | `failed` | `skipped`.
@@ -402,7 +402,7 @@ for step in report.steps:
 
 - **CLI-embedded brief:** `clickcast skill` (~900 words). Use for tool-discovery messages.
 - **Python library integration:** [`docs/ai-integration.md`](docs/ai-integration.md) — how to call clickcast from your agent's code.
-- **Sidecar schema:** [`src/clickcast/feedback/schema/v3.json`](src/clickcast/feedback/schema/v3.json).
+- **Sidecar schema:** [`src/clickcast/feedback/schema/v4.json`](src/clickcast/feedback/schema/v4.json).
 - **Assertions schema:** [`docs/assertions-schema/v1.json`](docs/assertions-schema/v1.json).
 - **Scenario examples:** [`docs/scenarios/`](docs/scenarios/) — real YAML you can copy.
 - **Human docs:** [`docs/for-agents.md`](docs/for-agents.md) — the shorter intro.

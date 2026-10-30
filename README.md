@@ -213,7 +213,18 @@ Discover interactive elements and record a click-tour.
 | Flag | Default | Notes |
 |---|---|---|
 | `--out PATH` | `reel.gif` | Extension picks the format. |
-| `--max-steps N` / `-N` | `10` | Cap on discovered elements to click. |
+| `--max-steps N` / `-N` | `15` | Total click budget across every visited page. |
+| `--max-pages N` | `5` | Cap on pages visited; `1` disables multi-page exploration. |
+| `--max-duration SEC` | `120` | Hard wall-time cap; on hit the tour stops and frames are encoded. |
+| `--click-timeout SEC` | `5` | Per-click timeout so one stuck click can't stall the tour. |
+| `--traversal dfs\|bfs` | `dfs` | `dfs` = narrative reels; `bfs` = site-map style coverage. |
+| `--seed-url URL` | – | Repeatable; tour visits exactly the start URL + seeds, no auto-enqueue. |
+| `--pace fast\|natural\|slow\|onboarding` | `natural` | Sets `--fps` + `--dwell` together. Explicit flags win. |
+| `--zoom-on-click F` | `0` (off) | Post-click crop-and-scale around the click point (e.g. `2.5` = 2.5×). |
+| `--for-humans` | off | Composite: flips `--pace onboarding`, `--zoom-on-click 2.5`, `--highlight-target`, `--title-card`, `--summary-card`. |
+| `--highlight-target` | off | Pulsing ring around each click target before the ripple. |
+| `--title-card` | off | Prepend a title card; masks the pre-first-paint flash. |
+| `--summary-card` | off | Append a pages · clicks · duration stats card. |
 | `--dwell SEC` | `1.0` | Hold time after each action. |
 | `--initial-wait SEC` | `2.0` | Post-`networkidle` hold to let SPAs hydrate. |
 | `--viewport WxH` | `1280x800` | |
@@ -223,10 +234,22 @@ Discover interactive elements and record a click-tour.
 | `--lang LOCALE` | – | e.g. `en-US`. |
 | `--dark` | off | Emulate `prefers-color-scheme: dark`. |
 | `--fps N` | `12` | |
-| `--format F` | – | Override extension-derived format. |
+| `--format F` | `gif` | Override extension-derived format. |
 | `--quality 1..30` | `8` | Lower = better (higher fidelity, bigger file). |
 | `--loop N` | `0` | `0` = infinite. |
 | `--no-sidecar` | off | Skip the JSON. |
+| `--with-feedback` | off | Attach a `feedback` block (repo URL + prefilled issue URL) to the sidecar. |
+| `--redact-pattern RE` | – | Repeatable regex; matches in the sidecar become `«redacted»`. |
+| `--strip-query-strings` | off | Drop query strings from every recorded sidecar URL. |
+| `--emit-events` | off | Print a JSONL `tour_complete` event on stdout. |
+| `--dump-elements` | off | On step failure, dump the full discover() list to stderr. |
+| `--insecure` | off | Ignore TLS cert errors (self-signed / private CA). |
+| `--header "Name: value"` / `-H` | – | Repeatable extra header; scope auth tokens with `--header-host`. |
+| `--header-host HOST` | – | Restrict `--header` to this host (+ subdomains) — prevents token leaks to third-party origins. |
+| `--grid` | off | Pixel-grid overlay on every frame with readable coordinate labels. |
+| `--grid-pitch N` | `100` | Major-line spacing in px; minor lines at pitch/10. |
+| `--grid-color HEX` | `#FFFFFF33` | RGBA hex. |
+| `--grid-style full\|ruler` | `full` | `ruler` = edge labels only. |
 | `-v` / `--verbose` | – | Repeatable. |
 
 ### `run <scenario.yml>`
@@ -714,14 +737,20 @@ Cutting a release is documented in [`RELEASING.md`](RELEASING.md).
 
 ## Roadmap
 
-**v0.1** (this release): Session · Actions · Recorder · Encoder · Discovery · YAML scenarios · CLI · Python API · Sidecar (schema v1) · Config precedence · Fixture test site · Docs.
+**v0.1** — Session · Actions · Recorder · Encoder · Discovery · YAML scenarios · CLI · Python API · Sidecar (schema v1) · Config precedence · Fixture test site · Docs.
 
-**v0.2** (planned — tracked in [#29](https://github.com/AlexKay28/clickcast/issues/29)):
+**v0.2** — everything on the original v0.2 list shipped during the v0.2–v0.4 line:
 
-- On-frame HUD — fixed header/footer with step index, action verb, target role, URL. OCR-legible so LLMs can *read* the reel as a strip of images.
-- BFS UI exploration — `clickcast explore <url>` treats the app as a state graph: discover → click → discover the new state → recurse. Bounded, deterministic, with visited-state dedup.
-- Sidecar schema v2 — adds a top-level `graph` block (nodes = distinct page states, edges = `(from, to, action, transition_kind)`).
-- Automatic annotation of `auto` / `run` outputs.
+- On-frame HUD — shipped as the `--for-humans` composite (`--highlight-target`, `--title-card`, `--summary-card`, `--zoom-on-click`, onboarding pace) with the annotation pipeline wired into `auto`/`run`.
+- BFS UI exploration — shipped as `auto --traversal bfs` (plus `--seed-url` for deterministic paths, `visited`-dedup, and the top-level `graph` sidecar block). No separate `explore` command yet — see below.
+- Sidecar schema v2 with the `graph` block — shipped (schema is now at v4; every bump strictly additive).
+- Automatic annotation of `auto` / `run` outputs — shipped (`annotate.pipeline` + `AnnotateConfig`).
+
+**v0.5** (planned):
+
+- **Flagship: `clickcast explore <url>`** — the missing first-class state-graph command. Today an agent that only wants an app's *shape* has to record a whole reel via `auto --traversal bfs`; `explore` reuses the same traversal/dedup internals but skips recording + encoding, returning a fast `explore.json` (nodes = distinct page states via DOM signature, edges = `(from, to, action, transition_kind)`, plus top discoveries per state). Structured-only, agent-first — the reel is opt-in.
+- Pillow 14 deprecation cleanup — the 28 test warnings from `Image.Image.getdata` (removed in Pillow 14) migrate to a compatibility shim.
+- Sidecar schema maturity — the v0.1-era plan for a graph block (originally tracked in #29) landed at schema v2 and the schema has since matured to v4 with strictly additive bumps; any future v5 keeps that contract.
 
 ---
 
