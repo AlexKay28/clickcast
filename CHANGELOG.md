@@ -8,6 +8,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **`clickcast explore <url>`: the app's shape without the movie** — the
+  v0.5 flagship. `auto --traversal bfs` already explored *inside* a
+  recording, so an agent that only needed an app's shape (pages, link
+  targets, clickable elements) paid for screenshots, cursor
+  interpolation, an annotation pass, and an encode it would never watch.
+  `explore` reuses the same building blocks (Session, discover, the
+  click-and-observe loop, normalised-URL dedup, the same
+  consecutive-failure / go_back-restore / cross-origin-bail policies)
+  minus the Recorder, the annotator, and the encoder, and writes a
+  compact `explore.json` instead (default `--out explore.json`): one node
+  per distinct page state, one navigation edge per URL-changing click —
+  both reusing the sidecar's `Graph`/`PageNode`/`Edge` models so
+  sidecar-graph consumers parse it with zero new code — plus each
+  visited page's top-N discoveries (`Element.to_dict()` shape, same as
+  `clickcast elements --json`) for selector authoring. Default traversal
+  is BFS (site-map coverage is the point); `--traversal dfs` keeps
+  narrative order. Bounds mirror `auto`: `--max-steps` (15),
+  `--max-pages` (10), `--max-duration` (120s). The output is a *new*
+  artifact (``kind: clickcast/explore``, `schema_version: 1`, documented
+  in `docs/explore-schema.md`) — the reel sidecar and the `assertions`
+  byte-stability contract are untouched. Also registered in the embedded
+  skill brief (`clickcast skill`) and `skill.md`.
 - **The npm install path is registered in the MCP registry.** `server.json`
   gains a second `packages[]` entry (`registryType: npm`, `identifier:
   clickcast-mcp`, `runtimeHint: npx`) alongside the existing PyPI one, so

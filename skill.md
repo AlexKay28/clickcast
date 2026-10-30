@@ -152,6 +152,18 @@ clickcast elements https://example.com --limit 20 --json
 
 Emits a JSON array of `{role, text, selector, score}` objects. Use this to pick reliable selectors instead of guessing.
 
+### `explore` — map the app's state graph, reel-free
+
+When you need the app's *shape* — which pages exist, which link points where, what's clickable on each — before deciding what (or whether) to record:
+
+```bash
+clickcast explore https://example.com --out map.json
+```
+
+Runs the same click-and-observe loop as `auto --traversal bfs` (BFS default, same dedup / budget policies), but takes no screenshots and encodes nothing — so a bounded site map costs seconds, not a full reel shoot. The output (`docs/explore-schema.md`, `kind: clickcast/explore`, schema v1) carries `graph` (the same `PageNode`/`Edge` shape the reel sidecar's graph block uses — nodes in first-seen order, one `navigation` edge per URL-changing click) plus each visited page's top-10 discoveries and click outcomes. Cross-origin destinations are recorded as nodes but never driven.
+
+Use it to plan a scenario (find the real nav structure first, script `run` second), or as the entire deliverable when an agent only needs to reason about app shape.
+
 ### `init` — scaffold a scenario
 
 ```bash
@@ -404,6 +416,7 @@ for step in report.steps:
 - **Python library integration:** [`docs/ai-integration.md`](docs/ai-integration.md) — how to call clickcast from your agent's code.
 - **Sidecar schema:** [`src/clickcast/feedback/schema/v4.json`](src/clickcast/feedback/schema/v4.json).
 - **Assertions schema:** [`docs/assertions-schema/v1.json`](docs/assertions-schema/v1.json).
+- **Explore map schema:** [`docs/explore-schema.md`](docs/explore-schema.md).
 - **Scenario examples:** [`docs/scenarios/`](docs/scenarios/) — real YAML you can copy.
 - **Human docs:** [`docs/for-agents.md`](docs/for-agents.md) — the shorter intro.
 - **Issues & feedback:** [github.com/AlexKay28/clickcast/issues](https://github.com/AlexKay28/clickcast/issues). File one when something feels off — even a one-sentence "this failed on X" is useful.

@@ -147,7 +147,6 @@ async def explore_site(cfg: ExploreConfig) -> dict[str, Any]:
     # First-seen URL order drives node ids ("n1", "n2", ...), matching the
     # sidecar graph's numbering so consumers see a familiar shape.
     node_order: list[str] = [cfg.url]
-    titles: dict[str, str] = {}
     visits: list[_Visit] = []
     # (from_url, to_url, visit_ordinal, selector) — one entry per click that
     # changed the URL, in discovery order. Converted to Edge models at the end.
@@ -238,7 +237,11 @@ async def explore_site(cfg: ExploreConfig) -> dict[str, Any]:
                         break
                 url_after = sess.page.url
                 if url_after != url_before:
-                    transitions.append((url_before, url_after, visit.ordinal, element.selector))
+                    # `current` (the queue URL), not `url_before` (whatever
+                    # the browser reports after redirects): the transition
+                    # semantics are "found while exploring this page", and
+                    # the queue key is always a known node.
+                    transitions.append((current, url_after, visit.ordinal, element.selector))
                     if url_after not in node_order:
                         node_order.append(url_after)
                     if (
@@ -272,13 +275,12 @@ async def explore_site(cfg: ExploreConfig) -> dict[str, Any]:
                         break
                 await sess.wait(_INTER_CLICK_WAIT_S)
 
-    return _finalise(cfg, visits, titles, node_order, transitions, started)
+    return _finalise(cfg, visits, node_order, transitions, started)
 
 
 def _finalise(
     cfg: ExploreConfig,
     visits: list[_Visit],
-    titles: dict[str, str],
     node_order: list[str],
     transitions: list[tuple[str, str, int, str]],
     started: float,
@@ -294,6 +296,14 @@ def _finalise(
     # Ordinal of the visit whose normalised URL matches — else the node was
     # only ever seen as a nav destination (never visited): park it one past
     # the last real visit so it still sorts after everything explored.
+    # Defensive: a raw transition endpoint that never entered node_order
+    # (can't happen today — edges register `to`, `current` was enqueued) gets
+    # appended first-seen rather than KeyError-ing.
+    for frm, to, _ordinal, _selector in transitions:
+        if frm not in node_order:
+            node_order.append(frm)
+        if to not in node_order:
+            node_order.append(to)
     visit_ordinal: dict[str, int] = {}
     for url in node_order:
         visit_ordinal[url] = len(visits)
@@ -301,6 +311,9 @@ def _finalise(
             if normalize_url(visit.url) == normalize_url(url):
                 visit_ordinal[url] = visit.ordinal
                 break
+    # Node titles come from the visit that saw the URL live (page_state
+    # granularity: a never-visited destination has no title to know).
+    visit_title: dict[str, str] = {v.url: v.title for v in visits if v.title}
 
     node_id: dict[str, str] = {url: f"n{i + 1}" for i, url in enumerate(node_order)}
 
@@ -321,7 +334,7 @@ def _finalise(
             PageNode(
                 id=node_id[url],
                 url=url,
-                title=titles.get(url, ""),
+                title=visit_title.get(url, ""),
                 first_seen_step=visit_ordinal[url],
                 last_seen_step=visit_ordinal[url],
             )

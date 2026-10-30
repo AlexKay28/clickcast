@@ -199,6 +199,7 @@ For a walkthrough of how an LLM agent consumes both, see [`docs/ai-integration.m
 | **Auto** | `clickcast auto <url>` | Quick tour of a site; you don't care about the exact script. |
 | **Scenario** | `clickcast run tour.yml` | Precise, repeatable walkthrough. Docs, release notes, CI. |
 | **Shot** | `clickcast shot <url>` | One screenshot, viewport or full-page. |
+| **Explore** | `clickcast explore <url>` | The app's *shape* only — nodes, edges, per-page discoveries — no reel. |
 
 All three are deterministic, headless-by-default, and CI-friendly.
 
@@ -323,6 +324,26 @@ clickcast elements https://example.com --grid --grid-pitch 50 --json
 | `--grid-pitch N` | `100` | Major-line spacing in px, used for `grid_cell`. |
 | `--grid-color HEX` | `#FFFFFF33` | Unused by `elements` beyond validation — kept symmetric with `auto`/`run`/`shot`. |
 | `--grid-style full\|ruler` | `full` | Unused by `elements` beyond validation — kept symmetric with `auto`/`run`/`shot`. |
+
+### `explore <url>`
+
+Map the site's state graph and emit `explore.json` — `auto --traversal bfs` minus everything that records (no frames, no annotator, no encoder), so mapping an app costs seconds instead of a reel shoot. Output shape: [`docs/explore-schema.md`](docs/explore-schema.md).
+
+```bash
+clickcast explore https://example.com --out map.json
+```
+
+| Flag | Default | Notes |
+|---|---|---|
+| `--out PATH` | `explore.json` | The exploration map. |
+| `--max-pages N` | `10` | Cap on pages visited. |
+| `--max-steps N` | `15` | Total click budget across every visited page. |
+| `--max-duration SEC` | `120` | Hard wall-time cap. |
+| `--click-timeout SEC` | `5` | Per-click timeout. |
+| `--initial-wait SEC` | `1.0` | Post-`networkidle` hold for SPA hydration. |
+| `--traversal dfs\|bfs` | `bfs` | BFS = site-map coverage (exploration default); DFS = narrative order. |
+| `--per-page N` | `10` | Top-N discovered elements pinned per page in the output. |
+| `--viewport WxH` / `--device` / `--engine` / `--headful` / `--lang` / `--dark` / `--insecure` / `--header` / `--header-host` | as `auto` | Same session flags as the other browser commands. |
 
 ### `report-bug <sidecar.json>`
 
@@ -746,10 +767,10 @@ Cutting a release is documented in [`RELEASING.md`](RELEASING.md).
 - Sidecar schema v2 with the `graph` block — shipped (schema is now at v4; every bump strictly additive).
 - Automatic annotation of `auto` / `run` outputs — shipped (`annotate.pipeline` + `AnnotateConfig`).
 
-**v0.5** (planned):
+**v0.5** (in development on the v0.5 line):
 
-- **Flagship: `clickcast explore <url>`** — the missing first-class state-graph command. Today an agent that only wants an app's *shape* has to record a whole reel via `auto --traversal bfs`; `explore` reuses the same traversal/dedup internals but skips recording + encoding, returning a fast `explore.json` (nodes = distinct page states via DOM signature, edges = `(from, to, action, transition_kind)`, plus top discoveries per state). Structured-only, agent-first — the reel is opt-in.
-- Pillow 14 deprecation cleanup — the 28 test warnings from `Image.Image.getdata` (removed in Pillow 14) migrate to a compatibility shim.
+- **Flagship: first-class `clickcast explore <url>` — implemented** (see [Unreleased](CHANGELOG.md) in the CHANGELOG): the state-graph command the v0.2 plan only gestured at. Same traversal/dedup internals as `auto --traversal bfs`, minus recording + encoding — returns a fast `explore.json` (nodes = distinct page states, edges = `(from, to, action, transition_kind)`, plus top discoveries per state). Structured-only, agent-first — the reel is opt-in. Contract: [`docs/explore-schema.md`](docs/explore-schema.md).
+- Pillow 14 deprecation cleanup — the remaining test warnings from `Image.Image.getdata` (removed in Pillow 14) migrate to a compatibility shim.
 - Sidecar schema maturity — the v0.1-era plan for a graph block (originally tracked in #29) landed at schema v2 and the schema has since matured to v4 with strictly additive bumps; any future v5 keeps that contract.
 
 ---
