@@ -6,14 +6,21 @@ duplicated infrastructure. Centralized here per #79. The canonical `FakePage`
 includes every field any test used to track (url stack, go_back history,
 go_back kwargs), so a new test never has to reintroduce them.
 
+Also hosts `flattened_pixels` — the Pillow-14-proof pixel probe helper —
+since pixel-assertion tests (annotator et al.) kept tripping over the
+`Image.getdata` deprecation individually.
+
 Pair with :mod:`tests.conftest` for the `stub_environment` pytest fixture.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
+
+from PIL import Image
 
 from clickcast.discovery import Element
 
@@ -21,9 +28,23 @@ __all__ = [
     "FakePage",
     "FakeRecorder",
     "FakeSession",
+    "flattened_pixels",
     "make_element",
     "make_result",
 ]
+
+
+def flattened_pixels(img: Image.Image) -> Iterator[tuple[int, ...]]:
+    """Iterate ``(r, g, b[, a])`` tuples for an image, Pillow-14-proof.
+
+    Pillow 14 (2027) removes `Image.getdata` in favour of
+    `get_flattened_data`; Pillow 10-12 only have the former. Either way
+    callers get the same tuple-per-pixel iterator, so pixel-assertion
+    tests work across the supported `Pillow>=10.0` range without
+    deprecation warnings on new Pillow.
+    """
+    getter = getattr(img, "get_flattened_data", None)
+    return iter(getter() if getter is not None else img.getdata())
 
 
 def make_element(text: str) -> Element:

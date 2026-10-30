@@ -14,6 +14,7 @@ from pathlib import Path
 from PIL import Image, ImageChops
 
 from clickcast.annotate import AnnotateConfig, Annotator, CursorStyle, LabelStyle
+from tests._stubs import flattened_pixels
 
 
 def _make_frame(path: Path, size: tuple[int, int] = (600, 400)) -> Path:
@@ -26,7 +27,7 @@ def _dominant_color(path: Path, box: tuple[int, int, int, int]) -> tuple[int, in
     """Return the average RGB inside `box` — cheap way to tell dark from light."""
     with Image.open(path) as img:
         crop = img.crop(box).convert("RGB")
-    px = list(crop.getdata())
+    px = list(flattened_pixels(crop))
     r = sum(p[0] for p in px) // len(px)
     g = sum(p[1] for p in px) // len(px)
     b = sum(p[2] for p in px) // len(px)
@@ -196,7 +197,7 @@ class TestCursorArrows:
         """True if any pixel in `box` is dominant-red (default arrow color)."""
         with Image.open(path) as img:
             crop = img.crop(box).convert("RGB")
-        return any(r > 150 and g < 100 and b < 100 for r, g, b in crop.getdata())
+        return any(r > 150 and g < 100 and b < 100 for r, g, b in flattened_pixels(crop))
 
     def test_arrow_drawn_between_positions(self, tmp_path: Path) -> None:
         out = self._run_two(tmp_path, (100, 100), (400, 100))

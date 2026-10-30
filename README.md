@@ -770,7 +770,7 @@ Cutting a release is documented in [`RELEASING.md`](RELEASING.md).
 **v0.5** (in development on the v0.5 line):
 
 - **Flagship: first-class `clickcast explore <url>` — implemented** (see [Unreleased](CHANGELOG.md) in the CHANGELOG): the state-graph command the v0.2 plan only gestured at. Same traversal/dedup internals as `auto --traversal bfs`, minus recording + encoding — returns a fast `explore.json` (nodes = distinct page states, edges = `(from, to, action, transition_kind)`, plus top discoveries per state). Structured-only, agent-first — the reel is opt-in. Contract: [`docs/explore-schema.md`](docs/explore-schema.md).
-- Pillow 14 deprecation cleanup — the remaining test warnings from `Image.Image.getdata` (removed in Pillow 14) migrate to a compatibility shim.
+- ~~Pillow 14 deprecation cleanup~~ — done: the 28 `Image.getdata` deprecation warnings in pixel-assertion tests migrated to a `flattened_pixels` helper (`tests/_stubs.py`) that prefers `get_flattened_data` and falls back across the supported `Pillow>=10.0` range.
 - Sidecar schema maturity — the v0.1-era plan for a graph block (originally tracked in #29) landed at schema v2 and the schema has since matured to v4 with strictly additive bumps; any future v5 keeps that contract.
 
 ---

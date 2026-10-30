@@ -40,6 +40,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   once `mcpName` reached a *published* npm version — the registry verifies
   npm ownership against the package on the registry, not the repo.
 
+### Changed
+- **Pillow 14 deprecation warnings cleaned up (28 → 0).** The pixel-
+  assertion tests (`test_annotator_ai_eye.py`,
+  `test_annotator_sticky_arrow.py`) were the last `Image.getdata` callers,
+  which Pillow 14 (2027) removes in favour of `get_flattened_data`. They
+  now go through a `flattened_pixels` helper in the shared test infra
+  (`tests/_stubs.py`) that prefers `get_flattened_data` when the installed
+  Pillow has it and falls back to `getdata` otherwise, so the suite stays
+  warning-free across the supported `Pillow>=10.0` range. `clickcast`
+  src itself never called `getdata` — no runtime change.
+
 ### Fixed
 - **`npm-release.yml`'s "wait for PyPI" gate asked the wrong endpoint, so
   the npm smoke test raced PyPI's index and lost.** The step polled

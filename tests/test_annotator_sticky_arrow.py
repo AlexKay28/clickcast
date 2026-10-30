@@ -16,6 +16,7 @@ from clickcast.annotate import (
     CursorStyle,
 )
 from clickcast.annotate.pipeline import StepAnnotation, annotate_frames_dir
+from tests._stubs import flattened_pixels
 
 
 def _make_frame(path: Path, size: tuple[int, int] = (600, 400)) -> Path:
@@ -26,14 +27,14 @@ def _make_frame(path: Path, size: tuple[int, int] = (600, 400)) -> Path:
 def _has_red(path: Path, box: tuple[int, int, int, int]) -> bool:
     with Image.open(path) as img:
         crop = img.crop(box).convert("RGB")
-    return any(r > 150 and g < 100 and b < 100 for r, g, b in crop.getdata())
+    return any(r > 150 and g < 100 and b < 100 for r, g, b in flattened_pixels(crop))
 
 
 def _has_white(path: Path, box: tuple[int, int, int, int]) -> bool:
     """The panel bg default is (255, 255, 255, 230) — near-white after compose."""
     with Image.open(path) as img:
         crop = img.crop(box).convert("RGB")
-    return any(r > 200 and g > 200 and b > 200 for r, g, b in crop.getdata())
+    return any(r > 200 and g > 200 and b > 200 for r, g, b in flattened_pixels(crop))
 
 
 class TestStickyArrow:

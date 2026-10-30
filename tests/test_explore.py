@@ -371,3 +371,122 @@ class TestGoBackRestore:
         # (the go_back itself, not the queue, is what's under test: after it,
         # url_before was x.com again).
         assert clicks[:2] == ["https://x.com/", "https://x.com/"]
+
+    @pytest.mark.asyncio
+    async def test_go_back_failure_stops_the_page_not_the_explore(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A same-origin nav whose go_back() raises ends the PAGE (remaining
+        discoveries are dropped) but the exploration continues if the queue
+        holds more URLs."""
+
+        async def _raise(**_kw: Any) -> None:
+            raise RuntimeError("navigation interrupted")
+
+        fake_sess = _stub_session(monkeypatch)
+        fake_sess.page.go_back = _raise  # type: ignore[method-assign]
+
+        async def _fake_execute(step: Any, _sess: Any, **_kw: Any) -> Any:
+            cls = step.__class__.__name__
+            if cls == "GotoStep":
+                fake_sess.page.url = step.url
+            elif cls == "ClickStep" and fake_sess.page.url == "https://x.com/":
+                fake_sess.page.url = "https://x.com/about"
+            return make_result()
+
+        with (
+            patch("clickcast.explore.execute", side_effect=_fake_execute),
+            patch(
+                "clickcast.explore.discover",
+                AsyncMock(return_value=[make_element(f"L{i}") for i in range(5)]),
+            ),
+        ):
+            payload = await explore_site(explore_cfg(max_steps=10, max_pages=3))
+
+        # Page 1's nav DID register an edge + enqueued destination, then the
+        # broken go_back cut the page short at exactly one click.
+        assert payload["pages"][0]["clicks_ok"] == 1
+        assert any(
+            e["to"] == "n2" and e["selector"] == 'text="L0"' for e in payload["graph"]["edges"]
+        )
+        # ...and the enqueued /about page was still explored next.
+        assert payload["pages"][1]["url"] == "https://x.com/about"
+
+    @pytest.mark.asyncio
+    async def test_go_back_landing_mismatch_stops_the_page(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """go_back that lands somewhere ELSE than we started means the
+        browser state is no longer the page we were exploring — stop the
+        page rather than clicking on a stranger."""
+        fake_sess = _stub_session(monkeypatch)
+
+        async def _decoy_go_back(**_kw: Any) -> None:
+            # Pop the nav destination and push a decoy — the engine should
+            # notice it isn't where it expected and keep nothing further
+            # from this page's pool.
+            fake_sess.page.url = "https://x.com/somewhere-else"
+
+        fake_sess.page.go_back = _decoy_go_back  # type: ignore[method-assign]
+
+        async def _fake_execute(step: Any, _sess: Any, **_kw: Any) -> Any:
+            cls = step.__class__.__name__
+            if cls == "GotoStep":
+                fake_sess.page.url = step.url
+            elif cls == "ClickStep" and fake_sess.page.url == "https://x.com/":
+                fake_sess.page.url = "https://x.com/about"
+            return make_result()
+
+        with (
+            patch("clickcast.explore.execute", side_effect=_fake_execute),
+            patch(
+                "clickcast.explore.discover",
+                AsyncMock(return_value=[make_element(f"L{i}") for i in range(5)]),
+            ),
+        ):
+            payload = await explore_site(explore_cfg(max_steps=10, max_pages=1))
+
+        assert payload["pages"][0]["clicks_ok"] == 1
+
+
+class TestPageFailurePaths:
+    @pytest.mark.asyncio
+    async def test_goto_failure_skips_page_and_continues(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An unreachable URL is skipped (still a payload page with no
+        discoveries); a queued sibling still gets explored."""
+        fake_sess = _stub_session(monkeypatch)
+        gotos: list[str] = []
+
+        async def _fake_execute(step: Any, _sess: Any, **_kw: Any) -> Any:
+            cls = step.__class__.__name__
+            if cls == "GotoStep":
+                gotos.append(step.url)
+                if "dead" in step.url:
+                    return make_result(ok=False)
+                fake_sess.page.url = step.url
+            elif cls == "ClickStep" and fake_sess.page.url == "https://x.com/":
+                fake_sess.page.url = "https://x.com/dead"
+            return make_result()
+
+        with (
+            patch("clickcast.explore.execute", side_effect=_fake_execute),
+            patch(
+                "clickcast.explore.discover",
+                AsyncMock(return_value=[make_element("Dead link"), make_element("Safe")]),
+            ),
+        ):
+            payload = await explore_site(explore_cfg(max_steps=10, max_pages=5))
+
+        # The dead page was visited-but-failed: no discoveries, in pages[].
+        dead = next(p for p in payload["pages"] if "dead" in p["url"])
+        assert dead["discovered"] == []
+        assert dead["clicks_ok"] == 0
+        # And it produced a node + edge (it IS part of the app's shape —
+        # agents want broken links in the map).
+        assert any(n["url"] == "https://x.com/dead" for n in payload["graph"]["nodes"])
+        assert any(e["to"] == "n2" for e in payload["graph"]["edges"])
+        # Exploration continued: the safe element still fired after the
+        # (fake-restoring) go_back.
+        assert gotos.count("https://x.com/dead") == 1
