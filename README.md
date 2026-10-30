@@ -7,7 +7,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/AlexKay28/clickcast/ci.yml?branch=main)](https://github.com/AlexKay28/clickcast/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 
-> **What's new (v0.3.0)** — live agent control via a new [MCP server](docs/mcp.md), pixel-level `clickcast diff`, accessibility semantics fused with the pixel-grid overlay, an official CI GitHub Action, day-one Homebrew/apt packaging, and a self-healing first run. See [`CHANGELOG.md`](CHANGELOG.md) for the full notes.
+> **What's new (v0.4.4)** — `npx`-installable npm wrappers (`clickcast` + `clickcast-mcp`) on top of the v0.3.0 highlights: live agent control via an [MCP server](docs/mcp.md), pixel-level `clickcast diff`, accessibility semantics fused with the pixel-grid overlay, an official CI GitHub Action, Homebrew/apt packaging, and a self-healing first run. See [`CHANGELOG.md`](CHANGELOG.md) for the full notes.
 
 ![clickcast · scripted tour of tailwindcss.com — sticky A→B arrow, actions panel bottom-right, symmetric open/close pairs](docs/demo.gif)
 
@@ -120,7 +120,7 @@ pages. Follow this exact sequence:
    `--for-humans` gives a legible reel for the user to watch;
    `--emit-events` prints a machine-readable JSONL line you can parse.
 
-4. READ THE SIDECAR (JSON at `<gif>.json`, schema v3)
+4. READ THE SIDECAR (JSON at `<gif>.json`, schema v4)
    For each step, gate on the structured fields — NOT regex over prose:
      - `status`      : "ok" | "failed" | "skipped"
      - `error_code`  : "timeout" | "locator_missing" | "cross_origin" |
@@ -186,7 +186,7 @@ clickcast auto https://example.com --out tour.gif
 Produces two files:
 
 - `tour.gif` — the reel
-- `tour.gif.json` — the AI-consumable sidecar (`schema_version: 1`, spec at [`docs/feedback-schema.md`](docs/feedback-schema.md))
+- `tour.gif.json` — the AI-consumable sidecar (`schema_version: 4`, spec at [`docs/feedback-schema.md`](docs/feedback-schema.md))
 
 For a walkthrough of how an LLM agent consumes both, see [`docs/ai-integration.md`](docs/ai-integration.md).
 
@@ -300,6 +300,31 @@ clickcast elements https://example.com --grid --grid-pitch 50 --json
 | `--grid-pitch N` | `100` | Major-line spacing in px, used for `grid_cell`. |
 | `--grid-color HEX` | `#FFFFFF33` | Unused by `elements` beyond validation — kept symmetric with `auto`/`run`/`shot`. |
 | `--grid-style full\|ruler` | `full` | Unused by `elements` beyond validation — kept symmetric with `auto`/`run`/`shot`. |
+
+### `report-bug <sidecar.json>`
+
+Turn a sidecar into an actionable bug report — redacted by default, shareable as-is, or `--open` to launch a prefilled GitHub issue.
+
+```bash
+clickcast report-bug tour.gif.json
+clickcast report-bug tour.gif.json --json    # machine-readable Track-C payload
+clickcast report-bug tour.gif.json --open --note "behind corporate proxy; TLS interception on"
+```
+
+Flags: `--json`, `--open`, `--redact/--no-redact` (default on — sanitizes URLs, selectors, and visible text), `--note`.
+
+### `feedback`
+
+Long-form usage feedback: record a session, then summarize it.
+
+```bash
+clickcast feedback start
+clickcast feedback status
+clickcast feedback summary --json
+clickcast feedback stop
+```
+
+Subcommands: `start`, `stop`, `status`, `list`, `summary`.
 
 ### `doctor`
 
@@ -487,7 +512,7 @@ for step in report.steps:
             print("  console errors:", step.page_state.console_errors)
 ```
 
-Consumers that don't want to import `clickcast` can parse the JSON directly against the schema at [`src/clickcast/feedback/schema/v1.json`](src/clickcast/feedback/schema/v1.json). A standalone reference implementation lives at [`tests/consumer/read_sidecar.py`](tests/consumer/read_sidecar.py).
+Consumers that don't want to import `clickcast` can parse the JSON directly against the schema at [`src/clickcast/feedback/schema/v4.json`](src/clickcast/feedback/schema/v4.json). A standalone reference implementation lives at [`tests/consumer/read_sidecar.py`](tests/consumer/read_sidecar.py).
 
 See [`docs/ai-integration.md`](docs/ai-integration.md) for the two-line agent-integration example and [`docs/feedback-schema.md`](docs/feedback-schema.md) for the full field-by-field walkthrough.
 
@@ -660,7 +685,7 @@ The annotator (`clickcast.annotate.Annotator` — click ripples, cursor trail, c
 - **Selector not found** — `clickcast elements <url>` shows what's actually clickable. Or mark the step `optional: true`.
 - **Can't reach an internal site** — set `CLICKCAST_PROXY`, or `proxy` in the scenario `meta:` block.
 - **Chromium missing** — `clickcast install`. On Linux CI add `--with-deps`.
-- **Sidecar shape changed** — the current schema is versioned at `src/clickcast/feedback/schema/v1.json`; a future v2 (see [#29](https://github.com/AlexKay28/clickcast/issues/29)) will add a `graph` block without breaking v1 consumers.
+- **Sidecar shape changed** — the current schema is versioned at `src/clickcast/feedback/schema/v4.json`; every bump from v1 has been strictly additive (the `graph` block landed in v2), so older sidecars keep parsing. See [`docs/feedback-schema.md`](docs/feedback-schema.md) for each version's additive contract.
 
 ---
 
