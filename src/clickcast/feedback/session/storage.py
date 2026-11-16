@@ -371,8 +371,9 @@ def default_store() -> SessionStore:
 _REDACTED_ARGV_VALUE = "<redacted>"
 _SENSITIVE_URL_KEY_RE = re.compile(
     r"(?:^|[-_])(?:auth|authorization|auth[-_]?token|api[-_]?key|access[-_]?key|"
-    r"access[-_]?token|bypass|bypass[-_]?token|refresh[-_]?token|id[-_]?token|credential|"
-    r"key|password|passwd|secret|signature|sig|token)(?:$|[-_])",
+    r"access[-_]?token|bypass|bypass[-_]?token|code|credential|id[-_]?token|jsessionid|"
+    r"key|passwd|password|phsid|refresh[-_]?token|secret|sess|session(?:id)?|sid|"
+    r"signature|sig|token|utoken)(?:$|[-_])",
     re.IGNORECASE,
 )
 
@@ -404,9 +405,20 @@ def _sanitize_url(value: str) -> str:
             part = f"{key}={_REDACTED_ARGV_VALUE}"
             changed = True
         query_parts.append(part)
+    fragment_parts = []
+    for part in parsed.fragment.split("&"):
+        key, separator, _ = part.partition("=")
+        if separator and _SENSITIVE_URL_KEY_RE.search(unquote_plus(key)):
+            part = f"{key}={_REDACTED_ARGV_VALUE}"
+            changed = True
+        fragment_parts.append(part)
     if not changed:
         return value
-    return urlunsplit(parsed._replace(netloc=netloc, query="&".join(query_parts)))
+    return urlunsplit(
+        parsed._replace(
+            netloc=netloc, query="&".join(query_parts), fragment="&".join(fragment_parts)
+        )
+    )
 
 
 def _sanitize_invocation_argv(argv: list[str]) -> list[str]:
@@ -417,6 +429,12 @@ def _sanitize_invocation_argv(argv: list[str]) -> list[str]:
         if redact_next is not None:
             sanitized.append(_redact_option_value(redact_next, arg))
             redact_next = None
+            continue
+        # Click accepts attached short options: `-HX-Api-Key: secret`,
+        # `-H=X-Api-Key: secret`. Split the attached form so its value is
+        # redacted like the separated `-H <value>` form instead of leaking.
+        if arg.startswith("-H") and len(arg) > 2 and arg[2] != "=":
+            sanitized.append(f"-H={_redact_option_value('-H', arg[2:])}")
             continue
         option, separator, value = arg.partition("=")
         if option in ("--header", "-H", "--var"):

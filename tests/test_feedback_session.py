@@ -235,6 +235,48 @@ class TestRecordInvocation:
             "--verbose",
         ]
 
+    def test_attached_short_option_headers_are_redacted(self, store: SessionStore) -> None:
+        info = store.start()
+        record_invocation_safe(
+            [
+                "run",
+                "tour.yml",
+                "-HX-Api-Key: attached-secret",
+                "-H=Cookie: equals-secret",
+            ],
+            exit_code=0,
+            wall_time_ms=1,
+            store=store,
+        )
+        argv = store.load_events(info.session_id)[0].argv
+        assert argv == [
+            "run",
+            "tour.yml",
+            "-H=X-Api-Key: <redacted>",
+            "-H=Cookie: <redacted>",
+        ]
+
+    def test_oauth_code_session_and_fragment_credentials_are_redacted(
+        self, store: SessionStore
+    ) -> None:
+        info = store.start()
+        record_invocation_safe(
+            [
+                "auto",
+                "https://example.test/cb?code=oauth-code&jsessionid=abc&sid=def&ok=1",
+                "https://example.test/app#access_token=frag-secret&state=x",
+            ],
+            exit_code=0,
+            wall_time_ms=1,
+            store=store,
+        )
+        argv = store.load_events(info.session_id)[0].argv
+        assert argv == [
+            "auto",
+            "https://example.test/cb?code=<redacted>&jsessionid=<redacted>&sid=<redacted>&ok=1",
+            "https://example.test/app#access_token=<redacted>&state=x",
+        ]
+
     def test_camel_case_token_query_keys_are_redacted(self, store: SessionStore) -> None:
         info = store.start()
         record_invocation_safe(

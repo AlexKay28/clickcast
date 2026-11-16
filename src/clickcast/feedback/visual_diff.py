@@ -470,24 +470,26 @@ def _diff_frames(
 
         w, h = run_img.size
         diff = ImageChops.difference(run_img, base_img)
-        r, g, b = diff.split()
-        rg = ImageChops.lighter(r, g)
-        diff_max = ImageChops.lighter(rg, b)
-        rg.close()
-        mask = diff_max.point(lambda p: 255 if p > threshold else 0)
         try:
-            if exclude_overlays:
-                exclusions = _overlay_exclusions((w, h), run_step, base_step)
-                _apply_exclusions(mask, exclusions)
+            r, g, b = diff.split()
+            rg = ImageChops.lighter(r, g)
+            diff_max = ImageChops.lighter(rg, b)
+            rg.close()
+            mask = diff_max.point(lambda p: 255 if p > threshold else 0)
+            try:
+                if exclude_overlays:
+                    exclusions = _overlay_exclusions((w, h), run_step, base_step)
+                    _apply_exclusions(mask, exclusions)
 
-            changed = mask.histogram()[255]
-            total = w * h
-            changed_pct = (100.0 * changed / total) if total else 0.0
-            regions = _connected_components(mask)
-            return changed_pct, regions
+                changed = mask.histogram()[255]
+                total = w * h
+                changed_pct = (100.0 * changed / total) if total else 0.0
+                regions = _connected_components(mask)
+                return changed_pct, regions
+            finally:
+                mask.close()
+                diff_max.close()
         finally:
-            mask.close()
-            diff_max.close()
             r.close()
             g.close()
             b.close()

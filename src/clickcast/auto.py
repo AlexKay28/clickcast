@@ -260,7 +260,12 @@ async def _goto_and_discover(
     grid cell, so ``discovered_elements[].accessibility.role/name/state``
     populate on every sidecar, grid or not.
     """
-    goto = GotoStep(url=url, wait="networkidle", dwell=dwell, timeout_ms=click_timeout_ms)
+    # A click timeout is the wrong budget for a full page navigation: the
+    # default --click-timeout (5 s) would make slow-but-working landing pages
+    # fail networkidle and get skipped where main branch captured them. Give
+    # discovery gotos a dedicated floor so per-click timing stays untouched.
+    goto_timeout_ms = max(click_timeout_ms, 15_000)
+    goto = GotoStep(url=url, wait="networkidle", dwell=dwell, timeout_ms=goto_timeout_ms)
     await rec.pre_action(sess)
     result = await execute(goto, sess, step_index=step_index)
     if not result.ok:

@@ -36,6 +36,7 @@ __all__ = [
     "ScoredCandidate",
     "format_candidates",
     "parse_selector",
+    "score_candidate",
     "suggest_candidates",
 ]
 
@@ -82,7 +83,7 @@ def parse_selector(selector: str) -> tuple[str | None, str | None]:
     return role, name
 
 
-def _score_candidate(element: Element, target_role: str | None, target_name: str | None) -> float:
+def score_candidate(element: Element, target_role: str | None, target_name: str | None) -> float:
     """Score one candidate against the parsed target components.
 
     Role exact match contributes up to :data:`_ROLE_WEIGHT`, name similarity
@@ -92,6 +93,10 @@ def _score_candidate(element: Element, target_role: str | None, target_name: str
     role-matched-but-name-slightly-off one — this matches how users
     actually mistype selectors: they know the visible text, they guess the
     role. Missing target components contribute 0.
+
+    Public so callers with an existing discovery pool (e.g. the failure
+    path in :mod:`clickcast.core.actions`) can reuse the exact scoring
+    used by :func:`suggest_candidates` without a second DOM traversal.
     """
     score = 0.0
     if target_role is not None and element.role and element.role == target_role:
@@ -132,7 +137,7 @@ async def suggest_candidates(
     elements = await discover(session, limit=20)
     target_role, target_name = parse_selector(failed_selector)
     scored = [
-        ScoredCandidate(element=el, score=_score_candidate(el, target_role, target_name))
+        ScoredCandidate(element=el, score=score_candidate(el, target_role, target_name))
         for el in elements
     ]
     scored.sort(key=lambda c: c.score, reverse=True)

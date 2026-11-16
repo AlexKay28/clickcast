@@ -714,9 +714,9 @@ async def _augment_with_hints(
         from clickcast.discovery import discover
         from clickcast.discovery.hints import (
             ScoredCandidate,
-            _score_candidate,
             format_candidates,
             parse_selector,
+            score_candidate,
         )
 
         # One walk feeds both ranking and the total/full dump. This preserves
@@ -727,7 +727,7 @@ async def _augment_with_hints(
             (
                 ScoredCandidate(
                     element=el,
-                    score=_score_candidate(el, target_role, target_name),
+                    score=score_candidate(el, target_role, target_name),
                 )
                 for el in all_elements
             ),

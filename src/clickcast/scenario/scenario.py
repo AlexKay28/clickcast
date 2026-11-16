@@ -114,6 +114,16 @@ class Meta(BaseModel):
         if browser:
             values["browser"] = BrowserOpts(**browser)
         if render:
+            # Fail fast on an invalid render block — a bad ``video_fps`` must
+            # surface at scenario load, not as a raw ValueError after the
+            # browser recording has already completed.
+            video_fps = render.get("video_fps")
+            if "video_fps" in render and (
+                isinstance(video_fps, bool)
+                or not isinstance(video_fps, int)
+                or not 1 <= video_fps <= 120
+            ):
+                raise ValueError("render.video_fps must be an integer between 1 and 120")
             values["render"] = RenderOpts(**render)
         return values
 

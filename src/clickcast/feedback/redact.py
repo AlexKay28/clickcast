@@ -44,7 +44,7 @@ __all__ = ["apply_patterns", "redact_report", "strip_query_strings"]
 REDACTED = "«redacted»"
 
 
-_TEXT_KEYS = ("text", "title", "name")
+_TEXT_KEYS = ("text", "title", "name", "expression", "value", "key")
 _ERROR_KEYS = (
     "error",
     "errors",
@@ -56,7 +56,9 @@ _ERROR_KEYS = (
     "network_failed",
 )
 _URL_KEYS = ("url", "url_after")
-_SELECTOR_KEYS = ("selector",)
+# ``into`` is the target selector for type/select steps and is excluded from
+# ``_TEXT_KEYS`` on purpose: quoted text inside it follows selector rules.
+_SELECTOR_KEYS = ("selector", "into")
 
 
 def redact_report(report: dict[str, Any]) -> dict[str, Any]:

@@ -63,9 +63,12 @@ def smooth_frames_dir(frames_dir: Path, config: SmoothConfig, *, source_fps: int
     """Smooth a frame directory while preserving its approximate duration.
 
     ``inserted`` includes ordinary holds as well as cursor and transition
-    frames. Missing or empty manifests are ignored. No files or manifest data
-    are changed when the sequence is disabled, already fast enough, or needs
-    no additional output slots.
+    frames. Missing or empty manifests are ignored; when no retiming is
+    applied (disabled, already fast enough, or no extra slots) the result
+    reports the capture rate as ``output_fps`` because the frames are
+    encoded unchanged. No files or manifest data are changed when the
+    sequence is disabled, already fast enough, or needs no additional
+    output slots.
     """
     if source_fps <= 0:
         raise ValueError("source_fps must be positive")
@@ -74,13 +77,14 @@ def smooth_frames_dir(frames_dir: Path, config: SmoothConfig, *, source_fps: int
 
     manifest_path = frames_dir / "frames.json"
     if not config.enabled or not manifest_path.exists():
-        return SmoothResult(0, _frame_count(manifest_path), config.output_fps)
+        # No retiming happened: the frames still play back at the capture rate.
+        return SmoothResult(0, _frame_count(manifest_path), source_fps)
 
     manifest: dict[str, Any] = json.loads(manifest_path.read_text(encoding="utf-8"))
     frames: list[dict[str, Any]] = manifest.get("frames", [])
     original_count = len(frames)
     if not frames or config.output_fps <= source_fps:
-        return SmoothResult(0, original_count, config.output_fps)
+        return SmoothResult(0, original_count, source_fps)
 
     # Integer form of floor(x + 0.5), avoiding banker's rounding at halves.
     ideal_total = max(
@@ -89,7 +93,7 @@ def smooth_frames_dir(frames_dir: Path, config: SmoothConfig, *, source_fps: int
     )
     total_frames = max(original_count, min(ideal_total, config.max_frames))
     if total_frames == original_count:
-        return SmoothResult(0, original_count, config.output_fps)
+        return SmoothResult(0, original_count, source_fps)
 
     slots = [
         ((i + 1) * total_frames) // original_count - (i * total_frames) // original_count

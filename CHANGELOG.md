@@ -32,6 +32,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   longer embed the target URL; invocation history redacts headers, variables,
   URL userinfo, and sensitive query parameters; run-time failure stderr honors
   redaction flags; header flags reject control characters.
+- **Follow-up hardening from review:** attached short-option headers
+  (`-HX-Header: value`) are redacted in invocation history; OAuth codes,
+  session IDs, and `#fragment` credentials are scrubbed from recorded URLs;
+  failed-step `args` (`expression`, `into`, `value`, `key`) honor report
+  redaction; `--smooth --video-fps` no-ops encode at the capture rate instead
+  of silently changing playback speed; discovery gotos use a dedicated
+  navigation timeout instead of the click timeout; scenario `video_fps` is
+  validated at load time; the selector-hint scorer is now a public API.
 - `GotoStep.timeout_ms` now reaches navigation and subsequent waits. Browser
   detection honors `PLAYWRIGHT_BROWSERS_PATH` and numeric version ordering.
 - `serve_directory` binds port 0 atomically instead of racing to reuse a port

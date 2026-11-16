@@ -61,20 +61,20 @@ def _read_frames(frames_dir: Path) -> list[dict[str, Any]]:
 
 class TestNoOp:
     def test_missing_manifest(self, tmp_path: Path) -> None:
-        assert smooth_frames_dir(tmp_path, SmoothConfig(), source_fps=5) == SmoothResult(0, 0, 30)
+        assert smooth_frames_dir(tmp_path, SmoothConfig(), source_fps=5) == SmoothResult(0, 0, 5)
 
     def test_empty_manifest(self, tmp_path: Path) -> None:
         manifest = _write_dir(tmp_path, [])
         before = manifest.read_bytes()
         result = smooth_frames_dir(tmp_path, SmoothConfig(), source_fps=5)
-        assert result == SmoothResult(0, 0, 30)
+        assert result == SmoothResult(0, 0, 5)
         assert manifest.read_bytes() == before
 
     def test_disabled_preserves_manifest(self, tmp_path: Path) -> None:
         manifest = _write_dir(tmp_path, [_frame("a.png", 0, [0, 0]), _frame("b.png", 1, [300, 0])])
         before = manifest.read_bytes()
         result = smooth_frames_dir(tmp_path, SmoothConfig(enabled=False), source_fps=5)
-        assert result == SmoothResult(0, 2, 30)
+        assert result == SmoothResult(0, 2, 5)
         assert manifest.read_bytes() == before
 
     @pytest.mark.parametrize(("source_fps", "output_fps"), [(30, 30), (60, 30)])
@@ -86,14 +86,16 @@ class TestNoOp:
         result = smooth_frames_dir(
             tmp_path, SmoothConfig(output_fps=output_fps), source_fps=source_fps
         )
-        assert result == SmoothResult(0, 2, output_fps)
+        # No retiming happened, so the sequence still plays at the capture
+        # rate — callers use this as the encode FPS (never slow-motion).
+        assert result == SmoothResult(0, 2, source_fps)
         assert manifest.read_bytes() == before
 
     def test_rounding_to_one_slot_does_not_rewrite(self, tmp_path: Path) -> None:
         manifest = _write_dir(tmp_path, [_frame("a.png", 0)])
         before = manifest.read_bytes()
         result = smooth_frames_dir(tmp_path, SmoothConfig(output_fps=21), source_fps=20)
-        assert result == SmoothResult(0, 1, 21)
+        assert result == SmoothResult(0, 1, 20)
         assert manifest.read_bytes() == before
 
     @pytest.mark.parametrize(("source_fps", "output_fps"), [(0, 30), (-1, 30), (5, 0), (5, -30)])
@@ -343,5 +345,5 @@ class TestManifestAndLimits:
         result = smooth_frames_dir(
             tmp_path, SmoothConfig(output_fps=30, max_frames=2), source_fps=5
         )
-        assert result == SmoothResult(inserted=0, total_frames=2, output_fps=30)
+        assert result == SmoothResult(inserted=0, total_frames=2, output_fps=5)
         assert manifest.read_bytes() == before

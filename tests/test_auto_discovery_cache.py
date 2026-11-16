@@ -80,7 +80,16 @@ async def test_ensure_discovered_keys_by_url() -> None:
 
 
 @pytest.mark.asyncio
-async def test_auto_goto_uses_configured_click_timeout(tmp_path) -> None:
+@pytest.mark.parametrize(
+    ("click_timeout_ms", "expected"),
+    [(1234, 15_000), (45_000, 45_000)],
+)
+async def test_auto_goto_uses_configured_click_timeout(
+    tmp_path, click_timeout_ms, expected
+) -> None:
+    # The click timeout is honored, but discovery gotos carry a 15 s floor: a
+    # 5 s click budget must not make slow-but-working landing pages fail
+    # networkidle and get skipped. An explicit larger budget wins.
     sess = FakeSession()
     execute = AsyncMock(return_value=make_result(cursor=None))
 
@@ -96,7 +105,7 @@ async def test_auto_goto_uses_configured_click_timeout(tmp_path) -> None:
             dwell=0.0,
             initial_wait=0.0,
             click_budget=1,
-            click_timeout_ms=1234,
+            click_timeout_ms=click_timeout_ms,
             step_index=0,
             step_annotations={},
             page_label="page 1/1",
@@ -104,4 +113,4 @@ async def test_auto_goto_uses_configured_click_timeout(tmp_path) -> None:
 
     step = execute.await_args.args[0]
     assert isinstance(step, GotoStep)
-    assert step.timeout_ms == 1234
+    assert step.timeout_ms == expected

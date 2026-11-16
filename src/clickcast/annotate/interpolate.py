@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from clickcast.annotate.annotator import CursorStyle
+from clickcast.annotate.smooth import _write_manifest_atomic
 
 __all__ = ["interpolate_cursor_motion"]
 
@@ -116,7 +117,7 @@ def interpolate_cursor_motion(frames_dir: Path, config: CursorStyle) -> int:
 
     manifest["frames"] = new_frames
     manifest["cursor_interpolated"] = True
-    manifest_path.write_text(json.dumps(manifest, indent=2))
+    _write_manifest_atomic(manifest_path, manifest)
     return sum(len(v) for v in insertions.values())
 
 

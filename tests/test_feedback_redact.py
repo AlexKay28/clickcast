@@ -27,6 +27,27 @@ def test_selector_text_replaced_structure_kept() -> None:
     assert out["selector"].endswith("] > span")
 
 
+def test_failed_step_args_redacted() -> None:
+    """Field names that appear in step ``args`` must not leak payloads."""
+    inp = {
+        "args": {
+            "expression": "localStorage.getItem('authToken')",
+            "into": 'input[placeholder="Search email"]',
+            "value": "secret typed text",
+            "key": "Enter",
+        }
+    }
+    out = redact_report(inp)
+    args = out["args"]
+    assert args["expression"] == "«redacted, 33 chars»"
+    # ``into`` follows selector rules: structure kept, quoted text replaced.
+    assert args["into"].startswith("input[placeholder=")
+    assert "«redacted»" in args["into"]
+    assert "Search email" not in args["into"]
+    assert args["value"] == "«redacted, 17 chars»"
+    assert args["key"] == "«redacted, 5 chars»"
+
+
 def test_visible_text_length_preserved_content_gone() -> None:
     out = redact_report({"text": "Compare plans and pricing"})
     assert out["text"] == "«redacted, 25 chars»"

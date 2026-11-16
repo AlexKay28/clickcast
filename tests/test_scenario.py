@@ -86,6 +86,13 @@ class TestLoadBasic:
         with pytest.raises(ScenarioError, match="annotations"):
             loads("steps: []\nannotations: [not-a-mapping]")
 
+    @pytest.mark.parametrize("bad", [0, -5, 121, '"thirty"'])
+    def test_video_fps_out_of_range_fails_fast(self, bad: object) -> None:
+        # Surface an invalid video_fps at load time — never after the
+        # browser recording has already completed.
+        with pytest.raises(ScenarioError, match="video_fps"):
+            loads(f"meta:\n  smooth: true\n  video_fps: {bad!r}\nsteps: []")
+
 
 class TestNormalizeStep:
     def test_goto_string_url(self) -> None:
