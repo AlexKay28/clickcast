@@ -288,6 +288,30 @@ class TestFindPlaywrightEngine:
         assert path == install
         assert kind == "install dir"
 
+    def test_numeric_version_order_and_playwright_browsers_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("clickcast.cli.sys.platform", "linux")
+        cache = tmp_path / "custom-browsers"
+        monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", str(cache))
+        older = cache / "chromium-999" / "chrome-linux64" / "chrome"
+        self._touch(older)
+        newer = cache / "chromium-1234" / "chrome-linux64" / "chrome"
+        self._touch(newer)
+        found = _find_playwright_engine("chromium")
+        assert found == (newer, "executable")
+
+    def test_older_version_with_binary_beats_newer_unknown_layout(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("clickcast.cli.sys.platform", "linux")
+        monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", str(tmp_path))
+        newer = tmp_path / "chromium-1234"
+        newer.mkdir()
+        older = tmp_path / "chromium-999" / "chrome-linux64" / "chrome"
+        self._touch(older)
+        assert _find_playwright_engine("chromium") == (older, "executable")
+
     def test_chromium_does_not_match_headless_shell_dir(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

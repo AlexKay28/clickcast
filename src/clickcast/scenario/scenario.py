@@ -54,7 +54,9 @@ _BROWSER_FIELDS: frozenset[str] = frozenset(
         "header_host",
     }
 )
-_RENDER_FIELDS: frozenset[str] = frozenset({"fps", "quality", "loop", "format"})
+_RENDER_FIELDS: frozenset[str] = frozenset(
+    {"fps", "quality", "loop", "format", "smooth", "video_fps"}
+)
 
 
 class Meta(BaseModel):
@@ -174,6 +176,10 @@ class Scenario(BaseModel):
 
     meta: Meta = Field(default_factory=Meta)
     steps: list[Step] = Field(default_factory=list)
+    # Declarative overlay primitives (rect/circle/arrow/text/spotlight),
+    # keyed by recorder step range. Parsed by clickcast.annotate.primitives
+    # during the post-capture annotation pass.
+    annotations: list[dict[str, Any]] = Field(default_factory=list)
 
 
 @dataclass(slots=True, frozen=True)
@@ -563,6 +569,11 @@ def loads(
         raise ScenarioError("`meta` must be a mapping")
     if not isinstance(steps_raw, list):
         raise ScenarioError("`steps` must be a list")
+    annotations_raw = raw.get("annotations") or []
+    if not isinstance(annotations_raw, list) or not all(
+        isinstance(item, dict) for item in annotations_raw
+    ):
+        raise ScenarioError("`annotations` must be a list of mappings")
 
     try:
         meta = Meta(**meta_raw)
@@ -572,7 +583,7 @@ def loads(
     canonical = [_normalize_step(s, i) for i, s in enumerate(steps_raw)]
     steps = _validate_steps(canonical, source)
 
-    scenario = Scenario(meta=meta, steps=steps)
+    scenario = Scenario(meta=meta, steps=steps, annotations=annotations_raw)
 
     # Per #151 (PERF-2): substitute after parse. Skip the walk entirely
     # when the caller passed no variables — the raw pre-walk used to run

@@ -315,6 +315,39 @@ class TestBuilder:
         assert report.warnings == ["hydration was slow"]
         assert report.errors == ["goto returned 500"]
 
+    def test_reattach_detaches_previous_collector_and_detach_is_safe(self) -> None:
+        first = _FakeSession()
+        second = _FakeSession()
+        builder = ReportBuilder()
+
+        builder.attach(first)  # type: ignore[arg-type]
+        assert first.total_listeners() == 3
+        builder.attach(second)  # type: ignore[arg-type]
+        assert first.total_listeners() == 0
+        assert second.total_listeners() == 3
+
+        builder.detach()
+        builder.detach()
+        assert second.total_listeners() == 0
+
+
+class _FakeSession:
+    def __init__(self) -> None:
+        self._listeners: dict[str, list[object]] = {
+            "console": [],
+            "pageerror": [],
+            "requestfailed": [],
+        }
+
+    def on(self, event: str, callback: object) -> None:
+        self._listeners[event].append(callback)
+
+    def off(self, event: str, callback: object) -> None:
+        self._listeners[event].remove(callback)
+
+    def total_listeners(self) -> int:
+        return sum(len(listeners) for listeners in self._listeners.values())
+
 
 class _FakeCollector:
     """Hands back a fixed queue of :class:`PageState` snapshots, one per

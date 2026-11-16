@@ -47,6 +47,7 @@ def build_graph(steps: list[StepReport]) -> Graph | None:
 
     # url -> (id, first_step, last_step). Preserve insertion order.
     pages: dict[str, tuple[str, int, int]] = {}
+    titles: dict[str, str] = {}
     edges: list[Edge] = []
     prev_url: str | None = None
 
@@ -61,6 +62,9 @@ def build_graph(steps: list[StepReport]) -> Graph | None:
         else:
             node_id, first_seen, _ = pages[url]
             pages[url] = (node_id, first_seen, step.index)
+
+        if url not in titles and step.page_state is not None and step.page_state.title:
+            titles[url] = step.page_state.title
 
         if prev_url is not None and url != prev_url:
             from_id, _, _ = pages[prev_url]
@@ -85,7 +89,7 @@ def build_graph(steps: list[StepReport]) -> Graph | None:
         PageNode(
             id=node_id,
             url=url,
-            title=_title_for(steps, url),
+            title=titles.get(url, ""),
             first_seen_step=first_step,
             last_seen_step=last_step,
         )
@@ -121,16 +125,6 @@ def _url_for(step: StepReport) -> str:
     if step.page_state is None:
         return ""
     return step.page_state.url_after or ""
-
-
-def _title_for(steps: list[StepReport], url: str) -> str:
-    """First non-empty ``page_state.title`` recorded for ``url`` in order."""
-    for step in steps:
-        if step.page_state is None:
-            continue
-        if step.page_state.url_after == url and step.page_state.title:
-            return step.page_state.title
-    return ""
 
 
 def _selector_for(step: StepReport) -> str | None:

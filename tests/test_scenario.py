@@ -64,6 +64,28 @@ class TestLoadBasic:
         with pytest.raises(ScenarioError):
             loads("meta:\n  nonsense: 1\nsteps: []")
 
+    def test_smooth_render_and_annotations_survive_load(self) -> None:
+        s = loads(
+            """
+            meta:
+              smooth: true
+              video_fps: 60
+              format: mp4
+            steps: []
+            annotations:
+              - kind: rect
+                bbox: [1, 2, 30, 40]
+                start_step: 0
+            """
+        )
+        assert s.meta.render.smooth is True
+        assert s.meta.render.video_fps == 60
+        assert s.annotations == [{"kind": "rect", "bbox": [1, 2, 30, 40], "start_step": 0}]
+
+    def test_annotations_must_be_mapping_list(self) -> None:
+        with pytest.raises(ScenarioError, match="annotations"):
+            loads("steps: []\nannotations: [not-a-mapping]")
+
 
 class TestNormalizeStep:
     def test_goto_string_url(self) -> None:

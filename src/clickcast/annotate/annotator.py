@@ -12,6 +12,7 @@ from typing import Literal
 from PIL import Image, ImageDraw, ImageFont
 
 from clickcast.annotate.grid import GridConfig, draw_grid
+from clickcast.annotate.primitives import RegionAnnotation, draw_annotations
 
 __all__ = [
     "ActionsPanelStyle",
@@ -294,6 +295,7 @@ class Annotator:
         all_labels: list[str] | None = None,
         target_bbox: tuple[int, int, int, int] | None = None,
         target_pulse_phase: float = 0.0,
+        regions: list[RegionAnnotation] | None = None,
     ) -> Path:
         """Composite the enabled layers onto ``frame_path``; return output Path.
 
@@ -353,6 +355,14 @@ class Annotator:
             self._draw_progress(canvas, step_index, total_steps)
         if self.config.target_highlight and target_bbox is not None:
             self._draw_target_highlight(canvas, target_bbox, target_pulse_phase)
+        if regions:
+            draw_annotations(
+                canvas,
+                regions,
+                step_index=step_index,
+                font=self._font,
+                phase=target_pulse_phase,
+            )
         if self.config.clicks and click_at is not None and ripple_stage > 0:
             self._draw_ripple(canvas, click_at, ripple_stage)
         if self.config.cursor and self._cursor_history:

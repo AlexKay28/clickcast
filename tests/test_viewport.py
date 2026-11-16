@@ -36,6 +36,18 @@ class TestParse:
         with pytest.raises(ValueError, match="'nonsense'"):
             Viewport.parse("nonsense")
 
+    @pytest.mark.parametrize("raw", ["0x800", "1280x0", "-1x800", "1280x-1", "-1x-1"])
+    def test_parse_rejects_non_positive_string_dimensions(self, raw: str) -> None:
+        with pytest.raises(ValueError, match="dimensions must be positive"):
+            Viewport.parse(raw)
+
+    @pytest.mark.parametrize("raw", [(0, 800), (1280, -1), Viewport(0, 800)])
+    def test_parse_rejects_non_positive_structured_dimensions(
+        self, raw: tuple[int, int] | Viewport
+    ) -> None:
+        with pytest.raises(ValueError, match="dimensions must be positive"):
+            Viewport.parse(raw)
+
     def test_parse_wrong_tuple_arity_raises(self) -> None:
         with pytest.raises(ValueError, match=r"tuple must be \(width, height\)"):
             Viewport.parse((1, 2, 3))  # type: ignore[arg-type]

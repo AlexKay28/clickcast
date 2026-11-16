@@ -244,17 +244,18 @@ def _check_cross_origin_bounce(steps: list[StepReport]) -> list[Advisory]:
     "reads as buggy" case Anti-pattern 2 in TIPS calls out.
     """
     out: list[Advisory] = []
+    previous_urls, next_urls = _adjacent_url_states(steps)
     for i, step in enumerate(steps):
         current = step.page_state
         if current is None or not current.url_after:
             continue
-        prev = _prev_url_state(steps, i)
-        if prev is None or not prev:
+        prev = previous_urls[i]
+        if prev is None:
             continue
         if _same_origin(current.url_after, prev):
             continue
         # We navigated cross-origin. Did a later step bounce us back?
-        returned = _next_url_state(steps, i)
+        returned = next_urls[i]
         if returned is None or not returned:
             continue
         if not _same_origin(returned, prev):
@@ -274,20 +275,30 @@ def _check_cross_origin_bounce(steps: list[StepReport]) -> list[Advisory]:
     return out
 
 
-def _prev_url_state(steps: list[StepReport], i: int) -> str | None:
-    for j in range(i - 1, -1, -1):
-        state = steps[j].page_state
-        if state is not None and state.url_after:
-            return state.url_after
-    return None
+def _adjacent_url_states(
+    steps: list[StepReport],
+) -> tuple[list[str | None], list[str | None]]:
+    """Return nearest preceding/following URL for each step in two linear passes."""
+    urls = [
+        step.page_state.url_after
+        if step.page_state is not None and step.page_state.url_after
+        else None
+        for step in steps
+    ]
+    previous: list[str | None] = []
+    prev_url: str | None = None
+    for url in urls:
+        previous.append(prev_url)
+        if url is not None:
+            prev_url = url
 
-
-def _next_url_state(steps: list[StepReport], i: int) -> str | None:
-    for j in range(i + 1, len(steps)):
-        state = steps[j].page_state
-        if state is not None and state.url_after:
-            return state.url_after
-    return None
+    following: list[str | None] = [None] * len(steps)
+    next_url: str | None = None
+    for i in range(len(steps) - 1, -1, -1):
+        following[i] = next_url
+        if urls[i] is not None:
+            next_url = urls[i]
+    return previous, following
 
 
 def _same_origin(a: str, b: str) -> bool:

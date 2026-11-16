@@ -46,23 +46,26 @@ class Viewport:
         that names the offending value.
         """
         if isinstance(raw, Viewport):
-            return raw
-        if isinstance(raw, tuple):
+            w, h = raw.width, raw.height
+        elif isinstance(raw, tuple):
             if len(raw) != 2:
                 raise ValueError(f"viewport tuple must be (width, height); got {raw!r}")
-            w, h = raw
-            return cls(int(w), int(h))
-        if isinstance(raw, str):
+            w, h = int(raw[0]), int(raw[1])
+        elif isinstance(raw, str):
             try:
                 w_str, h_str = raw.lower().split("x", 1)
-                return cls(int(w_str), int(h_str))
+                w, h = int(w_str), int(h_str)
             except ValueError as exc:
                 raise ValueError(
                     f"invalid viewport string {raw!r}; expected 'WxH' (e.g. '1280x800')"
                 ) from exc
-        raise TypeError(
-            f"viewport must be str, tuple[int, int], or Viewport; got {type(raw).__name__}"
-        )
+        else:
+            raise TypeError(
+                f"viewport must be str, tuple[int, int], or Viewport; got {type(raw).__name__}"
+            )
+        if w <= 0 or h <= 0:
+            raise ValueError(f"viewport dimensions must be positive; got {w}x{h} from {raw!r}")
+        return raw if isinstance(raw, Viewport) else cls(w, h)
 
     def __str__(self) -> str:
         return f"{self.width}x{self.height}"

@@ -350,17 +350,23 @@ def _pair_steps(
         baseline_by_label.setdefault(b.label, []).append(i)
 
     used_baseline: set[int] = set()
+    candidate_sets = {label: set(indices) for label, indices in baseline_by_label.items()}
+    candidate_offsets: dict[str | None, int] = {}
     pairs: list[tuple[int, int, StepReport, StepReport]] = []
     for i, r in enumerate(run_steps):
         candidates = baseline_by_label.get(r.label, [])
         match_idx: int | None = None
-        if i in candidates and i not in used_baseline:
+        if i in candidate_sets.get(r.label, set()) and i not in used_baseline:
             match_idx = i
         else:
-            for c in candidates:
-                if c not in used_baseline:
-                    match_idx = c
-                    break
+            # Advance monotonically per label instead of rescanning all used
+            # candidates for every duplicate auto-tour label.
+            offset = candidate_offsets.get(r.label, 0)
+            while offset < len(candidates) and candidates[offset] in used_baseline:
+                offset += 1
+            candidate_offsets[r.label] = offset
+            if offset < len(candidates):
+                match_idx = candidates[offset]
         if match_idx is None:
             unmatched.append(
                 UnmatchedStep(
@@ -453,30 +459,42 @@ def _diff_frames(
         run_img = ri.convert("RGB")
         base_img = bi.convert("RGB")
 
-    if run_img.size != base_img.size:
-        # Can't meaningfully pixel-diff mismatched dimensions (different
-        # viewport / crop) — report the whole run frame as changed rather
-        # than silently resizing one image to match the other (which would
-        # itself introduce diff noise from the resampling).
+    try:
+        if run_img.size != base_img.size:
+            # Can't meaningfully pixel-diff mismatched dimensions (different
+            # viewport / crop) — report the whole run frame as changed rather
+            # than silently resizing one image to match the other (which would
+            # itself introduce diff noise from the resampling).
+            w, h = run_img.size
+            return 100.0, [BBox(x=0, y=0, width=w, height=h)]
+
         w, h = run_img.size
-        return 100.0, [BBox(x=0, y=0, width=w, height=h)]
+        diff = ImageChops.difference(run_img, base_img)
+        r, g, b = diff.split()
+        rg = ImageChops.lighter(r, g)
+        diff_max = ImageChops.lighter(rg, b)
+        rg.close()
+        mask = diff_max.point(lambda p: 255 if p > threshold else 0)
+        try:
+            if exclude_overlays:
+                exclusions = _overlay_exclusions((w, h), run_step, base_step)
+                _apply_exclusions(mask, exclusions)
 
-    w, h = run_img.size
-    diff = ImageChops.difference(run_img, base_img)
-    r, g, b = diff.split()
-    diff_max = ImageChops.lighter(ImageChops.lighter(r, g), b)
-    mask = diff_max.point(lambda p: 255 if p > threshold else 0)
-
-    if exclude_overlays:
-        exclusions = _overlay_exclusions((w, h), run_step, base_step)
-        _apply_exclusions(mask, exclusions)
-
-    changed = mask.histogram()[255]
-    total = w * h
-    changed_pct = (100.0 * changed / total) if total else 0.0
-    regions = _connected_components(mask)
-
-    return changed_pct, regions
+            changed = mask.histogram()[255]
+            total = w * h
+            changed_pct = (100.0 * changed / total) if total else 0.0
+            regions = _connected_components(mask)
+            return changed_pct, regions
+        finally:
+            mask.close()
+            diff_max.close()
+            r.close()
+            g.close()
+            b.close()
+            diff.close()
+    finally:
+        run_img.close()
+        base_img.close()
 
 
 def _apply_exclusions(mask: Image.Image, boxes: list[BBox]) -> None:
@@ -507,8 +525,8 @@ def _connected_components(mask: Image.Image) -> list[BBox]:
         for tx in range(cols):
             x0 = tx * tile
             x1 = min(x0 + tile, w)
-            crop = mask.crop((x0, y0, x1, y1))
-            bbox = crop.getbbox()
+            with mask.crop((x0, y0, x1, y1)) as crop:
+                bbox = crop.getbbox()
             if bbox is None:
                 continue
             cx0, cy0, cx1, cy1 = bbox
@@ -636,12 +654,19 @@ def _write_diff_image(run_frame: Path, regions: list[BBox], out_path: Path) -> N
     """Composite red region outlines over the run frame; save to ``out_path``."""
     with Image.open(run_frame) as im:
         canvas = im.convert("RGBA")
-    draw = ImageDraw.Draw(canvas)
-    for box in regions:
-        draw.rectangle(
-            [box.x, box.y, box.x + box.width, box.y + box.height],
-            outline=(255, 40, 40, 255),
-            width=3,
-        )
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    canvas.convert("RGB").save(out_path, format="PNG")
+    try:
+        draw = ImageDraw.Draw(canvas)
+        for box in regions:
+            draw.rectangle(
+                [box.x, box.y, box.x + box.width, box.y + box.height],
+                outline=(255, 40, 40, 255),
+                width=3,
+            )
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        rgb = canvas.convert("RGB")
+        try:
+            rgb.save(out_path, format="PNG")
+        finally:
+            rgb.close()
+    finally:
+        canvas.close()

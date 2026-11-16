@@ -177,13 +177,11 @@ async def explore_site(cfg: ExploreConfig) -> dict[str, Any]:
             if key in visited:
                 continue
             visited.add(key)
-            pages_visited += 1
-            page_label = f"page {pages_visited}/{cfg.max_pages}"
+            page_label = f"page {pages_visited + 1}/{cfg.max_pages}"
             visit = _Visit(url=current, ordinal=len(visits))
-            visits.append(visit)
 
             # --- open the page -------------------------------------------------
-            goto = GotoStep(url=current, wait="networkidle")
+            goto = GotoStep(url=current, wait="networkidle", timeout_ms=cfg.click_timeout_ms)
             result = await execute(goto, sess, step_index=visit.ordinal)
             if not result.ok:
                 typer.secho(
@@ -191,6 +189,8 @@ async def explore_site(cfg: ExploreConfig) -> dict[str, Any]:
                 )
                 log.warning("%s · skipped: %s", page_label, result.error)
                 continue
+            pages_visited += 1
+            visits.append(visit)
             if cfg.initial_wait > 0:
                 await sess.wait(cfg.initial_wait)
             visit.title = await sess.title()
@@ -224,6 +224,8 @@ async def explore_site(cfg: ExploreConfig) -> dict[str, Any]:
                 if r.status == "ok":
                     clicks_remaining -= 1
                     visit.clicks_ok += 1
+                    consecutive_failures = 0
+                elif r.status == "skipped":
                     consecutive_failures = 0
                 else:
                     visit.clicks_failed += 1

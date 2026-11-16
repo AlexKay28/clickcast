@@ -80,10 +80,18 @@ class ReportBuilder:
         self._grid: GridMetadata | None = None
 
     def attach(self, session: Session) -> None:
-        """Wire the collector to the session — call once, at the start.
+        """Wire a fresh collector to the session, detaching any previous one.
         Since #98 the collector uses Session's narrow event surface
         (``session.on/off``) instead of reaching through ``session.page``."""
+        self.detach()
         self._collector = PageStateCollector(session)
+
+    def detach(self) -> None:
+        """Remove page listeners and release the collector. Safe to call repeatedly."""
+        collector = self._collector
+        self._collector = None
+        if collector is not None:
+            collector.detach()
 
     def set_grid(self, grid: GridConfig) -> None:
         """Attach the grid overlay's render params to the sidecar (#171).
@@ -257,7 +265,5 @@ class ReportBuilder:
             annotate=annotate_block,
         )
         # Detach page listeners so the collector doesn't outlive the builder.
-        # Idempotent — safe to call even if we were never attached.
-        if self._collector is not None:
-            self._collector.detach()
+        self.detach()
         return report

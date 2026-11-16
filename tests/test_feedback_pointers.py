@@ -80,12 +80,14 @@ class TestBuildFeedback:
         assert "clickcast: 1.2.3" in body
         assert "engine: chromium" in body
         assert "viewport: 1440x900" in body
-        assert "target url: https://example.com/app" in body
+        assert "target url" not in body
 
-    def test_body_omits_target_url_when_absent(self) -> None:
-        fb = build_feedback(_report(url=None))
+    def test_target_url_and_query_token_never_reach_prefill(self) -> None:
+        fb = build_feedback(_report(url="https://internal.acme.com/app?token=TOPSECRET"))
         body = parse_qs(urlparse(fb.new_issue_url).query)["body"][0]
         assert "target url" not in body
+        assert "internal.acme.com" not in fb.new_issue_url
+        assert "TOPSECRET" not in fb.new_issue_url
 
     def test_body_includes_prompt_template_labels(self) -> None:
         fb = build_feedback(_report())

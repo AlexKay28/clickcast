@@ -111,11 +111,9 @@ def write(
     Cloudflare / Netlify) leak the bypass token in every recorded URL —
     supply patterns to blot out the token(s), and/or drop query strings
     entirely. Applied on a copy of the report BEFORE the feedback block
-    is built: :func:`build_feedback` embeds the target URL in the prefilled
-    new-issue URL, so we have to scrub the report first or the token would
-    reappear URL-encoded inside the pointer block. The static repo/schema
-    /docs pointers themselves are constants and are added AFTER redaction
-    — they are never rewritten.
+    is built. The static repo/schema/docs pointers themselves are constants
+    and are added AFTER redaction — they are never rewritten. Target URLs are
+    not included in the feedback block's prefilled issue body.
     """
     redacted = _redact_report(
         report,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
@@ -99,6 +100,14 @@ class TestClassifyError:
         exc = RuntimeError("locator resolved to 0 elements")
         assert _classify_error(exc) == "locator_missing"
 
+    def test_waiting_for_missing_locator_maps_to_locator_missing(self) -> None:
+        exc = RuntimeError('waiting for locator("#gone")')
+        assert _classify_error(exc) == "locator_missing"
+
+    def test_visibility_drift_is_not_locator_missing(self) -> None:
+        exc = RuntimeError('waiting for locator("#late") to be visible')
+        assert _classify_error(exc) == "other"
+
     def test_cross_origin_error_maps_to_cross_origin(self) -> None:
         # Any of the shipped Playwright cross-origin phrasings work — pick
         # the "target closed" variant that fires on cross-origin bounces.
@@ -143,6 +152,17 @@ class TestStepContext:
     def test_zero_index_is_preserved(self) -> None:
         # Guard against `if index:` truthiness bugs — step 0 is a real step.
         assert _step_context(GotoStep(url="https://x"), 0) == "step 0 (goto)"
+
+
+class TestScreenshotWithoutPath:
+    async def test_is_successful_noop(self) -> None:
+        session = AsyncMock()
+        result = await execute(ScreenshotStep(), session)
+
+        assert result.ok
+        assert result.status == "ok"
+        assert result.screenshot_path is None
+        session.screenshot.assert_not_awaited()
 
 
 FIXTURE_HTML = """<!DOCTYPE html>

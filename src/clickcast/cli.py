@@ -11,6 +11,7 @@ import asyncio
 import inspect
 import json
 import logging
+import math
 import re
 import subprocess
 import sys
@@ -25,6 +26,7 @@ else:
     import tomli as tomllib
 
 import typer
+import yaml
 from platformdirs import user_config_dir
 
 from clickcast import __version__
@@ -61,6 +63,8 @@ from clickcast.feedback.pointers import (
     SCHEMA_URL,
     SKILL_URL,
 )
+from clickcast.feedback.redact import apply_patterns
+from clickcast.feedback.redact import strip_query_strings as strip_url_queries
 from clickcast.feedback.session.cli import feedback_app
 from clickcast.feedback.session.storage import record_invocation_safe
 from clickcast.feedback.visual_diff import DEFAULT_THRESHOLD as DEFAULT_VISUAL_DIFF_THRESHOLD
@@ -69,7 +73,7 @@ from clickcast.scenario import run as run_scenario
 
 _APP_NAME = "clickcast"
 
-log = logging.getLogger("clickcast.auto")
+log = logging.getLogger("clickcast.cli")
 
 
 def _setup_logging(verbose: int) -> None:
@@ -404,6 +408,10 @@ def _parse_header_flags(raw: list[str] | None) -> dict[str, str]:
         if ":" not in entry:
             raise typer.BadParameter(f"--header must be 'Name: value', got {entry!r}")
         name, _, value = entry.partition(":")
+        if any(ord(char) < 32 or 127 <= ord(char) <= 159 for char in name + value):
+            raise typer.BadParameter(
+                "--header names and values must not contain control characters"
+            )
         name = name.strip()
         value = value.strip()
         if not name:
@@ -527,6 +535,24 @@ def _compile_redact_patterns(raw: list[str] | None) -> list[re.Pattern[str]]:
         except re.error as e:
             raise typer.BadParameter(f"invalid --redact-pattern {src!r}: {e}") from e
     return compiled
+
+
+_ERROR_URL_RE = re.compile(r"[a-zA-Z][a-zA-Z0-9+.-]*://[^\s<>]+")
+
+
+def _redact_error_text(
+    text: str,
+    redact_patterns: list[re.Pattern[str]] | None,
+    strip_query_strings: bool,
+) -> str:
+    """Apply sidecar redaction to free-form scenario failure output."""
+    scrubbed: str = apply_patterns(text, list(redact_patterns or []))
+    if strip_query_strings:
+        scrubbed = _ERROR_URL_RE.sub(
+            lambda match: str(strip_url_queries({"url": match.group(0)})["url"]),
+            scrubbed,
+        )
+    return scrubbed
 
 
 # ==========================================================================
@@ -803,6 +829,24 @@ def auto(
     fps: Fps = 12,
     format: FormatOpt = None,
     quality: Quality = 8,
+    smooth: Annotated[
+        bool,
+        typer.Option(
+            "--smooth/--no-smooth",
+            help="Retime cursor motion and page transitions into a smooth high-FPS video.",
+        ),
+    ] = False,
+    video_fps: Annotated[
+        int,
+        typer.Option("--video-fps", min=1, max=120, help="Output FPS used with --smooth."),
+    ] = 30,
+    annotations: Annotated[
+        Path | None,
+        typer.Option(
+            "--annotations",
+            help="YAML/JSON region annotations (rect, circle, arrow, text, spotlight).",
+        ),
+    ] = None,
     loop: Loop = 0,
     no_sidecar: NoSidecar = False,
     with_feedback: WithFeedback = False,
@@ -887,6 +931,9 @@ def auto(
             fps=fps,
             format_=format,
             quality=quality,
+            smooth=smooth,
+            video_fps=video_fps,
+            annotations_path=annotations,
             loop=loop,
             no_sidecar=no_sidecar,
             with_feedback=with_feedback,
@@ -923,6 +970,9 @@ async def _do_auto(
     quality: int,
     loop: int,
     no_sidecar: bool,
+    smooth: bool = False,
+    video_fps: int = 30,
+    annotations_path: Path | None = None,
     with_feedback: bool = False,
     redact_patterns: list[re.Pattern[str]] | None = None,
     strip_query_strings: bool = False,
@@ -938,6 +988,14 @@ async def _do_auto(
     # actually renders. Keep the two in lockstep here so a shipped caller
     # that flips one always gets the other.
     annotate = AnnotateConfig(target_highlight=target_highlight, grid=grid)
+    region_annotations: list[Any] = []
+    if annotations_path is not None:
+        from clickcast.annotate.primitives import load_annotations
+
+        try:
+            region_annotations = load_annotations(annotations_path)
+        except (OSError, ValueError) as exc:
+            _die(f"annotations: {exc}")
     await run_tour(
         AutoConfig(
             url=url,
@@ -965,6 +1023,9 @@ async def _do_auto(
             title_card=title_card,
             summary_card=summary_card,
             emit_events=emit_events,
+            smooth=smooth,
+            video_fps=video_fps,
+            annotations=region_annotations,
         )
     )
 
@@ -982,6 +1043,24 @@ def run(
         str | None, typer.Option("--out", "-o", help="Override scenario meta.out.")
     ] = None,
     format: FormatOpt = None,
+    smooth: Annotated[
+        bool,
+        typer.Option(
+            "--smooth/--no-smooth",
+            help="Override scenario smooth-video retiming (eased cursor + crossfades).",
+        ),
+    ] = False,
+    video_fps: Annotated[
+        int,
+        typer.Option("--video-fps", min=1, max=120, help="Output FPS used with --smooth."),
+    ] = 30,
+    annotations: Annotated[
+        Path | None,
+        typer.Option(
+            "--annotations",
+            help="YAML/JSON region annotations; merged with scenario annotations.",
+        ),
+    ] = None,
     headful: Headful = False,
     slowmo: Slowmo = 0,
     url: Annotated[
@@ -1017,6 +1096,7 @@ def run(
     grid_color: GridColor = "#FFFFFF33",
     grid_style: GridStyle = "full",
 ) -> None:
+    _setup_logging(verbose)
     set_dump_elements(dump_elements)
     compiled_redacts = _compile_redact_patterns(redact_pattern)
     grid_cfg = _build_grid_config(grid, grid_pitch, grid_color, grid_style)
@@ -1058,6 +1138,10 @@ def run(
         effective_format: str | None = format
     else:
         effective_format = meta.format
+    if _is_explicit(ctx, "smooth"):
+        meta.render.smooth = smooth
+    if _is_explicit(ctx, "video_fps"):
+        meta.render.video_fps = video_fps
 
     # `--url` rewrites the first `goto` step's URL. Wins over any `--var URL=...`
     # substitution because it lands after `load()` has already substituted vars.
@@ -1090,6 +1174,7 @@ def run(
             strip_query_strings=strip_query_strings,
             emit_events=emit_events,
             grid=grid_cfg,
+            annotations_path=annotations,
         )
     )
 
@@ -1157,6 +1242,7 @@ async def _do_run(
     strip_query_strings: bool = False,
     emit_events: bool = False,
     grid: GridConfig | None = None,
+    annotations_path: Path | None = None,
 ) -> None:
     builder: ReportBuilder | None = None
     if not no_sidecar:
@@ -1172,9 +1258,29 @@ async def _do_run(
             builder.set_grid(grid)
 
     annotate_cfg = AnnotateConfig(grid=grid) if grid is not None else None
+    from clickcast.annotate.primitives import RegionAnnotation, load_annotations
+
+    try:
+        region_annotations = [
+            RegionAnnotation(**raw) for raw in getattr(scenario, "annotations", [])
+        ]
+        if annotations_path is not None:
+            region_annotations.extend(load_annotations(annotations_path))
+    except (OSError, TypeError, ValueError) as exc:
+        _die(f"annotations: {exc}")
     with Recorder(fps=scenario.meta.fps, default_dwell=scenario.meta.dwell) as rec:
         result = await run_scenario(scenario, recorder=rec, builder=builder)
         rec.flush()
+        encode_fps = scenario.meta.fps
+        if scenario.meta.render.smooth:
+            from clickcast.annotate.smooth import SmoothConfig, smooth_frames_dir
+
+            smoothed = smooth_frames_dir(
+                rec.frames_dir,
+                SmoothConfig(output_fps=scenario.meta.render.video_fps),
+                source_fps=scenario.meta.fps,
+            )
+            encode_fps = smoothed.output_fps
         # Overlays for scenario reels — same pipeline as `auto`. Every executed
         # step maps to one recorder step_index (repeat counts multiply); walk
         # them in parallel with `result.results` to build per-step annotations.
@@ -1182,17 +1288,18 @@ async def _do_run(
             rec.frames_dir,
             steps=_scenario_step_annotations(scenario, result),
             config=annotate_cfg,
+            regions=region_annotations,
         )
         out_path = Path(out)
         enc = encode(
             rec.frames_dir,
             out_path,
-            fps=scenario.meta.fps,
+            fps=encode_fps,
             format=format_,  # type: ignore[arg-type]
         )
     if builder is not None and not result.ok:
         builder.add_warning(f"scenario failed at step {result.failed_at}")
-    media = _make_media(enc, scenario.meta.fps)
+    media = _make_media(enc, encode_fps)
     sidecar = _write_sidecar(
         out_path,
         no_sidecar,
@@ -1216,6 +1323,7 @@ async def _do_run(
         if failed_at is not None and 0 <= failed_at < len(result.results):
             err_text = result.results[failed_at].error
             if err_text:
+                err_text = _redact_error_text(err_text, redact_patterns, strip_query_strings)
                 typer.secho(err_text, fg=typer.colors.RED, err=True)
     if sidecar:
         typer.echo(f"  sidecar: {sidecar}")
@@ -1317,12 +1425,14 @@ async def _do_shot(
     session_kwargs: dict[str, Any],
     grid: GridConfig | None = None,
 ) -> None:
+    wait_value: str | float
+    try:
+        wait_value = float(wait)
+    except ValueError:
+        wait_value = wait
+    if isinstance(wait_value, float) and not math.isfinite(wait_value):
+        raise typer.BadParameter("--wait numeric seconds must be finite")
     async with Session(**session_kwargs) as sess:
-        wait_value: str | float
-        try:
-            wait_value = float(wait)
-        except ValueError:
-            wait_value = wait
         await sess.goto(url, wait=wait_value)
         out_path = Path(out)
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1401,27 +1511,29 @@ async def _scenario_from_discovery(url: str, name: str, out: str) -> str:
         await sess.goto(url, wait="networkidle")
         elements = await discover(sess, limit=6)
 
-    lines = [
-        "meta:",
-        f"  name: {name}",
-        "  viewport: 1280x800",
-        "  fps: 12",
-        "  dwell: 1.0",
-        "  format: gif",
-        f"  out: {out}",
-        "",
-        "steps:",
-        f"  - goto: {url}",
-        "    wait: networkidle",
-        "    label: Open site",
+    steps: list[dict[str, Any]] = [
+        {"goto": url, "wait": "networkidle", "label": "Open site"},
     ]
     for el in elements:
-        selector = el.selector.replace('"', '\\"')
-        label = el.text[:60] or el.role
-        lines.append(f'  - click: "{selector}"')
-        lines.append(f"    label: {label}")
-        lines.append("    optional: true")
-    return "\n".join(lines) + "\n"
+        steps.append(
+            {
+                "click": el.selector,
+                "label": el.text[:60] or el.role,
+                "optional": True,
+            }
+        )
+    scenario = {
+        "meta": {
+            "name": name,
+            "viewport": "1280x800",
+            "fps": 12,
+            "dwell": 1.0,
+            "format": "gif",
+            "out": out,
+        },
+        "steps": steps,
+    }
+    return yaml.safe_dump(scenario, sort_keys=False, allow_unicode=True)
 
 
 # ==========================================================================
@@ -1739,8 +1851,9 @@ def _run_doctor_checks(*, configured_engine: str = "chromium") -> dict[str, Any]
     checks.append(
         {
             "name": "config-dir",
-            "ok": config_path.parent.exists() or True,  # non-existence is fine
+            "ok": config_path.parent.exists(),
             "detail": str(config_path),
+            "required": False,  # non-existence is fine
         }
     )
 

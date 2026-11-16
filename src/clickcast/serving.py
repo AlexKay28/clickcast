@@ -55,19 +55,6 @@ class _QuietHandler(SimpleHTTPRequestHandler):
         return
 
 
-def _pick_free_port(bind: str) -> int:
-    """Ask the OS for an ephemeral free port on ``bind``.
-
-    Bound-then-closed sockets on Linux enter ``TIME_WAIT`` but the kernel
-    will not reissue the same port in the microseconds between this
-    ``close()`` and the ``HTTPServer`` bind that follows, so this
-    two-step is safe in practice for the intended dev-iteration use case.
-    """
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind((bind, 0))
-        return int(s.getsockname()[1])
-
-
 def _wait_until_ready(host: str, port: int, timeout: float = 3.0) -> None:
     """Block until ``host:port`` accepts a TCP connection.
 
@@ -122,7 +109,10 @@ def serve_directory(
     if not root.is_dir():
         raise NotADirectoryError(f"serve_directory: {root} is not a directory")
 
-    bound_port = _pick_free_port(bind) if port is None else port
+    # Bind port 0 directly: the kernel reserves and assigns the ephemeral
+    # port in one operation. Probing a free port with a temporary socket and
+    # then closing it introduces a race with other processes.
+    bound_port = 0 if port is None else port
     # ``SimpleHTTPRequestHandler`` takes ``directory`` since 3.7; bind it via
     # ``functools.partial`` so the handler stays a class the server can
     # instantiate per-request.

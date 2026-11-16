@@ -255,6 +255,24 @@ class TestInterpolation:
         assert frames[0]["cursor_xy"] == [100, 200]
         assert frames[-1]["cursor_xy"] == [500, 300]
 
+    def test_rerun_on_interpolated_output_is_no_op(self, tmp_path: Path) -> None:
+        _write_dir(
+            tmp_path,
+            [
+                {"path": "a.png", "step_index": 0, "sub_index": 0, "cursor_xy": [100, 100]},
+                {"path": "b.png", "step_index": 1, "sub_index": 0, "cursor_xy": [500, 100]},
+            ],
+        )
+        style = CursorStyle(
+            interpolate_frames=2, interpolate_min_distance=50, interpolate_easing="linear"
+        )
+        assert interpolate_cursor_motion(tmp_path, style) == 2
+        before = (tmp_path / "frames.json").read_text()
+        assert json.loads(before)["cursor_interpolated"] is True
+
+        assert interpolate_cursor_motion(tmp_path, style) == 0
+        assert (tmp_path / "frames.json").read_text() == before
+
 
 @pytest.mark.parametrize("mode", ["linear", "ease-in-out"])
 def test_manifest_still_parseable(tmp_path: Path, mode: str) -> None:

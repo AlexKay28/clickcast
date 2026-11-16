@@ -226,9 +226,18 @@ class Session:
             raise RuntimeError("Session is not open — use `async with Session(...) as sess:`")
         return self._page
 
-    async def goto(self, url: str, wait: WaitArg | None = None) -> None:
-        await self.page.goto(url)
-        await self._wait(wait)
+    async def goto(
+        self,
+        url: str,
+        wait: WaitArg | None = None,
+        *,
+        timeout_ms: int | None = None,
+    ) -> None:
+        if timeout_ms is None:
+            await self.page.goto(url)
+        else:
+            await self.page.goto(url, timeout=timeout_ms)
+        await self._wait(wait, timeout_ms=timeout_ms)
 
     async def screenshot(
         self,
@@ -330,7 +339,7 @@ class Session:
         """Polymorphic wait: number → sleep, load-state → wait_for_load_state, else selector."""
         await self._wait(wait)
 
-    async def _wait(self, wait: WaitArg | None) -> None:
+    async def _wait(self, wait: WaitArg | None, *, timeout_ms: int | None = None) -> None:
         if wait is None:
             return
         if isinstance(wait, bool):
@@ -341,6 +350,11 @@ class Session:
         if not isinstance(wait, str):
             raise TypeError(f"Unsupported wait type: {type(wait).__name__}")
         if wait in _LOAD_STATES:
-            await self.page.wait_for_load_state(wait)  # type: ignore[arg-type]
-        else:
+            if timeout_ms is None:
+                await self.page.wait_for_load_state(wait)  # type: ignore[arg-type]
+            else:
+                await self.page.wait_for_load_state(wait, timeout=timeout_ms)  # type: ignore[arg-type]
+        elif timeout_ms is None:
             await self.page.wait_for_selector(wait)
+        else:
+            await self.page.wait_for_selector(wait, timeout=timeout_ms)

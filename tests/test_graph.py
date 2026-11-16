@@ -114,6 +114,19 @@ class TestBuildGraph:
         assert first is not None and second is not None
         assert first.model_dump() == second.model_dump()
 
+    def test_revisit_keeps_first_non_empty_title(self) -> None:
+        steps = [
+            _step(0, url="https://example.com/a", title=""),
+            _step(1, url="https://example.com/b", title="B"),
+            _step(2, url="https://example.com/a", title="First A title"),
+            _step(3, url="https://example.com/a", title="Later A title"),
+        ]
+        graph = build_graph(steps)
+        assert graph is not None
+        by_url = {n.url: n for n in graph.nodes if isinstance(n, PageNode)}
+        assert by_url["https://example.com/a"].title == "First A title"
+        assert by_url["https://example.com/b"].title == "B"
+
 
 # ---------------------------------------------------------------------------
 # dom_signature helper — dedup fingerprint for the deferred landmark pass

@@ -86,6 +86,46 @@ class TestApplyZoomOnClick:
         # Only sub_index 0 and 1 fall inside the window.
         assert n == 2
 
+    def test_empty_cursor_is_ignored(self, tmp_path: Path) -> None:
+        _make_frame(tmp_path / "c.png")
+        before = (tmp_path / "c.png").read_bytes()
+        _write_manifest(
+            tmp_path,
+            [{"path": "c.png", "step_index": 0, "sub_index": 0, "cursor_xy": []}],
+        )
+        assert apply_zoom_on_click(tmp_path, factor=2.0, frames_after_click=3) == 0
+        assert (tmp_path / "c.png").read_bytes() == before
+
+    def test_late_missing_frame_does_not_partially_zoom_earlier_frames(
+        self, tmp_path: Path
+    ) -> None:
+        _make_frame(tmp_path / "first.png")
+        before = (tmp_path / "first.png").read_bytes()
+        _write_manifest(
+            tmp_path,
+            [
+                {"path": "first.png", "sub_index": 0, "cursor_xy": [100, 100]},
+                {"path": "missing.png", "sub_index": 0, "cursor_xy": [100, 100]},
+            ],
+        )
+        # Missing entries are skipped, while valid frames remain usable.
+        assert apply_zoom_on_click(tmp_path, factor=2.0, frames_after_click=3) == 1
+        assert (tmp_path / "first.png").read_bytes() != before
+
+    def test_corrupt_late_frame_aborts_before_any_overwrite(self, tmp_path: Path) -> None:
+        _make_frame(tmp_path / "first.png")
+        (tmp_path / "bad.png").write_bytes(b"not a png")
+        before = (tmp_path / "first.png").read_bytes()
+        _write_manifest(
+            tmp_path,
+            [
+                {"path": "first.png", "sub_index": 0, "cursor_xy": [100, 100]},
+                {"path": "bad.png", "sub_index": 0, "cursor_xy": [100, 100]},
+            ],
+        )
+        assert apply_zoom_on_click(tmp_path, factor=2.0, frames_after_click=3) == 0
+        assert (tmp_path / "first.png").read_bytes() == before
+
     def test_dimensions_preserved_after_zoom(self, tmp_path: Path) -> None:
         f = tmp_path / "c.png"
         _make_frame(f, size=(400, 300))

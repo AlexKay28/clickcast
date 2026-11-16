@@ -20,9 +20,10 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from clickcast.auto import _ensure_discovered
+from clickcast.auto import _ensure_discovered, _goto_and_discover
+from clickcast.core.actions import GotoStep
 from clickcast.discovery import Element
-from tests._stubs import FakeSession, make_element
+from tests._stubs import FakeRecorder, FakeSession, make_element, make_result
 
 
 @pytest.mark.asyncio
@@ -76,3 +77,31 @@ async def test_ensure_discovered_keys_by_url() -> None:
     assert result == pool_b
     assert cache == {"https://x.com/a": pool_a, "https://x.com/b": pool_b}
     assert fake.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_auto_goto_uses_configured_click_timeout(tmp_path) -> None:
+    sess = FakeSession()
+    execute = AsyncMock(return_value=make_result(cursor=None))
+
+    with (
+        patch("clickcast.auto.execute", execute),
+        patch("clickcast.auto.discover", AsyncMock(return_value=[])),
+    ):
+        await _goto_and_discover(
+            sess=sess,  # type: ignore[arg-type]
+            rec=FakeRecorder(tmp_path),  # type: ignore[arg-type]
+            builder=None,
+            url="https://x.com/",
+            dwell=0.0,
+            initial_wait=0.0,
+            click_budget=1,
+            click_timeout_ms=1234,
+            step_index=0,
+            step_annotations={},
+            page_label="page 1/1",
+        )
+
+    step = execute.await_args.args[0]
+    assert isinstance(step, GotoStep)
+    assert step.timeout_ms == 1234

@@ -35,11 +35,13 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import re
 import sys
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import unquote_plus, urlsplit, urlunsplit
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -366,6 +368,71 @@ def default_store() -> SessionStore:
     return SessionStore()
 
 
+_REDACTED_ARGV_VALUE = "<redacted>"
+_SENSITIVE_URL_KEY_RE = re.compile(
+    r"(?:^|[-_])(?:auth|authorization|auth[-_]?token|api[-_]?key|access[-_]?key|"
+    r"access[-_]?token|bypass|bypass[-_]?token|refresh[-_]?token|id[-_]?token|credential|"
+    r"key|password|passwd|secret|signature|sig|token)(?:$|[-_])",
+    re.IGNORECASE,
+)
+
+
+def _redact_option_value(option: str, value: str) -> str:
+    if option == "--var":
+        key, separator, _ = value.partition("=")
+        return f"{key}={_REDACTED_ARGV_VALUE}" if separator else _REDACTED_ARGV_VALUE
+    name, separator, _ = value.partition(":")
+    return f"{name}: {_REDACTED_ARGV_VALUE}" if separator else _REDACTED_ARGV_VALUE
+
+
+def _sanitize_url(value: str) -> str:
+    if not value.startswith(("http://", "https://")):
+        return value
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return value
+    changed = False
+    netloc = parsed.netloc
+    if "@" in netloc:
+        netloc = f"{_REDACTED_ARGV_VALUE}@{netloc.rpartition('@')[2]}"
+        changed = True
+    query_parts = []
+    for part in parsed.query.split("&"):
+        key, separator, _ = part.partition("=")
+        if separator and _SENSITIVE_URL_KEY_RE.search(unquote_plus(key)):
+            part = f"{key}={_REDACTED_ARGV_VALUE}"
+            changed = True
+        query_parts.append(part)
+    if not changed:
+        return value
+    return urlunsplit(parsed._replace(netloc=netloc, query="&".join(query_parts)))
+
+
+def _sanitize_invocation_argv(argv: list[str]) -> list[str]:
+    """Remove credentials from argv while preserving its normal shape."""
+    sanitized: list[str] = []
+    redact_next: str | None = None
+    for arg in argv:
+        if redact_next is not None:
+            sanitized.append(_redact_option_value(redact_next, arg))
+            redact_next = None
+            continue
+        option, separator, value = arg.partition("=")
+        if option in ("--header", "-H", "--var"):
+            sanitized.append(
+                f"{option}={_redact_option_value(option, value)}" if separator else arg
+            )
+            if not separator:
+                redact_next = option
+            continue
+        if separator and value.startswith(("http://", "https://")):
+            sanitized.append(f"{option}={_sanitize_url(value)}")
+        else:
+            sanitized.append(_sanitize_url(arg))
+    return sanitized
+
+
 def record_invocation_safe(
     argv: list[str],
     *,
@@ -391,7 +458,7 @@ def record_invocation_safe(
         event = InvocationEvent(
             kind="invocation",
             ts=_now_iso(),
-            argv=list(argv),
+            argv=_sanitize_invocation_argv(argv),
             exit_code=int(exit_code),
             wall_time_ms=max(0, int(wall_time_ms)),
             cwd=cwd if cwd is not None else os.getcwd(),
@@ -428,6 +495,60 @@ def _new_session_id() -> str:
     return f"{stamp}-{suffix}"
 
 
+def _git_dir_for(candidate: Path) -> Path | None:
+    """Resolve the git metadata dir for ``candidate``, handling worktrees.
+
+    A normal repo has ``.git`` as a directory. Linked worktrees (and
+    submodules) instead have a ``.git`` *file* containing
+    ``gitdir: <path>`` — pointing at ``<repo>/.git/worktrees/<name>``
+    (or the submodule's git metadata dir). Relative paths are resolved
+    against the directory holding the ``.git`` file, per git's own rules.
+    Returns ``None`` when the marker is unreadable or malformed.
+    """
+    dotgit = candidate / ".git"
+    if not dotgit.exists():
+        return None
+    if dotgit.is_dir():
+        return dotgit
+    if not dotgit.is_file():
+        return None
+    try:
+        content = dotgit.read_text().strip()
+    except OSError:
+        return None
+    if not content.startswith("gitdir:"):
+        return None
+    raw = content[len("gitdir:") :].strip()
+    if not raw:
+        return None
+    location = Path(raw)
+    if not location.is_absolute():
+        location = candidate / location
+    return location if location.is_dir() else None
+
+
+def _common_dir_for(git_dir: Path) -> Path:
+    """Return the worktree-aware common dir for a git metadata dir.
+
+    Main repos and submodules have no marker — the git dir IS the common
+    dir. Linked worktrees carry a ``commondir`` file with a path relative
+    to the worktree's git dir, pointing at the parent repo's ``.git``.
+    """
+    marker = git_dir / "commondir"
+    if not marker.exists():
+        return git_dir
+    try:
+        raw = marker.read_text().strip()
+    except OSError:
+        return git_dir
+    if not raw:
+        return git_dir
+    location = Path(raw)
+    if not location.is_absolute():
+        location = git_dir / location
+    return location if location.is_dir() else git_dir
+
+
 def _git_rev(cwd: str | None) -> str | None:
     """Return the current git HEAD short-sha, or None.
 
@@ -435,30 +556,42 @@ def _git_rev(cwd: str | None) -> str | None:
     ``.git/refs/…`` is faster and doesn't spawn a process on every
     single CLI invocation (which would compound with clickcast's own
     startup cost). Missing / detached / broken git states return None.
+    Handles linked worktrees and submodules via ``.git`` files.
     """
     try:
         start = Path(cwd) if cwd else Path.cwd()
     except OSError:
         return None
     for candidate in (start, *start.parents):
-        head = candidate / ".git" / "HEAD"
-        if not head.exists():
+        # Once a ``.git`` marker exists, it owns the result — a malformed
+        # marker must return None, not silently attribute a parent repo.
+        if not (candidate / ".git").exists():
             continue
+        git_dir = _git_dir_for(candidate)
+        if git_dir is None:
+            return None
+        head = git_dir / "HEAD"
+        if not head.exists():
+            return None
         try:
             content = head.read_text().strip()
         except OSError:
             return None
         if content.startswith("ref: "):
             ref = content[len("ref: ") :].strip()
-            ref_path = candidate / ".git" / ref
-            if ref_path.exists():
-                try:
-                    return ref_path.read_text().strip()[:12] or None
-                except OSError:
-                    return None
-            # Packed refs — fall back to reading them.
-            packed = candidate / ".git" / "packed-refs"
-            if packed.exists():
+            # Branch refs live in the common dir; per-worktree refs (e.g.
+            # rebase/bisect state) can live in the worktree git dir.
+            ref_paths = (git_dir / ref, _common_dir_for(git_dir) / ref)
+            for ref_path in ref_paths:
+                if ref_path.exists():
+                    try:
+                        return ref_path.read_text().strip()[:12] or None
+                    except OSError:
+                        return None
+            # Packed refs — fall back to reading them, common dir first.
+            for packed in (_common_dir_for(git_dir) / "packed-refs", git_dir / "packed-refs"):
+                if not packed.exists():
+                    continue
                 try:
                     for line in packed.read_text().splitlines():
                         if line.endswith(" " + ref):

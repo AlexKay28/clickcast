@@ -1,0 +1,22 @@
+name: Smooth annotated form tour
+meta:
+  render:
+    fps: 12
+    format: mp4
+    smooth: true
+    video_fps: 30
+  dwell: 0.8
+  out: form-tour.mp4
+steps:
+  - goto: https://example.com
+  - wait: 0.5
+annotations:
+  - kind: spotlight
+    bbox: [80, 80, 700, 300]
+    start_step: 0
+    end_step: 0
+  - kind: text
+    bbox: [100, 110, 440, 60]
+    text: "The primary content region"
+    start_step: 0
+    end_step: 0

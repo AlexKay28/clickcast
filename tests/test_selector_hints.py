@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 import pytest_asyncio
 
-from clickcast.core.actions import ClickStep, execute
+from clickcast.core.actions import ClickStep, _augment_with_hints, execute
 from clickcast.core.session import Session
 from clickcast.discovery import Element
 from clickcast.discovery.hints import (
@@ -167,6 +167,32 @@ class TestSuggestCandidatesRanking:
                 failed_selector="x",
                 top_n=0,
             )
+
+
+async def test_failure_hints_use_single_discovery_walk() -> None:
+    pool = [
+        _mkel("tab", "Population", 'role=tab[name="Population"]'),
+        _mkel("button", "Populate", 'role=button[name="Populate"]'),
+    ]
+    discovery = AsyncMock(return_value=pool)
+    session = object()
+    step = ClickStep(selector='role=button[name="Population"]')
+
+    with (
+        patch("clickcast.discovery.discover", new=discovery),
+        patch("clickcast.discovery.hints.discover", new=discovery),
+    ):
+        message = await _augment_with_hints(
+            "base failure",
+            step,
+            session,  # type: ignore[arg-type]
+            step.selector,
+            RuntimeError("locator resolved to 0 elements"),
+        )
+
+    assert discovery.await_count == 1
+    assert 'role=tab[name="Population"]' in message
+    assert "Full page discovery: 2 interactive elements" in message
 
 
 # ---------------------------------------------------------------------------

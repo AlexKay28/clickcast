@@ -90,3 +90,9 @@ class RenderOpts:
     quality: int = 8
     loop: int = 0
     format: str = "gif"  # "gif" | "mp4" | "webp" | "frames"
+    # Smooth-video post-processing. Capture stays at ``fps`` (fewer browser
+    # screenshots); the annotation pipeline retimes cursor moves and page
+    # transitions to ``video_fps`` before encoding. Off by default to keep
+    # existing GIF output byte-for-byte compatible.
+    smooth: bool = False
+    video_fps: int = 30

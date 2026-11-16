@@ -212,6 +212,19 @@ class TestCrossOriginBounce:
         assert "external.com" in msg
         assert "Step 1" in msg
 
+    def test_sparse_page_states_keep_nearest_url_semantics(self) -> None:
+        steps = [
+            _goto(0, url="https://example.com/"),
+            StepReport(index=1, action="wait", status="ok", duration_ms=10.0),
+            _click(2, url="https://external.com/page"),
+            StepReport(index=3, action="wait", status="ok", duration_ms=10.0),
+            _click(4, url="https://example.com/"),
+        ]
+        advs = build_advisories(steps, _media(), total_clicks=2, nav_clicks=2)
+        bounces = [a for a in advs if a.id == "cross-origin-bounce"]
+        assert len(bounces) == 1
+        assert "Step 2" in bounces[0].message
+
     def test_cross_origin_click_that_stays_cross_origin_does_not_trigger(self) -> None:
         # No bounce back — the tour ended on the external site. Different
         # anti-pattern, not this one.
