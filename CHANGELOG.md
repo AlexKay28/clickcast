@@ -26,6 +26,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   deterministically.
 
 ### Fixed
+- **Browser pre-flight now checks the revision Playwright will actually
+  launch.** `find_installed_engine` accepted any `chromium-<N>` dir, so a stale
+  shared cache passed `clickcast doctor` and then died with Playwright's raw
+  `Executable doesn't exist` traceback. `check_engine` reads the installed
+  driver bundle's `browsers.json` and reports `ok` / `stale` / `missing`;
+  `doctor` shows the mismatch and the pre-flight raises `EngineStaleError`
+  (an `EngineNotInstalledError`, so install-and-retry still self-heals).
+  `doctor` also flags a chromium cache installed with `--no-shell`, which
+  breaks headless runs.
 - **Security/privacy:** discovery-generated scenarios use safe YAML
   serialization (hostile element labels cannot inject steps); feedback issue
   reports redact URLs/errors/diagnostics throughout; feedback pointer URLs no

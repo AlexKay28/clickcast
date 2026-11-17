@@ -20,7 +20,7 @@ import typer
 from typer.testing import CliRunner
 
 from clickcast.cli import _handle_missing_engine, _run, app
-from clickcast.core.engines import EngineNotInstalledError
+from clickcast.core.engines import EngineCheck, EngineNotInstalledError
 
 runner = CliRunner()
 
@@ -108,7 +108,10 @@ class TestEndToEnd:
     def test_shot_command_dies_with_clear_message_when_engine_missing(
         self, tmp_path: object
     ) -> None:
-        with patch("clickcast.core.session.find_installed_engine", return_value=None):
+        with patch(
+            "clickcast.core.session.check_engine",
+            return_value=EngineCheck(engine="chromium", state="missing"),
+        ):
             result = runner.invoke(
                 app,
                 ["shot", "https://example.com", "--out", str(tmp_path) + "/x.png"],
@@ -118,4 +121,26 @@ class TestEndToEnd:
         assert "clickcast install --with-deps chromium" in result.output
         # The old failure mode: a raw Playwright traceback leaking through.
         assert "Executable doesn't exist" not in result.output
+        assert "Traceback" not in result.output
+
+    def test_shot_command_explains_stale_engine_without_traceback(self, tmp_path: object) -> None:
+        """#254: the stale-cache case — doctor used to say ok, then Playwright
+        failed demanding a newer revision."""
+        with patch(
+            "clickcast.core.session.check_engine",
+            return_value=EngineCheck(
+                engine="chromium",
+                state="stale",
+                found_revision="999",
+                required_revision="1234",
+            ),
+        ):
+            result = runner.invoke(
+                app,
+                ["shot", "https://example.com", "--out", str(tmp_path) + "/x.png"],
+            )
+        assert result.exit_code == 1
+        assert "out of date" in result.output
+        assert "chromium-1234" in result.output
+        assert "clickcast install --with-deps chromium" in result.output
         assert "Traceback" not in result.output
