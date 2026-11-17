@@ -15,6 +15,7 @@ from typing import Any
 from urllib.parse import urlencode
 
 from clickcast import __version__ as CLICKCAST_VERSION
+from clickcast.core.engines import playwright_importable, playwright_version
 from clickcast.feedback.models import Report, StepReport
 from clickcast.feedback.pointers import REPO_URL
 from clickcast.feedback.redact import redact_report
@@ -60,13 +61,8 @@ def build_agent_report(
         "sidecar_excerpt": excerpt,
         "redacted": redact,
     }
-    try:
-        import playwright  # noqa: F401
-        from playwright import __version__ as pw_version  # type: ignore[attr-defined]
-
+    if playwright_importable() and (pw_version := playwright_version()):
         payload["playwright_version"] = pw_version
-    except Exception:  # pragma: no cover — playwright is a hard dep
-        pass
     if environment_note:
         payload["environment_note"] = (
             _redact_freeform(environment_note) if redact else environment_note

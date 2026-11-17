@@ -50,6 +50,7 @@ from clickcast.core.engines import (
     EngineStaleError,
     check_engine,
     find_installed_engine,
+    playwright_importable,
 )
 from clickcast.core.opts import BrowserOpts
 from clickcast.core.session import Session
@@ -1825,12 +1826,10 @@ def _run_doctor_checks(*, configured_engine: str = "chromium") -> dict[str, Any]
         }
     )
 
-    try:
-        import playwright  # noqa: F401
-
+    if playwright_importable():
         checks.append({"name": "playwright", "ok": True, "detail": "importable"})
-    except ImportError as e:
-        checks.append({"name": "playwright", "ok": False, "detail": f"import failed: {e}"})
+    else:
+        checks.append({"name": "playwright", "ok": False, "detail": "not installed"})
 
     for engine_name in ("chromium", "firefox", "webkit"):
         # check_engine, not find_installed_engine: doctor must agree with what
