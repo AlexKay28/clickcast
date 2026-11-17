@@ -173,6 +173,15 @@ class ReportBuilder:
         if self._collector is not None:
             page_state = await self._collector.snapshot_and_clear()
 
+        # Derive the report-level `url` from the first `goto` when the caller
+        # did not supply one. `auto`/`Reel` pass it up front; `run` and live
+        # MCP sessions learn it here, which is why their sidecars used to
+        # report a null url while every `auto` sidecar had one.
+        if self._url is None and step.action == "goto":
+            target = getattr(step, "url", None)
+            if isinstance(target, str) and target:
+                self._url = target
+
         args = step.model_dump(exclude=_COMMON_STEP_FIELDS)
 
         # #227: an `optional` click/dblclick that ran clean (execute() never

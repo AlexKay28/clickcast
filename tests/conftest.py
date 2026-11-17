@@ -6,7 +6,7 @@ Provides:
   ``tests/fixtures/site/`` on an ephemeral port so integration tests can
   drive a real multi-page browser tour without hitting the public internet.
 - ``stub_environment``: patches every heavy dependency the auto engine
-  touches (Session, Recorder, encode, annotate_frames_dir, _write_sidecar,
+  touches (Session, Recorder, encode, annotate_frames_dir, write_sidecar,
   ReportBuilder) so unit tests can invoke it without a real browser.
 """
 
@@ -127,6 +127,6 @@ def stub_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FakeSes
             )
         ),
     )
-    monkeypatch.setattr("clickcast.auto._write_sidecar", MagicMock(return_value=None))
+    monkeypatch.setattr("clickcast.auto.write_sidecar", MagicMock(return_value=None))
     monkeypatch.setattr("clickcast.auto.ReportBuilder", MagicMock)
     return fake_sess
