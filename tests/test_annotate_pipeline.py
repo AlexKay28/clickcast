@@ -7,7 +7,7 @@ from pathlib import Path
 
 from PIL import Image, ImageChops
 
-from clickcast.annotate import StepAnnotation, annotate_frames_dir
+from clickcast.annotate import StepAnnotation, annotate_frames_dir, ripple_stage_for
 
 
 def _make_frame(path: Path, size: tuple[int, int] = (320, 200)) -> None:
@@ -118,3 +118,34 @@ class TestAnnotateFramesDir:
         s = StepAnnotation()
         assert s.label is None
         assert s.click_at is None
+
+
+class TestRippleStageFor:
+    """#262: batch reels and live MCP frames must compute the ripple stage the
+    same way. The MCP path used to pass the *final* stage for a single frame."""
+
+    def test_no_click_has_no_ripple(self) -> None:
+        assert ripple_stage_for(click_at=None, sub_index=0, pre_click_count=0, stages=3) == 0
+
+    def test_first_post_click_frame_is_stage_one(self) -> None:
+        assert ripple_stage_for(click_at=(1, 2), sub_index=0, pre_click_count=0, stages=3) == 1
+
+    def test_stages_advance_then_stop(self) -> None:
+        stages = [
+            ripple_stage_for(click_at=(1, 2), sub_index=i, pre_click_count=0, stages=3)
+            for i in range(5)
+        ]
+        assert stages == [1, 2, 3, 0, 0]
+
+    def test_pre_click_hold_frames_do_not_consume_a_stage(self) -> None:
+        # 2 pre-click frames, then the click: sub_index 2 is the first post-click.
+        assert ripple_stage_for(click_at=(1, 2), sub_index=1, pre_click_count=2, stages=3) == 0
+        assert ripple_stage_for(click_at=(1, 2), sub_index=2, pre_click_count=2, stages=3) == 1
+        assert ripple_stage_for(click_at=(1, 2), sub_index=4, pre_click_count=2, stages=3) == 3
+
+    def test_live_single_frame_matches_the_batch_first_post_click_frame(self) -> None:
+        """The live MCP pipeline has exactly one post-click frame; it must
+        render the same ripple beat as the batch reel's first one."""
+        live = ripple_stage_for(click_at=(100, 80), sub_index=0, pre_click_count=0, stages=4)
+        batch_first = ripple_stage_for(click_at=(100, 80), sub_index=0, pre_click_count=0, stages=4)
+        assert live == batch_first == 1

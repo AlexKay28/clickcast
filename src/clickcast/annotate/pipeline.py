@@ -38,6 +38,31 @@ class StepAnnotation:
     target_bbox: tuple[int, int, int, int] | None = None
 
 
+def ripple_stage_for(
+    *,
+    click_at: tuple[int, int] | None,
+    sub_index: int,
+    pre_click_count: int,
+    stages: int,
+) -> int:
+    """Return the ripple animation stage for one captured frame.
+
+    ``0`` means "no ripple". The first post-click frame is stage ``1``, on
+    through ``stages`` — so a caller that only has a single post-click frame
+    (the live MCP pipeline) gets stage 1, the ripple's first beat, exactly
+    like the first post-click frame of a batch reel.
+
+    ``pre_click_count`` offsets the counter because the recorder emits
+    hold-frames before the click (target highlight) that must not consume a
+    ripple stage. Batch and live paths share this function so their ripples
+    cannot drift apart (#262).
+    """
+    if click_at is None:
+        return 0
+    post_offset = sub_index - pre_click_count
+    return post_offset + 1 if 0 <= post_offset < stages else 0
+
+
 def annotate_frames_dir(
     frames_dir: Path,
     *,
@@ -102,11 +127,12 @@ def annotate_frames_dir(
         pre_n = pre_click_count.get(step_index, 0)
         # Ripple only fires on the first N POST-CLICK sub-frames (offset by
         # pre-click padding count so highlight-ring frames don't consume it).
-        if step_ann.click_at is not None:
-            post_offset = sub_index - pre_n
-            ripple_stage = post_offset + 1 if 0 <= post_offset < ann.config.ripple.stages else 0
-        else:
-            ripple_stage = 0
+        ripple_stage = ripple_stage_for(
+            click_at=step_ann.click_at,
+            sub_index=sub_index,
+            pre_click_count=pre_n,
+            stages=ann.config.ripple.stages,
+        )
         # Target highlight — draw on pre-click sub-frames only (sub_index
         # < pre_n), which is where the recorder held the target still.
         target_bbox: tuple[int, int, int, int] | None = None
