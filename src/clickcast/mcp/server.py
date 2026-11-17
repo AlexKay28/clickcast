@@ -49,6 +49,7 @@ from clickcast.core.session import Session, WaitArg
 from clickcast.core.viewport import Viewport
 from clickcast.feedback import PageState, ReportBuilder
 from clickcast.kernel import finalize_report, transcript_media, write_sidecar
+from clickcast.perception import settle as settle_session
 from mcp import types as mcp_types
 
 __all__ = ["ClickcastSessionState", "create_server", "serve_stdio"]
@@ -541,6 +542,25 @@ def create_server(
         """Capture the current page without performing any action."""
         return await _run_step(
             ScreenshotStep(full_page=full_page, label=label), full_page=full_page
+        )
+
+    @server.tool()
+    @_safe_tool
+    async def settle(budget_ms: int | None = None) -> mcp_types.CallToolResult:
+        """Wait until the page has stopped changing.
+
+        Polls three independent signals (in-flight network requests, DOM
+        mutations, compositor activity) with their own budgeted quiet
+        windows. Returns ``{"ok", "ms", "signals", "timed_out"}``; a signal
+        that exhausts its budget is named in ``timed_out`` instead of raising,
+        and the call itself is a successful observation either way. Pass
+        ``budget_ms`` for a hard ceiling on the whole call (default 3000).
+        """
+        if state.session is None:
+            return _error_result("other", _ERROR_NO_SESSION)
+        result = await settle_session(state.session, budget_ms=budget_ms)
+        return mcp_types.CallToolResult(
+            content=[mcp_types.TextContent(type="text", text=json.dumps(result.to_dict()))],
         )
 
     return server

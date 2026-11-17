@@ -21,6 +21,7 @@ _EXPECTED_TOOLS = {
     "scroll",
     "wait",
     "screenshot",
+    "settle",
 }
 
 

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Infinite rAF</title>
+  <style>
+    body { font-family: sans-serif; margin: 20px; color: #222; }
+    #frames { font-variant-numeric: tabular-nums; color: #666; }
+  </style>
+</head>
+<body>
+  <h1>Infinite rAF</h1>
+  <p>This page requests an animation frame forever and never mutates the DOM.
+     <code>settle()</code> must report <code>timed_out: ["raf"]</code>.</p>
+  <p id="frames">frames: 0</p>
+  <script>
+    // Deliberately no DOM writes in the loop: the DOM signal must stay quiet
+    // so the test can attribute the timeout to the compositor signal alone.
+    let frames = 0;
+    function loop() {
+      frames += 1;
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>

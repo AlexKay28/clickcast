@@ -50,6 +50,9 @@ Two session-lifecycle tools that have no `core/actions.py` counterpart
 - `close_session` — closes the Playwright session and optionally flushes
   the accumulated sidecar-shaped transcript to disk.
 
+`settle` (below) is a third non-step tool: a perception primitive from
+`perception/settle.py`, not a `Step` wrapper.
+
 ## Session lifecycle
 
 v1 is single-session, single-process (see #191 "Out of scope"): one
@@ -249,6 +252,37 @@ the sidecar builder relies on — one classification table, two consumers.
 | Args | `full_page` (`bool`, default `false`), `label` (`str \| null`) |
 | Returns | Per-call response shape — the primary payload IS the frame; `status` is `"ok"` unless the page itself is unreachable. |
 | Errors | `other`. |
+
+### `settle`
+
+Not a `core/actions.py` step — a perception primitive (#265) exposed directly
+from [`perception/settle.py`](../src/clickcast/perception/settle.py).
+
+| | |
+|---|---|
+| Args | `budget_ms` (`int \| null`, default `null` → 3000 ms overall) |
+| Returns | `{"ok": bool, "ms": int, "signals": {name: {"ok", "ms", "budget_ms", ...}}, "timed_out": [name, ...]}` — no frame. |
+| Errors | `other` — no active session (a timed-out signal is **not** an error; see below). |
+
+Three independent signals are polled concurrently, each with its own quiet
+window and budget:
+
+| Signal | Quiet window | Budget |
+|---|---|---|
+| `network` | 500 ms without a request event (own in-flight counter — not `networkidle`) | 3000 ms |
+| `dom` | 250 ms without a `MutationObserver` record (`window.__ccMut`) | 2000 ms |
+| `raf` | 250 ms without a page-issued `requestAnimationFrame` and no `document.getAnimations()` entries | 2000 ms |
+
+`budget_ms` is a hard ceiling on the whole call: each per-signal budget is
+clamped to it. `ok` is `true` iff `timed_out` is empty. A signal that
+exhausts its budget is reported in `timed_out` and the tool still returns
+successfully (`isError` is `false`) — an infinite rAF loop therefore answers
+`{"ok": false, ..., "timed_out": ["raf"]}`, which is an observation the agent
+can act on, not a broken call. A page that mutated for ~1 s and stopped
+settles with `ok: true` around 1.3 s. Earlier engines without
+`document.getAnimations` lose only the CSS-animation half of the `raf`
+signal (`signals.raf.supported` is `false`); `ok` can still be `true`.
+
 
 ## Confirmed against `core/actions.py`
 
