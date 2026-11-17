@@ -9,6 +9,7 @@ report and a friendly pre-flight error instead of Playwright's raw
 
 from __future__ import annotations
 
+import importlib.metadata
 import importlib.util
 import json
 import os
@@ -22,6 +23,8 @@ __all__ = [
     "EngineStaleError",
     "check_engine",
     "find_installed_engine",
+    "playwright_importable",
+    "playwright_version",
     "required_revision",
 ]
 
@@ -165,6 +168,33 @@ def _engine_dirs(engine: str) -> list[tuple[int, Path]]:
         if p.is_dir() and p.name[len(prefix) + 1 :].isdigit()
     ]
     return sorted(matches, key=lambda item: item[0], reverse=True)
+
+
+def playwright_importable() -> bool:
+    """Whether the Playwright package is installed.
+
+    The single probe used by ``clickcast doctor`` and ``report-bug``. It goes
+    through :func:`importlib.util.find_spec` rather than ``import playwright``
+    so this module never needs a value import and stays outside the Playwright
+    import allowlist.
+    """
+    try:
+        return importlib.util.find_spec("playwright") is not None
+    except (ImportError, ValueError):  # pragma: no cover — broken install
+        return False
+
+
+def playwright_version() -> str | None:
+    """Installed Playwright version, read from package metadata.
+
+    Playwright does not export ``__version__``, so metadata is the reliable
+    source (the same approach ``discovery.accessibility`` uses). Returns
+    ``None`` when Playwright isn't installed.
+    """
+    try:
+        return importlib.metadata.version("playwright")
+    except importlib.metadata.PackageNotFoundError:  # pragma: no cover — hard dep
+        return None
 
 
 def required_revision(engine: str) -> str | None:
