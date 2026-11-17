@@ -188,6 +188,8 @@ Live driving is token-bounded end to end, so an agent can iterate dozens of time
 
 Every primitive is also on the Python SDK (`Reel.observe()`, `Reel.receipt()`). Loop doc and artifact layout: [`docs/perception.md`](docs/perception.md).
 
+If you are an agent or a crawler, [`llms.txt`](https://alexkay28.github.io/clickcast/llms.txt) is a single-file index of the install path, CLI, SDK, MCP tools, the loop and the schema — and the docs also build as a static site at [alexkay28.github.io/clickcast](https://alexkay28.github.io/clickcast/).
+
 ---
 
 ## First run — 30 seconds

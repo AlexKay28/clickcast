@@ -6,13 +6,18 @@
   "keywords": [
     "mcp",
     "model-context-protocol",
+    "mcp-server",
     "clickcast",
     "playwright",
     "browser-automation",
     "ai-agent",
+    "ai-agents",
+    "llm",
+    "claude",
+    "computer-use",
     "screenshot"
   ],
-  "homepage": "https://github.com/AlexKay28/clickcast#readme",
+  "homepage": "https://alexkay28.github.io/clickcast/",
   "bugs": "https://github.com/AlexKay28/clickcast/issues",
   "repository": {
     "type": "git",

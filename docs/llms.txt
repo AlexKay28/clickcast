@@ -1,0 +1,102 @@
+# clickcast
+
+> Playwright browser automation, screenshots and GIF/MP4/WebP recording for AI agents. Every run returns a demo reel plus a machine-readable JSON sidecar (schema v5) with per-step selectors, timing, console errors, page state and structured action deltas. A live MCP server exposes the same engine for step-by-step agent control.
+
+clickcast drives Chromium, Firefox or WebKit through Playwright. Batch mode records a whole tour and writes `<reel>.json` next to it; live mode (MCP) drives one action at a time and returns a bounded payload per call.
+
+## Install
+
+```bash
+pip install clickcast
+pip install 'clickcast[mcp]'   # MCP server
+npx -y clickcast-mcp           # same MCP server without a Python install
+clickcast install              # download browser engines
+```
+
+## Batch: record a tour, read the sidecar
+
+```bash
+clickcast auto https://example.com --out tour.gif
+clickcast run tour.yml --emit-events --out tour.gif
+clickcast elements https://example.com
+clickcast explore https://example.com
+clickcast assertions tour.gif.json --baseline baseline.json
+clickcast diff tour.gif.json baseline.gif.json
+clickcast report-bug tour.gif.json --json
+clickcast doctor --json
+```
+
+`auto`/`run` write two files: the reel (`tour.gif`) and the sidecar
+(`tour.gif.json`). Gate on `steps[].status` (`ok` / `failed` / `skipped`),
+`steps[].error_code`, `steps[].skip_reason` and `steps[].delta` instead of
+parsing prose.
+
+## Python API
+
+```python
+from clickcast import AsyncReel, Reel, discover
+
+Reel("https://example.com", viewport=(1280, 800), fps=12) \
+    .goto(wait="networkidle") \
+    .click("#cta", label="Open pricing") \
+    .save("tour.gif")
+
+reel = Reel("https://example.com").goto()
+snapshot = reel.observe(token_budget=800)   # observe/1 payload, ref=eN handles
+summary = reel.receipt(out="./artifacts")   # receipt/1 payload + artifact dir
+```
+
+- `Reel.observe()` / `AsyncReel.observe()` — token-bounded page snapshot with stable `ref=eN` handles
+- `Reel.receipt()` — one artifact directory plus a <=200-token summary
+- `discover(url)` — list interactive elements without recording
+- `Reel.serve_dir("./public")` — serve a local directory for the tour
+
+## MCP server (live agent control)
+
+```bash
+clickcast mcp
+```
+
+Tools: `start_session`, `close_session`, `goto`, `click`, `dblclick`,
+`hover`, `type`, `press`, `select`, `scroll`, `wait`, `screenshot`,
+`observe`, `settle`, `receipt`.
+
+Action tools accept `ref` (an `eN` handle from `observe`) in place of
+`selector`. Every action returns a `delta` describing what changed.
+
+## Perception loop
+
+`observe -> act -> settle -> receipt`
+
+| Call | Question it answers | Ceiling |
+|---|---|---|
+| `observe` | What can I act on? | 800 est. tokens, 20 nodes |
+| act (`click(ref=...)`) | What did it change? | 300 est. tokens |
+| `settle` | Has the page stopped changing? | `timed_out` is reported, never hangs |
+| `receipt` | Did it work, and where are the artifacts? | 200 est. tokens |
+
+## Sidecar schema
+
+Current version: **v5**, strictly additive from v1. `steps[].delta` is
+optional and `null` on batch runs, so v1-v4 sidecars parse unchanged.
+
+- [v5 JSON Schema](https://github.com/AlexKay28/clickcast/blob/main/src/clickcast/feedback/schema/v5.json)
+- [Feedback schema doc](https://alexkay28.github.io/clickcast/feedback-schema.html)
+
+## Docs
+
+- [Landing page](https://alexkay28.github.io/clickcast/)
+- [For AI agents](https://alexkay28.github.io/clickcast/for-agents.html)
+- [Perception loop](https://alexkay28.github.io/clickcast/perception.html)
+- [MCP tool schema](https://alexkay28.github.io/clickcast/mcp-tool-schema.html)
+- [Feedback schema](https://alexkay28.github.io/clickcast/feedback-schema.html)
+- [Benchmarks](https://alexkay28.github.io/clickcast/benchmarks.html)
+- [Smooth video](https://alexkay28.github.io/clickcast/smooth-video.html)
+- [AI integration](https://alexkay28.github.io/clickcast/ai-integration.html)
+
+## Optional
+
+- [Source repository](https://github.com/AlexKay28/clickcast)
+- [PyPI package](https://pypi.org/project/clickcast/)
+- [Changelog](https://github.com/AlexKay28/clickcast/blob/main/CHANGELOG.md)
+- [Agent self-introduction](https://github.com/AlexKay28/clickcast/blob/main/SKILL.md) (also `clickcast skill`)

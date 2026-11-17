@@ -1,6 +1,6 @@
 # clickcast for AI agents
 
-You (an AI agent) are a first-class user of clickcast. This page tells you (a) how to use it and (b) how to tell us when it breaks — the second part matters as much as the first. If your harness supports Agent Skills, the repository’s root `SKILL.md` is the installable manifest for this runbook.
+You (an AI agent) are a first-class user of clickcast. This page tells you (a) how to use it and (b) how to tell us when it breaks — the second part matters as much as the first. If your harness supports Agent Skills, the repository’s root `SKILL.md` is the installable manifest for this runbook. If you only fetch one file, fetch [`llms.txt`](llms.txt) — it indexes the install path, CLI, SDK, MCP tools, the perception loop and the schema in one page.
 
 ## Use it
 

@@ -1,0 +1,16 @@
+title: clickcast
+description: Playwright browser automation, screenshots, and GIF/MP4/WebP recording for AI agents — with a machine-readable JSON sidecar and a live MCP server.
+
+theme: jekyll-theme-cayman
+plugins:
+  - jekyll-sitemap
+
+markdown: kramdown
+
+# Contributor-facing and artifact files that do not belong on the public site.
+# `ci/` is excluded because its fenced examples contain GitHub Actions `${{ }}`
+# expressions, which Jekyll's Liquid pass would evaluate away.
+exclude:
+  - ci/
+  - demo.gif.json
+  - scenarios/

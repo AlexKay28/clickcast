@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://alexkay28.github.io/clickcast/sitemap.xml
