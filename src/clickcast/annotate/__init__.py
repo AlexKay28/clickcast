@@ -24,6 +24,7 @@ from clickcast.annotate.pipeline import (
     ripple_stage_for,
 )
 from clickcast.annotate.primitives import RegionAnnotation, load_annotations
+from clickcast.annotate.reel_grammar import GrammarConfig, GrammarResult, apply_reel_grammar
 from clickcast.annotate.smooth import SmoothConfig, SmoothResult, smooth_frames_dir
 from clickcast.annotate.zoom import apply_zoom_on_click
 
@@ -33,6 +34,8 @@ __all__ = [
     "Annotator",
     "CardStyle",
     "CursorStyle",
+    "GrammarConfig",
+    "GrammarResult",
     "GridConfig",
     "LabelStyle",
     "ProgressStyle",
@@ -44,6 +47,7 @@ __all__ = [
     "SummaryStats",
     "TargetHighlightStyle",
     "annotate_frames_dir",
+    "apply_reel_grammar",
     "apply_zoom_on_click",
     "draw_grid",
     "interpolate_cursor_motion",
