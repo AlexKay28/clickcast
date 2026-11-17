@@ -26,6 +26,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   context on demand, making this repo directly installable as an agent skill.
 
 ### Changed
+- **`clickcast run` renders through the same kernel as `auto`.** New
+  `clickcast.kernel.render`: surfaces build a `RenderPlan` and get one media
+  pipeline (zoom → smooth *or* interpolate → annotate → encode) with the encode
+  FPS decided exactly once. Scenario reels now get cursor interpolation, and
+  `render.quality`, `render.loop` and `render.format` reach the encoder instead
+  of being silently dropped. `run --emit-events` also reports real wall-clock
+  time instead of the reel duration.
 - Pre-click annotation counting, graph/advisory lookup, failure-hint discovery,
   and duplicate-label step pairing no longer repeat full-frame/full-DOM/full-list
   scans. Grid fonts are cached and visual-diff Pillow buffers are released

@@ -112,9 +112,11 @@ def stub_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FakeSes
             return None
 
     monkeypatch.setattr("clickcast.auto.Recorder", _FakeRecorderCtor)
-    monkeypatch.setattr("clickcast.auto.annotate_frames_dir", MagicMock(return_value=0))
+    # The render pipeline moved into the shared kernel (#256) — patch it where
+    # it now runs, not in the engine that calls it.
+    monkeypatch.setattr("clickcast.kernel.render.annotate_frames_dir", MagicMock(return_value=0))
     monkeypatch.setattr(
-        "clickcast.auto.encode",
+        "clickcast.kernel.render.encode",
         MagicMock(
             return_value=MagicMock(
                 path=tmp_path / "reel.gif",

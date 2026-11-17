@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -296,8 +297,10 @@ class TestRunEmitEventsCountsExecutedStepsOnly:
                 AsyncMock(return_value=fake_run_result),
             ),
             patch("clickcast.cli.Recorder", _FakeRecorder),
-            patch("clickcast.cli.annotate_frames_dir"),
-            patch("clickcast.cli.encode", return_value=fake_enc),
+            patch(
+                "clickcast.cli.render_reel",
+                MagicMock(return_value=SimpleNamespace(enc=fake_enc, encode_fps=12)),
+            ),
             pytest.raises(typer.Exit),
         ):
             # _do_run raises typer.Exit(1) on a failed scenario.
@@ -382,8 +385,10 @@ class TestRunEmitEventsCountsExecutedStepsOnly:
                 AsyncMock(return_value=fake_run_result),
             ),
             patch("clickcast.cli.Recorder", _FakeRecorder),
-            patch("clickcast.cli.annotate_frames_dir"),
-            patch("clickcast.cli.encode", return_value=fake_enc),
+            patch(
+                "clickcast.cli.render_reel",
+                MagicMock(return_value=SimpleNamespace(enc=fake_enc, encode_fps=12)),
+            ),
         ):
             await _do_run(
                 scenario=scenario,

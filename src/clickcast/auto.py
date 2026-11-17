@@ -40,21 +40,17 @@ from clickcast.annotate import (
     GridConfig,
     StepAnnotation,
     SummaryStats,
-    annotate_frames_dir,
-    apply_zoom_on_click,
-    interpolate_cursor_motion,
     render_summary_card,
     render_title_card,
 )
-from clickcast.annotate.smooth import SmoothConfig, smooth_frames_dir
 from clickcast.capture import Recorder
 from clickcast.core.actions import ClickStep, GotoStep, ScrollStep, execute
 from clickcast.core.session import Session
 from clickcast.discovery import Element, capture_accessibility_batch, discover
 from clickcast.discovery.urlutil import is_same_origin, normalize_url
-from clickcast.encode import encode
 from clickcast.feedback import Media, ReportBuilder, StepReport, build_advisories
 from clickcast.feedback import write as write_report
+from clickcast.kernel import RenderPlan, render_reel
 
 __all__ = ["AutoConfig", "explore_page", "run_tour"]
 
@@ -728,78 +724,52 @@ async def run_tour(cfg: AutoConfig) -> None:
                 len(step_annotations),
             )
             rec.flush()
-            if cfg.zoom_on_click_factor is not None:
-                zoomed = apply_zoom_on_click(
-                    rec.frames_dir,
-                    factor=cfg.zoom_on_click_factor,
-                    frames_after_click=cfg.zoom_frames_after_click,
-                )
-                log.info(
-                    "zoomed %d frames (factor=%.1fx, %d frames after each click)",
-                    zoomed,
-                    cfg.zoom_on_click_factor,
-                    cfg.zoom_frames_after_click,
-                )
-            encode_fps = cfg.fps
-            if cfg.smooth:
-                smoothed = smooth_frames_dir(
-                    rec.frames_dir,
-                    SmoothConfig(output_fps=cfg.video_fps),
-                    source_fps=cfg.fps,
-                )
-                encode_fps = smoothed.output_fps
-                log.info(
-                    "smoothed reel: +%d frames, %d total @ %d fps",
-                    smoothed.inserted,
-                    smoothed.total_frames,
-                    encode_fps,
-                )
-            else:
-                inserted = interpolate_cursor_motion(rec.frames_dir, cfg.annotate.cursor_style)
-                if inserted:
-                    log.info(
-                        "interpolated %d frames (n=%d per gap, easing=%s, min_distance=%d)",
-                        inserted,
-                        cfg.annotate.cursor_style.interpolate_frames,
-                        cfg.annotate.cursor_style.interpolate_easing,
-                        cfg.annotate.cursor_style.interpolate_min_distance,
-                    )
-            log.info("annotating frames...")
-            annotate_frames_dir(
-                rec.frames_dir,
-                steps=step_annotations,
-                config=cfg.annotate,
-                regions=cfg.annotations,
-            )
+
             # Bookend the annotated frames with title / summary cards so a
             # human viewer sees a titled entry beat and a stats-summary
             # tail. Cards render at the browser's viewport size so they
             # match the surrounding frames exactly. The prepend also masks
             # any pre-first-paint white flash (#68/#129 Track G). Deferred
             # bookend-only tour totals go in the summary card. See #129 E.
-            if cfg.title_card or cfg.summary_card:
-                card_size = _card_size_for(cfg, rec.frames_dir)
-                if cfg.title_card:
-                    _prepend_title_card(rec.frames_dir, cfg, card_size)
-                if cfg.summary_card:
-                    _append_summary_card(
-                        rec.frames_dir,
-                        cfg,
-                        card_size,
-                        pages_visited=pages_visited,
-                        clicks=cfg.max_steps - clicks_remaining,
-                        tour_elapsed_s=time.monotonic() - tour_started,
-                    )
-            log.info("encoding %s...", cfg.out)
+            # Runs inside the kernel's before_encode seam: after annotation,
+            # before the one encode() call (#256).
+            def _bookends(frames_dir: Path) -> None:
+                if cfg.title_card or cfg.summary_card:
+                    card_size = _card_size_for(cfg, frames_dir)
+                    if cfg.title_card:
+                        _prepend_title_card(frames_dir, cfg, card_size)
+                    if cfg.summary_card:
+                        _append_summary_card(
+                            frames_dir,
+                            cfg,
+                            card_size,
+                            pages_visited=pages_visited,
+                            clicks=cfg.max_steps - clicks_remaining,
+                            tour_elapsed_s=time.monotonic() - tour_started,
+                        )
+
             out_path = Path(cfg.out)
-            enc = encode(
+            rendered = render_reel(
                 rec.frames_dir,
-                out_path,
-                fps=encode_fps,
-                quality=cfg.quality,
-                loop=cfg.loop,
-                format=cfg.format,  # type: ignore[arg-type]
+                RenderPlan(
+                    out=out_path,
+                    fps=cfg.fps,
+                    smooth=cfg.smooth,
+                    video_fps=cfg.video_fps,
+                    cursor_style=cfg.annotate.cursor_style,
+                    quality=cfg.quality,
+                    loop=cfg.loop,
+                    format=cfg.format,  # type: ignore[arg-type]
+                    annotate=cfg.annotate,
+                    step_annotations=step_annotations,
+                    regions=cfg.annotations,
+                    zoom_factor=cfg.zoom_on_click_factor,
+                    zoom_frames_after_click=cfg.zoom_frames_after_click,
+                ),
+                before_encode=_bookends,
             )
+            enc = rendered.enc
+            encode_fps = rendered.encode_fps
             media = _make_media(enc, encode_fps)
             sidecar = _write_sidecar(
                 out_path,
