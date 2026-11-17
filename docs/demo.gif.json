@@ -1,306 +1,1163 @@
 {
-  "schema_version": 1,
-  "clickcast_version": "0.2.0",
-  "url": "https://tailwindcss.com/",
+  "schema_version": 4,
+  "clickcast_version": "0.5.0",
+  "url": "https://react.dev/",
   "engine": "chromium",
   "viewport": [
     1280,
     800
   ],
-  "started_at": "2026-07-29T10:28:24.330172+00:00",
-  "duration_s": 34.77977657690644,
+  "started_at": "2026-11-17T10:16:40.727264+00:00",
+  "duration_s": 150.86965078790672,
   "media": {
-    "path": "/tmp/tw-tour.gif",
+    "path": "docs/demo.gif",
     "format": "gif",
-    "size_bytes": 984514,
-    "frame_count": 115,
-    "duration_s": 14.375,
-    "fps": 8
+    "size_bytes": 5010760,
+    "frame_count": 161,
+    "duration_s": 13.416666666666666,
+    "fps": 12
   },
-  "discovered_elements": [],
+  "discovered_elements": [
+    {
+      "selector": "role=link[name=\"React\"]",
+      "role": "link",
+      "text": "React",
+      "bbox": [
+        16,
+        8,
+        48,
+        48
+      ],
+      "score": 3,
+      "source": "dom-heuristic",
+      "accessibility": {
+        "role": "link",
+        "name": "React",
+        "state": {
+          "disabled": null,
+          "checked": null,
+          "expanded": null,
+          "pressed": null,
+          "selected": null
+        },
+        "grid_cell": null
+      }
+    },
+    {
+      "selector": "role=button[name=\"Use Dark Mode\"]",
+      "role": "button",
+      "text": "Use Dark Mode",
+      "bbox": [
+        1116,
+        8,
+        48,
+        48
+      ],
+      "score": 3,
+      "source": "dom-heuristic",
+      "accessibility": {
+        "role": "button",
+        "name": "Use Dark Mode",
+        "state": {
+          "disabled": null,
+          "checked": null,
+          "expanded": null,
+          "pressed": null,
+          "selected": null
+        },
+        "grid_cell": null
+      }
+    },
+    {
+      "selector": "role=link[name=\"Translations\"]",
+      "role": "link",
+      "text": "Translations",
+      "bbox": [
+        1164,
+        8,
+        48,
+        48
+      ],
+      "score": 3,
+      "source": "dom-heuristic",
+      "accessibility": {
+        "role": "link",
+        "name": "Translations",
+        "state": {
+          "disabled": null,
+          "checked": null,
+          "expanded": null,
+          "pressed": null,
+          "selected": null
+        },
+        "grid_cell": null
+      }
+    },
+    {
+      "selector": "role=link[name=\"Open on GitHub\"]",
+      "role": "link",
+      "text": "Open on GitHub",
+      "bbox": [
+        1212,
+        8,
+        48,
+        48
+      ],
+      "score": 3,
+      "source": "dom-heuristic",
+      "accessibility": {
+        "role": "link",
+        "name": "Open on GitHub",
+        "state": {
+          "disabled": null,
+          "checked": null,
+          "expanded": null,
+          "pressed": null,
+          "selected": null
+        },
+        "grid_cell": null
+      }
+    },
+    {
+      "selector": "role=link[name=\"v19.3\"]",
+      "role": "link",
+      "text": "v19.3",
+      "bbox": [
+        68,
+        9,
+        32,
+        46
+      ],
+      "score": 3,
+      "source": "dom-heuristic",
+      "accessibility": {
+        "role": "link",
+        "name": "v19.3",
+        "state": {
+          "disabled": null,
+          "checked": null,
+          "expanded": null,
+          "pressed": null,
+          "selected": null
+        },
+        "grid_cell": null
+      }
+    },
+    {
+      "selector": "role=link[name=\"Learn\"]",
+      "role": "link",
+      "text": "Learn",
+      "bbox": [
+        750,
+        11,
+        66,
+        42
+      ],
+      "score": 3,
+      "source": "dom-heuristic",
+      "accessibility": {
+        "role": "link",
+        "name": "Learn",
+        "state": {
+          "disabled": null,
+          "checked": null,
+          "expanded": null,
+          "pressed": null,
+          "selected": null
+        },
+        "grid_cell": null
+      }
+    },
+    {
+      "selector": "role=link[name=\"Reference\"]",
+      "role": "link",
+      "text": "Reference",
+      "bbox": [
+        822,
+        11,
+        100,
+        42
+      ],
+      "score": 3,
+      "source": "dom-heuristic",
+      "accessibility": {
+        "role": "link",
+        "name": "Reference",
+        "state": {
+          "disabled": null,
+          "checked": null,
+          "expanded": null,
+          "pressed": null,
+          "selected": null
+        },
+        "grid_cell": null
+      }
+    },
+    {
+      "selector": "role=link[name=\"Community\"] >> nth=0",
+      "role": "link",
+      "text": "Community",
+      "bbox": [
+        928,
+        11,
+        109,
+        42
+      ],
+      "score": 3,
+      "source": "dom-heuristic",
+      "accessibility": {
+        "role": "link",
+        "name": "Community",
+        "state": {
+          "disabled": null,
+          "checked": null,
+          "expanded": null,
+          "pressed": null,
+          "selected": null
+        },
+        "grid_cell": null
+      }
+    },
+    {
+      "selector": "role=link[name=\"Blog\"] >> nth=0",
+      "role": "link",
+      "text": "Blog",
+      "bbox": [
+        1043,
+        11,
+        57,
+        42
+      ],
+      "score": 3,
+      "source": "dom-heuristic",
+      "accessibility": {
+        "role": "link",
+        "name": "Blog",
+        "state": {
+          "disabled": null,
+          "checked": null,
+          "expanded": null,
+          "pressed": null,
+          "selected": null
+        },
+        "grid_cell": null
+      }
+    },
+    {
+      "selector": "role=button[name=\"Search\nCtrl\nK\"]",
+      "role": "button",
+      "text": "Search\nCtrl\nK",
+      "bbox": [
+        112,
+        12,
+        616,
+        40
+      ],
+      "score": 3,
+      "source": "dom-heuristic",
+      "accessibility": {
+        "role": "button",
+        "name": "Search Ctrl K",
+        "state": {
+          "disabled": null,
+          "checked": null,
+          "expanded": null,
+          "pressed": null,
+          "selected": null
+        },
+        "grid_cell": null
+      }
+    },
+    {
+      "selector": "role=link[name=\"Learn React\"] >> nth=0",
+      "role": "link",
+      "text": "Learn React",
+      "bbox": [
+        477,
+        432,
+        150,
+        47
+      ],
+      "score": 3,
+      "source": "dom-heuristic",
+      "accessibility": {
+        "role": "link",
+        "name": "Learn React",
+        "state": {
+          "disabled": null,
+          "checked": null,
+          "expanded": null,
+          "pressed": null,
+          "selected": null
+        },
+        "grid_cell": null
+      }
+    },
+    {
+      "selector": "role=link[name=\"API Reference\"] >> nth=0",
+      "role": "link",
+      "text": "API Reference",
+      "bbox": [
+        635,
+        432,
+        169,
+        47
+      ],
+      "score": 3,
+      "source": "dom-heuristic",
+      "accessibility": {
+        "role": "link",
+        "name": "API Reference",
+        "state": {
+          "disabled": null,
+          "checked": null,
+          "expanded": null,
+          "pressed": null,
+          "selected": null
+        },
+        "grid_cell": null
+      }
+    },
+    {
+      "selector": "role=button[name=\"Save\"] >> nth=0",
+      "role": "button",
+      "text": "Save",
+      "bbox": [
+        1184,
+        1172,
+        40,
+        40
+      ],
+      "score": 1,
+      "source": "dom-heuristic",
+      "accessibility": {
+        "role": "button",
+        "name": "Save",
+        "state": {
+          "disabled": null,
+          "checked": null,
+          "expanded": null,
+          "pressed": null,
+          "selected": null
+        },
+        "grid_cell": null
+      }
+    },
+    {
+      "selector": "role=link[name=\"Add React to your page\"]",
+      "role": "link",
+      "text": "Add React to your page",
+      "bbox": [
+        488,
+        3788,
+        304,
+        44
+      ],
+      "score": 1,
+      "source": "dom-heuristic",
+      "accessibility": {
+        "role": "link",
+        "name": "Add React to your page",
+        "state": {
+          "disabled": null,
+          "checked": null,
+          "expanded": null,
+          "pressed": null,
+          "selected": null
+        },
+        "grid_cell": null
+      }
+    },
+    {
+      "selector": "role=link[name=\"Next.js\"]",
+      "role": "link",
+      "text": "Next.js",
+      "bbox": [
+        746,
+        4283,
+        66,
+        26
+      ],
+      "score": 1,
+      "source": "dom-heuristic",
+      "accessibility": {
+        "role": "link",
+        "name": "Next.js",
+        "state": {
+          "disabled": null,
+          "checked": null,
+          "expanded": null,
+          "pressed": null,
+          "selected": null
+        },
+        "grid_cell": null
+      }
+    }
+  ],
   "steps": [
     {
       "index": 0,
       "action": "goto",
       "args": {
-        "timeout_ms": null,
-        "url": "https://tailwindcss.com/",
+        "timeout_ms": 15000,
+        "url": "https://react.dev/",
         "wait": "networkidle",
         "retries": 0
       },
       "status": "ok",
-      "duration_ms": 6121.7472814023495,
+      "duration_ms": 3877.25402507931,
       "frames": [
         "frame-0000-001.png",
         "frame-0000-002.png",
         "frame-0000-003.png",
         "frame-0000-004.png",
         "frame-0000-005.png",
-        "frame-0000-006.png",
-        "frame-0000-007.png",
-        "frame-0000-008.png",
-        "frame-0000-009.png",
-        "frame-0000-010.png",
-        "frame-0000-011.png",
-        "frame-0000-012.png",
-        "frame-0000-013.png",
-        "frame-0000-014.png",
-        "frame-0000-015.png",
-        "frame-0000-016.png",
-        "frame-0000-017.png",
-        "frame-0000-018.png",
-        "frame-0000-019.png",
-        "frame-0000-020.png",
-        "frame-0000-021.png",
-        "frame-0000-022.png",
-        "frame-0000-023.png",
-        "frame-0000-024.png"
+        "frame-0000-006.png"
       ],
-      "label": "Land on tailwindcss.com",
+      "label": null,
       "cursor_xy": null,
       "page_state": {
-        "title": "Tailwind CSS - Rapidly build modern websites without ever leaving your HTML.",
-        "url_after": "https://tailwindcss.com/",
+        "title": "React",
+        "url_after": "https://react.dev/",
         "console_errors": [],
         "page_errors": [],
-        "network_failed": [
-          "https://region1.google-analytics.com/g/collect?v=2&tid=G-TMR96VNVMT&gtm=45je67r2v9256037244za200zd9256037244&_p=1785320906578&gcd=13l3l3l2l1l1&npa=1&dma_cps=a&dma=1&are=1&cid=1948717386.1785320907&frm=0&ngs=1&pscdl=noapi&rcb=0&sr=1280x800&uaa=x86&uab=64&uafvl=HeadlessChrome%3B149.0.7827.55%7CChromium%3B149.0.7827.55%7CNot)A%253BBrand%3B24.0.0.0&uam=&uamb=0&uap=Linux&uapv=&uaw=0&ul=en-us&_s=1&tag_exp=115938466~115938468~118897920~118897930~119896803~120084215&sid=1785320906&sct=1&seg=0&dl=https%3A%2F%2Ftailwindcss.com%2F&dt=Tailwind%20CSS%20-%20Rapidly%20build%20modern%20websites%20without%20ever%20leaving%20your%20HTML.&en=page_view&_fv=1&_nsi=1&_ss=1&_ee=1&tfd=1176"
-        ]
+        "network_failed": []
       },
-      "error": null
+      "error": null,
+      "skip_reason": null,
+      "error_code": null
     },
     {
       "index": 1,
       "action": "click",
       "args": {
-        "timeout_ms": null,
-        "selector": "role=button[name=\"Select version of library\"]"
+        "timeout_ms": 15000,
+        "selector": "role=link[name=\"React\"]",
+        "wait": null
       },
-      "status": "ok",
-      "duration_ms": 2297.3589282482862,
+      "status": "skipped",
+      "duration_ms": 588.2786510046571,
       "frames": [
         "frame-0001-001.png",
         "frame-0001-002.png",
         "frame-0001-003.png",
         "frame-0001-004.png",
         "frame-0001-005.png",
-        "frame-0001-006.png",
-        "frame-0001-007.png",
-        "frame-0001-008.png",
-        "frame-0001-009.png",
-        "frame-0001-010.png",
-        "frame-0001-011.png",
-        "frame-0001-012.png",
-        "frame-0001-013.png",
-        "frame-0001-014.png",
-        "frame-0001-015.png",
-        "frame-0001-016.png"
+        "frame-0001-006.png"
       ],
-      "label": "Open version dropdown",
+      "label": "React",
       "cursor_xy": [
-        229,
-        28
+        40,
+        32
       ],
       "page_state": {
-        "title": "Tailwind CSS - Rapidly build modern websites without ever leaving your HTML.",
-        "url_after": "https://tailwindcss.com/",
+        "title": "React",
+        "url_after": "https://react.dev/",
         "console_errors": [],
         "page_errors": [],
         "network_failed": []
       },
-      "error": null
+      "error": "click produced no observable page reaction (url and title unchanged)",
+      "skip_reason": "optional_no_reaction",
+      "error_code": null
     },
     {
       "index": 2,
-      "action": "press",
+      "action": "click",
       "args": {
-        "timeout_ms": null,
-        "key": "Escape",
-        "selector": null
+        "timeout_ms": 15000,
+        "selector": "role=button[name=\"Use Dark Mode\"]",
+        "wait": null
       },
-      "status": "ok",
-      "duration_ms": 1610.3851348161697,
+      "status": "skipped",
+      "duration_ms": 558.7825311813504,
       "frames": [
         "frame-0002-001.png",
         "frame-0002-002.png",
         "frame-0002-003.png",
         "frame-0002-004.png",
         "frame-0002-005.png",
-        "frame-0002-006.png",
-        "frame-0002-007.png",
-        "frame-0002-008.png",
-        "frame-0002-009.png",
-        "frame-0002-010.png",
-        "frame-0002-011.png",
-        "frame-0002-012.png"
+        "frame-0002-006.png"
       ],
-      "label": "Close (symmetric)",
-      "cursor_xy": null,
+      "label": "Use Dark Mode",
+      "cursor_xy": [
+        1140,
+        32
+      ],
       "page_state": {
-        "title": "Tailwind CSS - Rapidly build modern websites without ever leaving your HTML.",
-        "url_after": "https://tailwindcss.com/",
+        "title": "React",
+        "url_after": "https://react.dev/",
         "console_errors": [],
         "page_errors": [],
         "network_failed": []
       },
-      "error": null
+      "error": "click produced no observable page reaction (url and title unchanged)",
+      "skip_reason": "optional_no_reaction",
+      "error_code": null
     },
     {
       "index": 3,
       "action": "click",
       "args": {
-        "timeout_ms": null,
-        "selector": "role=button[name=\"Ctrl K\"]"
+        "timeout_ms": 15000,
+        "selector": "role=link[name=\"Translations\"]",
+        "wait": null
       },
       "status": "ok",
-      "duration_ms": 2638.3343264460564,
+      "duration_ms": 564.2412870656699,
       "frames": [
         "frame-0003-001.png",
         "frame-0003-002.png",
         "frame-0003-003.png",
         "frame-0003-004.png",
         "frame-0003-005.png",
-        "frame-0003-006.png",
-        "frame-0003-007.png",
-        "frame-0003-008.png",
-        "frame-0003-009.png",
-        "frame-0003-010.png",
-        "frame-0003-011.png",
-        "frame-0003-012.png",
-        "frame-0003-013.png",
-        "frame-0003-014.png",
-        "frame-0003-015.png",
-        "frame-0003-016.png",
-        "frame-0003-017.png",
-        "frame-0003-018.png",
-        "frame-0003-019.png",
-        "frame-0003-020.png"
+        "frame-0003-006.png"
       ],
-      "label": "Open search overlay",
+      "label": "Translations",
       "cursor_xy": [
-        830,
-        28
+        1188,
+        32
       ],
       "page_state": {
-        "title": "Tailwind CSS - Rapidly build modern websites without ever leaving your HTML.",
-        "url_after": "https://tailwindcss.com/",
+        "title": "Translations \u2013 React",
+        "url_after": "https://react.dev/community/translations",
         "console_errors": [],
         "page_errors": [],
         "network_failed": []
       },
-      "error": null
+      "error": null,
+      "skip_reason": null,
+      "error_code": null
     },
     {
       "index": 4,
-      "action": "press",
+      "action": "click",
       "args": {
-        "timeout_ms": null,
-        "key": "Escape",
-        "selector": null
+        "timeout_ms": 15000,
+        "selector": "role=link[name=\"Open on GitHub\"]",
+        "wait": null
       },
       "status": "ok",
-      "duration_ms": 1516.3125954568386,
+      "duration_ms": 563.0614869296551,
       "frames": [
         "frame-0004-001.png",
         "frame-0004-002.png",
         "frame-0004-003.png",
         "frame-0004-004.png",
         "frame-0004-005.png",
-        "frame-0004-006.png",
-        "frame-0004-007.png",
-        "frame-0004-008.png",
-        "frame-0004-009.png",
-        "frame-0004-010.png",
-        "frame-0004-011.png",
-        "frame-0004-012.png"
+        "frame-0004-006.png"
       ],
-      "label": "Close (symmetric)",
-      "cursor_xy": null,
+      "label": "Open on GitHub",
+      "cursor_xy": [
+        1236,
+        32
+      ],
       "page_state": {
-        "title": "Tailwind CSS - Rapidly build modern websites without ever leaving your HTML.",
-        "url_after": "https://tailwindcss.com/",
+        "title": "React",
+        "url_after": "https://react.dev/",
         "console_errors": [],
         "page_errors": [],
         "network_failed": []
       },
-      "error": null
+      "error": null,
+      "skip_reason": null,
+      "error_code": null
     },
     {
       "index": 5,
-      "action": "scroll",
+      "action": "click",
       "args": {
-        "timeout_ms": null,
-        "to": null,
-        "by": 500,
-        "selector": null,
-        "dx": 0
+        "timeout_ms": 15000,
+        "selector": "role=link[name=\"v19.3\"]",
+        "wait": null
       },
       "status": "ok",
-      "duration_ms": 1505.6871566921473,
+      "duration_ms": 541.4731509517878,
       "frames": [
         "frame-0005-001.png",
         "frame-0005-002.png",
         "frame-0005-003.png",
         "frame-0005-004.png",
         "frame-0005-005.png",
-        "frame-0005-006.png",
-        "frame-0005-007.png",
-        "frame-0005-008.png",
-        "frame-0005-009.png",
-        "frame-0005-010.png",
-        "frame-0005-011.png",
-        "frame-0005-012.png"
+        "frame-0005-006.png"
       ],
-      "label": "Scroll down",
-      "cursor_xy": null,
+      "label": "v19.3",
+      "cursor_xy": [
+        84,
+        32
+      ],
       "page_state": {
-        "title": "Tailwind CSS - Rapidly build modern websites without ever leaving your HTML.",
-        "url_after": "https://tailwindcss.com/",
+        "title": "React Versions \u2013 React",
+        "url_after": "https://react.dev/versions",
         "console_errors": [],
         "page_errors": [],
         "network_failed": []
       },
-      "error": null
+      "error": null,
+      "skip_reason": null,
+      "error_code": null
     },
     {
       "index": 6,
-      "action": "scroll",
+      "action": "click",
       "args": {
-        "timeout_ms": null,
-        "to": null,
-        "by": -500,
-        "selector": null,
-        "dx": 0
+        "timeout_ms": 15000,
+        "selector": "role=link[name=\"Learn\"]",
+        "wait": null
       },
       "status": "ok",
-      "duration_ms": 1505.0577241927385,
+      "duration_ms": 553.2353431917727,
       "frames": [
         "frame-0006-001.png",
         "frame-0006-002.png",
         "frame-0006-003.png",
         "frame-0006-004.png",
         "frame-0006-005.png",
-        "frame-0006-006.png",
-        "frame-0006-007.png",
-        "frame-0006-008.png",
-        "frame-0006-009.png",
-        "frame-0006-010.png",
-        "frame-0006-011.png",
-        "frame-0006-012.png"
+        "frame-0006-006.png"
       ],
-      "label": "Scroll back up (symmetric)",
-      "cursor_xy": null,
+      "label": "Learn",
+      "cursor_xy": [
+        783,
+        32
+      ],
       "page_state": {
-        "title": "Tailwind CSS - Rapidly build modern websites without ever leaving your HTML.",
-        "url_after": "https://tailwindcss.com/",
+        "title": "Quick Start \u2013 React",
+        "url_after": "https://react.dev/learn",
+        "console_errors": [],
+        "page_errors": [],
+        "network_failed": [
+          "https://static.doubleclick.net/instream/ad_status.js",
+          "https://i.ytimg.com/vi/XxVg_s8xAms/sddefault.jpg?sqp=-oaymwEmCIAFEOAD8quKqQMa8AEB-AHOBoAC3AOKAgwIABABGFAgTShlMA8=&rs=AOn4CLCtjNRHYbjwwyp8rWOi1aSZ99y6gA",
+          "https://fonts.gstatic.com/s/roboto/v48/KFO7CnqEu92Fr1ME7kSn66aGLdTylUAMa3iUBGEe.woff2",
+          "https://fonts.gstatic.com/s/roboto/v48/KFO7CnqEu92Fr1ME7kSn66aGLdTylUAMa3yUBA.woff2",
+          "https://www.youtube.com/youtubei/v1/log_event?alt=json"
+        ]
+      },
+      "error": null,
+      "skip_reason": null,
+      "error_code": null
+    },
+    {
+      "index": 7,
+      "action": "click",
+      "args": {
+        "timeout_ms": 15000,
+        "selector": "role=link[name=\"Reference\"]",
+        "wait": null
+      },
+      "status": "ok",
+      "duration_ms": 564.2117459792644,
+      "frames": [
+        "frame-0007-001.png",
+        "frame-0007-002.png",
+        "frame-0007-003.png",
+        "frame-0007-004.png",
+        "frame-0007-005.png",
+        "frame-0007-006.png"
+      ],
+      "label": "Reference",
+      "cursor_xy": [
+        872,
+        32
+      ],
+      "page_state": {
+        "title": "React Reference Overview \u2013 React",
+        "url_after": "https://react.dev/reference/react",
         "console_errors": [],
         "page_errors": [],
         "network_failed": []
       },
-      "error": null
+      "error": null,
+      "skip_reason": null,
+      "error_code": null
+    },
+    {
+      "index": 8,
+      "action": "click",
+      "args": {
+        "timeout_ms": 15000,
+        "selector": "role=link[name=\"Community\"] >> nth=0",
+        "wait": null
+      },
+      "status": "ok",
+      "duration_ms": 561.418638098985,
+      "frames": [
+        "frame-0008-001.png",
+        "frame-0008-002.png",
+        "frame-0008-003.png",
+        "frame-0008-004.png",
+        "frame-0008-005.png",
+        "frame-0008-006.png"
+      ],
+      "label": "Community",
+      "cursor_xy": [
+        982,
+        32
+      ],
+      "page_state": {
+        "title": "React Community \u2013 React",
+        "url_after": "https://react.dev/community",
+        "console_errors": [],
+        "page_errors": [],
+        "network_failed": []
+      },
+      "error": null,
+      "skip_reason": null,
+      "error_code": null
+    },
+    {
+      "index": 9,
+      "action": "click",
+      "args": {
+        "timeout_ms": 15000,
+        "selector": "role=link[name=\"Blog\"] >> nth=0",
+        "wait": null
+      },
+      "status": "ok",
+      "duration_ms": 561.0371688380837,
+      "frames": [
+        "frame-0009-001.png",
+        "frame-0009-002.png",
+        "frame-0009-003.png",
+        "frame-0009-004.png",
+        "frame-0009-005.png",
+        "frame-0009-006.png"
+      ],
+      "label": "Blog",
+      "cursor_xy": [
+        1071,
+        32
+      ],
+      "page_state": {
+        "title": "React Blog \u2013 React",
+        "url_after": "https://react.dev/blog",
+        "console_errors": [],
+        "page_errors": [],
+        "network_failed": []
+      },
+      "error": null,
+      "skip_reason": null,
+      "error_code": null
+    },
+    {
+      "index": 10,
+      "action": "click",
+      "args": {
+        "timeout_ms": 15000,
+        "selector": "role=button[name=\"Search\nCtrl\nK\"]",
+        "wait": null
+      },
+      "status": "ok",
+      "duration_ms": 543.2541400659829,
+      "frames": [
+        "frame-0010-001.png",
+        "frame-0010-002.png",
+        "frame-0010-003.png",
+        "frame-0010-004.png",
+        "frame-0010-005.png",
+        "frame-0010-006.png"
+      ],
+      "label": "Search\nCtrl\nK",
+      "cursor_xy": [
+        420,
+        32
+      ],
+      "page_state": {
+        "title": "React",
+        "url_after": "https://react.dev/",
+        "console_errors": [],
+        "page_errors": [],
+        "network_failed": []
+      },
+      "error": null,
+      "skip_reason": null,
+      "error_code": null
+    },
+    {
+      "index": 11,
+      "action": "click",
+      "args": {
+        "timeout_ms": 15000,
+        "selector": "role=link[name=\"Learn React\"] >> nth=0",
+        "wait": null
+      },
+      "status": "skipped",
+      "duration_ms": 15027.402518084273,
+      "frames": [
+        "frame-0011-001.png",
+        "frame-0011-002.png",
+        "frame-0011-003.png",
+        "frame-0011-004.png",
+        "frame-0011-005.png",
+        "frame-0011-006.png"
+      ],
+      "label": "Learn React",
+      "cursor_xy": null,
+      "page_state": {
+        "title": "React",
+        "url_after": "https://react.dev/",
+        "console_errors": [],
+        "page_errors": [],
+        "network_failed": []
+      },
+      "error": "step 11 (Learn React): TimeoutError: Locator.click: Timeout 15000ms exceeded.\nCall log:\n  - waiting for locator(\"role=link[name=\\\"Learn React\\\"]\").first\n    - locator resolved to <a href=\"/learn\" target=\"_self\" aria-label=\"Learn React\" class=\"w-full sm:w-auto justify-center active:scale-[.98] transition-transform inline-flex font-bold items-center outline-none focus:outline-none focus-visible:outline focus-visible:outline-link focus:outline-offset-2 focus-visible:dark:focus:outline-link-dark leading-snug bg-link text-white dark:bg-brand-dark dark:text-gray-90 hover:bg-opacity-80 text-lg py-3 rounded-full px-4 sm:px-6\">Learn React</a>\n  - attempting click action\n    2 \u00d7 waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <div class=\"DocSearch-Dropdown\">\u2026</div> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n    - retrying click action\n    - waiting 20ms\n    - waiting for element to be visible, enabled and stable\n    - element is visible, enabled and stable\n    - scrolling into view if needed\n    - done scrolling\n    - <div class=\"DocSearch-Dropdown\">\u2026</div> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n  2 \u00d7 retrying click action\n      - waiting 100ms\n      - waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <header class=\"DocSearch-SearchBar\">\u2026</header> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n  7 \u00d7 retrying click action\n      - waiting 500ms\n      - waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <div class=\"DocSearch-Dropdown\">\u2026</div> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n    - retrying click action\n      - waiting 500ms\n      - waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <div class=\"DocSearch-Dropdown\">\u2026</div> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n    - retrying click action\n      - waiting 500ms\n      - waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <header class=\"DocSearch-SearchBar\">\u2026</header> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n    - retrying click action\n      - waiting 500ms\n      - waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <header class=\"DocSearch-SearchBar\">\u2026</header> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n  - retrying click action\n    - waiting 500ms\n\nselector 'role=link[name=\"Learn React\"] >> nth=0' resolved to 0 elements.\n\n  Candidates that might be what you meant (top 5 by similarity):\n    role=link[name=\"Learn React\"] >> nth=0        bbox=[477, 0, 150, 47]            score=1.50\n    role=link[name=\"React\"]                       bbox=[16, 8, 48, 48]              score=0.78\n    role=link[name=\"Learn\"]                       bbox=[750, 11, 66, 42]            score=0.78\n    role=link[name=\"Read more React news\"]        bbox=[60, 6615, 299, 44]          score=0.75\n    role=link[name=\"React Conf\"]                  bbox=[666, 4248, 144, 81]         score=0.69\n\n  Full page discovery: 75 interactive elements. Rerun with --dump-elements to see all.",
+      "skip_reason": "pre_action_failed",
+      "error_code": "timeout"
+    },
+    {
+      "index": 12,
+      "action": "click",
+      "args": {
+        "timeout_ms": 15000,
+        "selector": "role=link[name=\"API Reference\"] >> nth=0",
+        "wait": null
+      },
+      "status": "skipped",
+      "duration_ms": 15023.870621109381,
+      "frames": [
+        "frame-0012-001.png",
+        "frame-0012-002.png",
+        "frame-0012-003.png",
+        "frame-0012-004.png",
+        "frame-0012-005.png",
+        "frame-0012-006.png"
+      ],
+      "label": "API Reference",
+      "cursor_xy": null,
+      "page_state": {
+        "title": "React",
+        "url_after": "https://react.dev/",
+        "console_errors": [],
+        "page_errors": [],
+        "network_failed": []
+      },
+      "error": "step 12 (API Reference): TimeoutError: Locator.click: Timeout 15000ms exceeded.\nCall log:\n  - waiting for locator(\"role=link[name=\\\"API Reference\\\"]\").first\n    - locator resolved to <a target=\"_self\" href=\"/reference/react\" aria-label=\"API Reference\" class=\"w-full sm:w-auto justify-center active:scale-[.98] transition-transform inline-flex font-bold items-center outline-none focus:outline-none focus-visible:outline focus-visible:outline-link focus:outline-offset-2 focus-visible:dark:focus:outline-link-dark leading-snug text-primary dark:text-primary-dark shadow-secondary-button-stroke dark:shadow-secondary-button-stroke-dark hover:bg-gray-40/5 active:bg-gray-40/10 hover:dark\u2026>API Reference</a>\n  - attempting click action\n    - waiting for element to be visible, enabled and stable\n    - element is visible, enabled and stable\n    - scrolling into view if needed\n    - done scrolling\n    - <header class=\"DocSearch-SearchBar\">\u2026</header> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n  - retrying click action\n    - waiting for element to be visible, enabled and stable\n    - element is visible, enabled and stable\n    - scrolling into view if needed\n    - done scrolling\n    - <div class=\"DocSearch-Dropdown\">\u2026</div> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n  - retrying click action\n    - waiting 20ms\n    - waiting for element to be visible, enabled and stable\n    - element is visible, enabled and stable\n    - scrolling into view if needed\n    - done scrolling\n    - <div class=\"DocSearch-Dropdown\">\u2026</div> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n  2 \u00d7 retrying click action\n      - waiting 100ms\n      - waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <header class=\"DocSearch-SearchBar\">\u2026</header> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n  7 \u00d7 retrying click action\n      - waiting 500ms\n      - waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <div class=\"DocSearch-Dropdown\">\u2026</div> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n    - retrying click action\n      - waiting 500ms\n      - waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <div class=\"DocSearch-Dropdown\">\u2026</div> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n    - retrying click action\n      - waiting 500ms\n      - waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <header class=\"DocSearch-SearchBar\">\u2026</header> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n    - retrying click action\n      - waiting 500ms\n      - waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <header class=\"DocSearch-SearchBar\">\u2026</header> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n  - retrying click action\n    - waiting 500ms\n\nselector 'role=link[name=\"API Reference\"] >> nth=0' resolved to 0 elements.\n\n  Candidates that might be what you meant (top 5 by similarity):\n    role=link[name=\"API Reference\"] >> nth=0      bbox=[635, 0, 169, 47]            score=1.50\n    role=link[name=\"Reference\"]                   bbox=[822, 11, 100, 42]           score=0.89\n    role=link[name=\"Learn React\"] >> nth=0        bbox=[477, 0, 150, 47]            score=0.65\n    role=link[name=\"Meta Open Source\"]            bbox=[48, 8354, 198, 19]          score=0.65\n    role=link[name=\"React Router\"]                bbox=[842, 3851, 125, 26]         score=0.64\n\n  Full page discovery: 75 interactive elements. Rerun with --dump-elements to see all.",
+      "skip_reason": "pre_action_failed",
+      "error_code": "timeout"
+    },
+    {
+      "index": 13,
+      "action": "click",
+      "args": {
+        "timeout_ms": 15000,
+        "selector": "role=button[name=\"Save\"] >> nth=0",
+        "wait": null
+      },
+      "status": "skipped",
+      "duration_ms": 15014.208865119144,
+      "frames": [
+        "frame-0013-001.png",
+        "frame-0013-002.png",
+        "frame-0013-003.png",
+        "frame-0013-004.png",
+        "frame-0013-005.png",
+        "frame-0013-006.png"
+      ],
+      "label": "Save",
+      "cursor_xy": null,
+      "page_state": {
+        "title": "React",
+        "url_after": "https://react.dev/",
+        "console_errors": [],
+        "page_errors": [],
+        "network_failed": []
+      },
+      "error": "step 13 (Save): TimeoutError: Locator.click: Timeout 15000ms exceeded.\nCall log:\n  - waiting for locator(\"role=button[name=\\\"Save\\\"]\").first\n    - locator resolved to <button aria-label=\"Save\" data-hover=\"LikeButton\" class=\"outline-none focus:bg-red-50/5 focus:text-red-50 relative flex items-center justify-center w-10 h-10 cursor-pointer rounded-full hover:bg-card active:scale-95 active:bg-red-50/5 active:text-red-50 text-tertiary\">\u2026</button>\n  - attempting click action\n    2 \u00d7 waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> intercepts pointer events\n    - retrying click action\n    - waiting 20ms\n    2 \u00d7 waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> intercepts pointer events\n    - retrying click action\n      - waiting 100ms\n    29 \u00d7 waiting for element to be visible, enabled and stable\n       - element is visible, enabled and stable\n       - scrolling into view if needed\n       - done scrolling\n       - <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> intercepts pointer events\n     - retrying click action\n       - waiting 500ms\n\nselector 'role=button[name=\"Save\"] >> nth=0' resolved to 0 elements.\n\n  Candidates that might be what you meant (top 5 by similarity):\n    role=button[name=\"Save\"] >> nth=0             bbox=[1184, -0.0, 40, 40]         score=1.50\n    role=button[name=\"Search\"]                    bbox=[0, 0, 1280, 800]            score=0.64\n    role=button[name=\"Search\nCtrl\nK\"]             bbox=[112, 12, 616, 40]           score=0.54\n    role=button[name=\"Use Light Mode\"]            bbox=[1116, 8, 48, 48]            score=0.53\n    role=button[name=\"Reload\"]                    bbox=[1199, 3190, 29, 29]         score=0.52\n\n  Full page discovery: 75 interactive elements. Rerun with --dump-elements to see all.",
+      "skip_reason": "pre_action_failed",
+      "error_code": "timeout"
+    },
+    {
+      "index": 14,
+      "action": "click",
+      "args": {
+        "timeout_ms": 15000,
+        "selector": "role=link[name=\"Add React to your page\"]",
+        "wait": null
+      },
+      "status": "skipped",
+      "duration_ms": 15019.070108886808,
+      "frames": [
+        "frame-0014-001.png",
+        "frame-0014-002.png",
+        "frame-0014-003.png",
+        "frame-0014-004.png",
+        "frame-0014-005.png",
+        "frame-0014-006.png"
+      ],
+      "label": "Add React to your page",
+      "cursor_xy": null,
+      "page_state": {
+        "title": "React",
+        "url_after": "https://react.dev/",
+        "console_errors": [],
+        "page_errors": [],
+        "network_failed": []
+      },
+      "error": "step 14 (Add React to your page): TimeoutError: Locator.click: Timeout 15000ms exceeded.\nCall log:\n  - waiting for locator(\"role=link[name=\\\"Add React to your page\\\"]\")\n    - locator resolved to <a href=\"/learn/add-react-to-an-existing-project\" class=\"focus:outline-none focus-visible:outline focus-visible:outline-link focus:outline-offset-2 focus-visible:dark:focus:outline-link-dark group cursor-pointer w-auto justify-center inline-flex font-bold items-center mt-10 outline-none hover:bg-gray-40/5 active:bg-gray-40/10 hover:dark:bg-gray-60/5 active:dark:bg-gray-60/10 leading-tight hover:bg-opacity-80 text-lg py-2.5 rounded-full px-4 sm:px-6 ease-in-out shadow-secondary-button-stroke dark:\u2026>\u2026</a>\n  - attempting click action\n    - waiting for element to be visible, enabled and stable\n    - element is visible, enabled and stable\n    - scrolling into view if needed\n    - done scrolling\n    - <div class=\"DocSearch-Dropdown\">\u2026</div> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n  - retrying click action\n    - waiting for element to be visible, enabled and stable\n    - element is visible, enabled and stable\n    - scrolling into view if needed\n    - done scrolling\n    - <footer class=\"DocSearch-Footer\">\u2026</footer> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n  - retrying click action\n    - waiting 20ms\n    - waiting for element to be visible, enabled and stable\n    - element is visible, enabled and stable\n    - scrolling into view if needed\n    - done scrolling\n    - <div class=\"DocSearch-Dropdown\">\u2026</div> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n  2 \u00d7 retrying click action\n      - waiting 100ms\n      - waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <header class=\"DocSearch-SearchBar\">\u2026</header> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n  6 \u00d7 retrying click action\n      - waiting 500ms\n      - waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <footer class=\"DocSearch-Footer\">\u2026</footer> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n    - retrying click action\n      - waiting 500ms\n      - waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <div class=\"DocSearch-Dropdown\">\u2026</div> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n    - retrying click action\n      - waiting 500ms\n      - waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <header class=\"DocSearch-SearchBar\">\u2026</header> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n    - retrying click action\n      - waiting 500ms\n      - waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <header class=\"DocSearch-SearchBar\">\u2026</header> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n  - retrying click action\n    - waiting 500ms\n    - waiting for element to be visible, enabled and stable\n    - element is visible, enabled and stable\n    - scrolling into view if needed\n    - done scrolling\n    - <footer class=\"DocSearch-Footer\">\u2026</footer> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n  - retrying click action\n    - waiting 500ms\n    - waiting for element to be visible, enabled and stable\n    - element is visible, enabled and stable\n    - scrolling into view if needed\n    - done scrolling\n    - <div class=\"DocSearch-Dropdown\">\u2026</div> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n  - retrying click action\n    - waiting 500ms\n    - waiting for element to be visible, enabled and stable\n    - element is visible, enabled and stable\n    - scrolling into view if needed\n    - done scrolling\n    - <header class=\"DocSearch-SearchBar\">\u2026</header> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n  - retrying click action\n    - waiting 500ms\n\nselector 'role=link[name=\"Add React to your page\"]' resolved to 0 elements.\n\n  Candidates that might be what you meant (top 5 by similarity):\n    role=link[name=\"Add React to your page\"]      bbox=[488, 0, 304, 44]            score=1.50\n    role=link[name=\"React Router\"]                bbox=[842, 495, 125, 26]          score=0.72\n    role=link[name=\"React DOM APIs\"]              bbox=[541, 5064, 105, 31]         score=0.70\n    role=link[name=\"Read more React news\"]        bbox=[60, 3259, 299, 44]          score=0.69\n    role=link[name=\"Adding Interactivity\"]        bbox=[294, 5128, 124, 31]         score=0.69\n\n  Full page discovery: 75 interactive elements. Rerun with --dump-elements to see all.",
+      "skip_reason": "pre_action_failed",
+      "error_code": "timeout"
+    },
+    {
+      "index": 15,
+      "action": "click",
+      "args": {
+        "timeout_ms": 15000,
+        "selector": "role=link[name=\"Next.js\"]",
+        "wait": null
+      },
+      "status": "skipped",
+      "duration_ms": 15016.665572999045,
+      "frames": [
+        "frame-0015-001.png",
+        "frame-0015-002.png",
+        "frame-0015-003.png",
+        "frame-0015-004.png",
+        "frame-0015-005.png",
+        "frame-0015-006.png"
+      ],
+      "label": "Next.js",
+      "cursor_xy": null,
+      "page_state": {
+        "title": "React",
+        "url_after": "https://react.dev/",
+        "console_errors": [],
+        "page_errors": [],
+        "network_failed": []
+      },
+      "error": "step 15 (Next.js): TimeoutError: Locator.click: Timeout 15000ms exceeded.\nCall log:\n  - waiting for locator(\"role=link[name=\\\"Next.js\\\"]\")\n    - locator resolved to <a rel=\"noopener\" target=\"_blank\" href=\"https://nextjs.org\" class=\"inline text-link dark:text-link-dark border-b border-link border-opacity-0 hover:border-opacity-100 duration-100 ease-in transition leading-normal\">Next.js</a>\n  - attempting click action\n    - waiting for element to be visible, enabled and stable\n    - element is visible, enabled and stable\n    - scrolling into view if needed\n    - done scrolling\n    - <div class=\"DocSearch-Dropdown\">\u2026</div> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n  - retrying click action\n    - waiting for element to be visible, enabled and stable\n    - element is visible, enabled and stable\n    - scrolling into view if needed\n    - done scrolling\n    - <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> intercepts pointer events\n  - retrying click action\n    - waiting 20ms\n    - waiting for element to be visible, enabled and stable\n    - element is visible, enabled and stable\n    - scrolling into view if needed\n    - done scrolling\n    - <div class=\"DocSearch-Dropdown\">\u2026</div> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n  2 \u00d7 retrying click action\n      - waiting 100ms\n      - waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> intercepts pointer events\n  6 \u00d7 retrying click action\n      - waiting 500ms\n      - waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> intercepts pointer events\n    - retrying click action\n      - waiting 500ms\n      - waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <div class=\"DocSearch-Dropdown\">\u2026</div> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n    - retrying click action\n      - waiting 500ms\n      - waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> intercepts pointer events\n    - retrying click action\n      - waiting 500ms\n      - waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> intercepts pointer events\n  - retrying click action\n    - waiting 500ms\n    - waiting for element to be visible, enabled and stable\n    - element is visible, enabled and stable\n    - scrolling into view if needed\n    - done scrolling\n    - <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> intercepts pointer events\n  - retrying click action\n    - waiting 500ms\n    - waiting for element to be visible, enabled and stable\n    - element is visible, enabled and stable\n    - scrolling into view if needed\n    - done scrolling\n    - <div class=\"DocSearch-Dropdown\">\u2026</div> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n  - retrying click action\n    - waiting 500ms\n    - waiting for element to be visible, enabled and stable\n    - element is visible, enabled and stable\n    - scrolling into view if needed\n    - done scrolling\n    - <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> intercepts pointer events\n  - retrying click action\n    - waiting 500ms\n\nselector 'role=link[name=\"Next.js\"]' resolved to 0 elements.\n\n  Candidates that might be what you meant (top 5 by similarity):\n    role=link[name=\"Next.js\"]                     bbox=[746, 0, 66, 26]             score=1.50\n    role=link[name=\"Expo\"]                        bbox=[964, 1552, 49, 26]          score=0.62\n    role=link[name=\"React APIs\"]                  bbox=[541, 4537, 70, 31]          score=0.61\n    role=link[name=\"Acknowledgements\"]            bbox=[787, 4633, 124, 31]         score=0.61\n    role=link[name=\"React\"]                       bbox=[16, 8, 48, 48]              score=0.60\n\n  Full page discovery: 75 interactive elements. Rerun with --dump-elements to see all.",
+      "skip_reason": "pre_action_failed",
+      "error_code": "timeout"
+    },
+    {
+      "index": 16,
+      "action": "click",
+      "args": {
+        "timeout_ms": 15000,
+        "selector": "role=link[name=\"React Router\"]",
+        "wait": null
+      },
+      "status": "skipped",
+      "duration_ms": 15018.717858940363,
+      "frames": [
+        "frame-0016-001.png",
+        "frame-0016-002.png",
+        "frame-0016-003.png",
+        "frame-0016-004.png",
+        "frame-0016-005.png",
+        "frame-0016-006.png"
+      ],
+      "label": "React Router",
+      "cursor_xy": null,
+      "page_state": {
+        "title": "React",
+        "url_after": "https://react.dev/",
+        "console_errors": [],
+        "page_errors": [],
+        "network_failed": []
+      },
+      "error": "step 16 (React Router): TimeoutError: Locator.click: Timeout 15000ms exceeded.\nCall log:\n  - waiting for locator(\"role=link[name=\\\"React Router\\\"]\")\n    - locator resolved to <a rel=\"noopener\" target=\"_blank\" href=\"https://reactrouter.com\" class=\"inline text-link dark:text-link-dark border-b border-link border-opacity-0 hover:border-opacity-100 duration-100 ease-in transition leading-normal\">React Router</a>\n  - attempting click action\n    2 \u00d7 waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> intercepts pointer events\n    - retrying click action\n    - waiting 20ms\n    - waiting for element to be visible, enabled and stable\n    - element is visible, enabled and stable\n    - scrolling into view if needed\n    - done scrolling\n    - <div class=\"DocSearch-Dropdown\">\u2026</div> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n  2 \u00d7 retrying click action\n      - waiting 100ms\n      - waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> intercepts pointer events\n  6 \u00d7 retrying click action\n      - waiting 500ms\n      - waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> intercepts pointer events\n    - retrying click action\n      - waiting 500ms\n      - waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <div class=\"DocSearch-Dropdown\">\u2026</div> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n    - retrying click action\n      - waiting 500ms\n      - waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> intercepts pointer events\n    - retrying click action\n      - waiting 500ms\n      - waiting for element to be visible, enabled and stable\n      - element is visible, enabled and stable\n      - scrolling into view if needed\n      - done scrolling\n      - <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> intercepts pointer events\n  - retrying click action\n    - waiting 500ms\n    - waiting for element to be visible, enabled and stable\n    - element is visible, enabled and stable\n    - scrolling into view if needed\n    - done scrolling\n    - <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> intercepts pointer events\n  - retrying click action\n    - waiting 500ms\n    - waiting for element to be visible, enabled and stable\n    - element is visible, enabled and stable\n    - scrolling into view if needed\n    - done scrolling\n    - <div class=\"DocSearch-Dropdown\">\u2026</div> from <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> subtree intercepts pointer events\n  - retrying click action\n    - waiting 500ms\n    - waiting for element to be visible, enabled and stable\n    - element is visible, enabled and stable\n    - scrolling into view if needed\n    - done scrolling\n    - <div tabindex=\"0\" role=\"button\" aria-expanded=\"true\" aria-haspopup=\"listbox\" aria-labelledby=\"docsearch-label\" class=\"DocSearch DocSearch-Container\">\u2026</div> intercepts pointer events\n  - retrying click action\n    - waiting 500ms\n\nselector 'role=link[name=\"React Router\"]' resolved to 0 elements.\n\n  Candidates that might be what you meant (top 5 by similarity):\n    role=link[name=\"React Router\"]                bbox=[842, 0, 125, 26]            score=1.50\n    role=link[name=\"React on Twitter\"]            bbox=[1064, 4698, 22, 22]         score=0.83\n    role=link[name=\"React Native\"] >> nth=0       bbox=[797, 1552, 122, 26]         score=0.80\n    role=link[name=\"React on Bluesky\"]            bbox=[1094, 4698, 21, 21]         score=0.79\n    role=link[name=\"React Conf\"]                  bbox=[666, 397, 144, 81]          score=0.78\n\n  Full page discovery: 75 interactive elements. Rerun with --dump-elements to see all.",
+      "skip_reason": "pre_action_failed",
+      "error_code": "timeout"
+    },
+    {
+      "index": 17,
+      "action": "click",
+      "args": {
+        "timeout_ms": 15000,
+        "selector": "role=button[name=\"Reload\"]",
+        "wait": null
+      },
+      "status": "skipped",
+      "duration_ms": 15011.870221002027,
+      "frames": [
+        "frame-0017-001.png",
+        "frame-0017-002.png",
+        "frame-0017-003.png",
+        "frame-0017-004.png",
+        "frame-0017-005.png",
+        "frame-0017-006.png"
+      ],
+      "label": "Reload",
+      "cursor_xy": null,
+      "page_state": {
+        "title": "React",
+        "url_after": "https://react.dev/",
+        "console_errors": [],
+        "page_errors": [],
+        "network_failed": []
+      },
+      "error": "step 17 (Reload): TimeoutError: Locator.click: Timeout 15000ms exceeded.\nCall log:\n  - waiting for locator(\"role=button[name=\\\"Reload\\\"]\")\n    - locator resolved to <button aria-label=\"Reload\" class=\"z-10 flex items-center p-1.5 rounded-full cursor-pointer justify-center bg-[#ebecef] hover:bg-[#d3d7de]\">\u2026</button>\n  - attempting click action\n    2 \u00d7 waiting for element to be visible, enabled and stable\n      - element is not stable\n    - retrying click action\n    - waiting 20ms\n    2 \u00d7 waiting for element to be visible, enabled and stable\n      - element is not stable\n    - retrying click action\n      - waiting 100ms\n    28 \u00d7 waiting for element to be visible, enabled and stable\n       - element is not stable\n     - retrying click action\n       - waiting 500ms\n\nselector 'role=button[name=\"Reload\"]' resolved to 0 elements.\n\n  Candidates that might be what you meant (top 5 by similarity):\n    role=button[name=\"Reload\"]                    bbox=[1199, 79, 29, 29]           score=1.50\n    role=button[name=\"Use Light Mode\"]            bbox=[1116, 8, 48, 48]            score=0.64\n    role=button[name=\"Search\nCtrl\nK\"]             bbox=[112, 12, 616, 40]           score=0.53\n    role=button[name=\"Save\"] >> nth=0             bbox=[1184, 418, 40, 40]          score=0.52\n    role=button[name=\"Search\"]                    bbox=[0, 0, 1280, 800]            score=0.50\n\n  Full page discovery: 75 interactive elements. Rerun with --dump-elements to see all.",
+      "skip_reason": "pre_action_failed",
+      "error_code": "timeout"
+    },
+    {
+      "index": 18,
+      "action": "scroll",
+      "args": {
+        "timeout_ms": null,
+        "to": null,
+        "by": 600,
+        "selector": null,
+        "dx": 0
+      },
+      "status": "ok",
+      "duration_ms": 502.9776080045849,
+      "frames": [
+        "frame-0018-001.png",
+        "frame-0018-002.png",
+        "frame-0018-003.png",
+        "frame-0018-004.png",
+        "frame-0018-005.png",
+        "frame-0018-006.png"
+      ],
+      "label": null,
+      "cursor_xy": null,
+      "page_state": {
+        "title": "React",
+        "url_after": "https://react.dev/",
+        "console_errors": [],
+        "page_errors": [],
+        "network_failed": []
+      },
+      "error": null,
+      "skip_reason": null,
+      "error_code": null
     }
   ],
   "warnings": [],
   "errors": [],
-  "feedback": null
+  "feedback": null,
+  "graph": {
+    "nodes": [
+      {
+        "id": "n1",
+        "kind": "page",
+        "url": "https://react.dev/",
+        "title": "React",
+        "dom_signature": "",
+        "first_seen_step": 0,
+        "last_seen_step": 18,
+        "components": []
+      },
+      {
+        "id": "n2",
+        "kind": "page",
+        "url": "https://react.dev/community/translations",
+        "title": "Translations \u2013 React",
+        "dom_signature": "",
+        "first_seen_step": 3,
+        "last_seen_step": 3,
+        "components": []
+      },
+      {
+        "id": "n3",
+        "kind": "page",
+        "url": "https://react.dev/versions",
+        "title": "React Versions \u2013 React",
+        "dom_signature": "",
+        "first_seen_step": 5,
+        "last_seen_step": 5,
+        "components": []
+      },
+      {
+        "id": "n4",
+        "kind": "page",
+        "url": "https://react.dev/learn",
+        "title": "Quick Start \u2013 React",
+        "dom_signature": "",
+        "first_seen_step": 6,
+        "last_seen_step": 6,
+        "components": []
+      },
+      {
+        "id": "n5",
+        "kind": "page",
+        "url": "https://react.dev/reference/react",
+        "title": "React Reference Overview \u2013 React",
+        "dom_signature": "",
+        "first_seen_step": 7,
+        "last_seen_step": 7,
+        "components": []
+      },
+      {
+        "id": "n6",
+        "kind": "page",
+        "url": "https://react.dev/community",
+        "title": "React Community \u2013 React",
+        "dom_signature": "",
+        "first_seen_step": 8,
+        "last_seen_step": 8,
+        "components": []
+      },
+      {
+        "id": "n7",
+        "kind": "page",
+        "url": "https://react.dev/blog",
+        "title": "React Blog \u2013 React",
+        "dom_signature": "",
+        "first_seen_step": 9,
+        "last_seen_step": 9,
+        "components": []
+      }
+    ],
+    "edges": [
+      {
+        "from": "n1",
+        "to": "n2",
+        "via_step": 3,
+        "selector": "role=link[name=\"Translations\"]",
+        "transition_kind": "navigation"
+      },
+      {
+        "from": "n2",
+        "to": "n1",
+        "via_step": 4,
+        "selector": "role=link[name=\"Open on GitHub\"]",
+        "transition_kind": "navigation"
+      },
+      {
+        "from": "n1",
+        "to": "n3",
+        "via_step": 5,
+        "selector": "role=link[name=\"v19.3\"]",
+        "transition_kind": "navigation"
+      },
+      {
+        "from": "n3",
+        "to": "n4",
+        "via_step": 6,
+        "selector": "role=link[name=\"Learn\"]",
+        "transition_kind": "navigation"
+      },
+      {
+        "from": "n4",
+        "to": "n5",
+        "via_step": 7,
+        "selector": "role=link[name=\"Reference\"]",
+        "transition_kind": "navigation"
+      },
+      {
+        "from": "n5",
+        "to": "n6",
+        "via_step": 8,
+        "selector": "role=link[name=\"Community\"] >> nth=0",
+        "transition_kind": "navigation"
+      },
+      {
+        "from": "n6",
+        "to": "n7",
+        "via_step": 9,
+        "selector": "role=link[name=\"Blog\"] >> nth=0",
+        "transition_kind": "navigation"
+      },
+      {
+        "from": "n7",
+        "to": "n1",
+        "via_step": 10,
+        "selector": "role=button[name=\"Search\nCtrl\nK\"]",
+        "transition_kind": "navigation"
+      }
+    ]
+  },
+  "annotate": null
 }

@@ -11,13 +11,6 @@ GIF and a summary table. See [#206](https://github.com/AlexKay28/clickcast/issue
 [#210](https://github.com/AlexKay28/clickcast/issues/210)) for the full spec
 this implements.
 
-> **Depends on [#211](https://github.com/AlexKay28/clickcast/pull/211)
-> (`feat/visual-diff`).** The `clickcast diff` command this Action's visual
-> gate shells out to doesn't exist on `main` yet. Until #211 merges and a
-> release ships with it, `baseline-sidecar` / `diff-*` inputs are
-> non-functional against a real PyPI install — `scenario`/`url` + `baseline`
-> (the structural `assertions` gate) work standalone today.
-
 ## How it relates to the manual shell recipe
 
 The main README's 2-line gate (`clickcast run` + `clickcast assertions
