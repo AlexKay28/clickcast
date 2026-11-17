@@ -54,7 +54,9 @@ Two session-lifecycle tools that have no `core/actions.py` counterpart
   the accumulated sidecar-shaped transcript to disk.
 
 `settle` and `observe` (below) are non-step tools: perception primitives
-from `perception/`, not `Step` wrappers.
+from `perception/`, not `Step` wrappers. `receipt` is the loop's closing
+call — it summarizes the live transcript and writes artifacts, and does
+**not** close the session.
 
 Selector-shaped action tools also accept `ref` (an `eN` handle from
 `observe`) in place of `selector`/`into` — see "`ref=` — act on an observed
@@ -392,6 +394,49 @@ from the parity table above.
 
 `observe` does not append a step to the transcript (it is a read, not an
 action), so it never changes the sidecar shape written by `close_session`.
+
+### `receipt`
+
+The closing call of the perception loop (#271): `observe → act → settle →
+receipt`. Summarizes the steps recorded so far into a ≤200-token `receipt/1`
+payload and writes one artifact directory.
+
+| | |
+|---|---|
+| Args | `media` (`bool`, default `false` — encode the recorded frames as a playable `tour.mp4` through the shared render kernel), `out` (`str \| null` — artifact directory; defaults to `<session frames>/receipt`, which `close_session` deletes, so pass a path to keep the artifacts), `baseline` (`str \| null` — assertions JSON to measure drift against), `baseline_sidecar` (`str \| null` — sidecar to pixel-diff against, adding `visual_diff`) |
+| Returns | **Text only** — one `TextContent` block with the `receipt/1` summary below. |
+| Errors | `other` — no active session. |
+
+```jsonc
+{
+  "schema": "receipt/1",
+  "media": {"path": "tour.mp4", "duration_s": 14.2, "frames": 170},  // only with media=True
+  "sidecar": "tour.mp4.json",        // relative to the artifact directory
+  "sidecar_version": 5,
+  "steps": {"ok": 6, "failed": 1, "skipped": 0},
+  "top_error": {"step": 4, "error_code": "timeout"},  // omitted when nothing failed
+  "assertions": {"drift": 2, "baseline": "baseline.json"},  // only when baseline was given
+  "visual_diff": {"changed_steps": [3], "max_changed_pct": 6.4},  // only with baseline_sidecar
+  "tokens": {"budget": 200, "estimated": 96}
+}
+```
+
+- **Token budget**: `tokens.estimated` is `ceil(len(compact_json)/4)` of the
+  exact returned payload (the `observe` estimator in `perception/tokens.py`),
+  and is enforced in production code — optional blocks are dropped
+  (`visual_diff` first, then `assertions`) until the summary fits 200.
+- **Omissions**: blocks with nothing to report are absent. `assertions` and
+  `visual_diff` only appear when a baseline was supplied; `top_error` only
+  when a step failed.
+- **`top_error`**: `step` is the 0-based position of the **first**
+  `status: "failed"` step; `error_code` is that step's enumerated code (the
+  same values as "Error modes"), never the free-text `error`.
+- **Artifacts**: the sidecar (schema v5), `assertions.json`, a copy of the
+  baseline, `visual-diff/`, and `receipt.json` all live in `out`. Details
+  (per-step counters, page state, deltas, frames) live in the sidecar, not
+  the summary.
+- **No session change**: `receipt` is a read. It does not append a step and
+  does **not** close the session — call `close_session` when done.
 
 ## Confirmed against `core/actions.py`
 

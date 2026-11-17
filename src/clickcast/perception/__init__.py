@@ -1,6 +1,6 @@
-"""Perception primitives — "what is the page doing right now?" (#263, #265).
+"""Perception primitives — "what is the page doing right now?" (#263, #265, #271).
 
-Two primitives live here:
+Three primitives live here:
 
 - :func:`observe` — a token-bounded snapshot of the page's interactive
   elements, addressed by stable opaque ``ref=eN`` handles
@@ -9,9 +9,18 @@ Two primitives live here:
   DOM and compositor activity (:mod:`clickcast.perception.settle`), answering
   the question bare sleeps and ``networkidle`` cannot: *has the page stopped
   changing?*
+- :func:`clickcast.perception.receipt.write_receipt` / ``build_receipt`` —
+  the closing call of the loop: a ≤200-token summary plus one artifact
+  directory holding the details (:mod:`clickcast.perception.receipt`).
 """
 
 from clickcast.perception.observe import MAX_NODES, SCHEMA, observe
+from clickcast.perception.receipt import (
+    RECEIPT_FILENAME,
+    RECEIPT_TOKEN_BUDGET,
+    build_receipt,
+    write_receipt,
+)
 from clickcast.perception.refs import (
     RefCandidate,
     RefEntry,
@@ -42,6 +51,8 @@ __all__ = [
     "MAX_COMPACT_CHARS",
     "MAX_NODES",
     "POLL_MS",
+    "RECEIPT_FILENAME",
+    "RECEIPT_TOKEN_BUDGET",
     "SCHEMA",
     "SIGNALS",
     "RefCandidate",
@@ -50,6 +61,7 @@ __all__ = [
     "SettleResult",
     "SignalResult",
     "SignalSpec",
+    "build_receipt",
     "compact_json",
     "estimate_tokens",
     "fits_budget",
@@ -57,4 +69,5 @@ __all__ = [
     "registry_for",
     "reset_registry",
     "settle",
+    "write_receipt",
 ]

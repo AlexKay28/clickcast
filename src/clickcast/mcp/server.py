@@ -48,11 +48,20 @@ from clickcast.core.opts import BrowserOpts
 from clickcast.core.session import Session, WaitArg
 from clickcast.core.viewport import Viewport
 from clickcast.feedback import PageState, ReportBuilder, StepDelta
-from clickcast.kernel import finalize_report, transcript_media, write_sidecar
+from clickcast.feedback.visual_diff import visual_diff as _visual_diff
+from clickcast.kernel import (
+    RenderPlan,
+    finalize_report,
+    make_media,
+    render_reel,
+    transcript_media,
+    write_sidecar,
+)
 from clickcast.perception import observe as _observe
 from clickcast.perception import settle as settle_session
 from clickcast.perception.delta import capture as _capture_observation
 from clickcast.perception.delta import diff_observations as _diff_observations
+from clickcast.perception.receipt import write_receipt as _write_receipt
 from clickcast.perception.refs import registry_for
 from mcp import types as mcp_types
 
@@ -69,7 +78,21 @@ _INSTRUCTIONS = (
     "screenshot as needed, then close_session when done. Every action tool "
     "returns an annotated PNG frame plus a JSON page_state/error_code block "
     "— gate on error_code, not on message text. observe returns a text-only, "
-    "token-bounded snapshot with stable ref=eN handles."
+    "token-bounded snapshot with stable ref=eN handles, settle waits until the "
+    "page stops changing, and receipt closes the loop with a ≤200-token "
+    "summary plus an artifact directory. receipt does not close the session."
+)
+
+#: The frames a live session records are already annotated per action, so the
+#: receipt encode must not stamp overlays a second time. Same toggles as
+#: ``clickcast.reel._NO_OVERLAY_ANNOTATE`` (kept local: the MCP server must
+#: not import the SDK facade).
+_NO_OVERLAY_ANNOTATE = AnnotateConfig(
+    clicks=False,
+    labels=False,
+    cursor=False,
+    progress=False,
+    actions_panel=False,
 )
 
 
@@ -198,6 +221,24 @@ def _resolve_grid(
         color=color if color is not None else base.color,
         style=style if style is not None else base.style,  # type: ignore[arg-type]
     )
+
+
+def _write_live_frames_manifest(frames_dir: Path) -> None:
+    """Give the encoder a manifest for a live session's ``step-NNNN.png`` frames.
+
+    The recorder writes ``frame-*.png`` + ``frames.json``; the MCP server
+    writes one already-annotated PNG per action and no manifest, and the
+    encoder only globs ``frame-*.png``. Regenerated on every ``receipt``
+    call so it always reflects the frames recorded so far.
+    """
+    frames = sorted(frames_dir.glob("step-*.png"))
+    manifest = {
+        "frames": [
+            {"path": frame.name, "step_index": index, "sub_index": 0, "cursor_xy": None}
+            for index, frame in enumerate(frames)
+        ]
+    }
+    (frames_dir / "frames.json").write_text(json.dumps(manifest))
 
 
 def create_server(
@@ -712,6 +753,85 @@ def create_server(
         payload = await _observe(state.session, token_budget=token_budget)
         return mcp_types.CallToolResult(
             content=[mcp_types.TextContent(type="text", text=json.dumps(payload))]
+        )
+
+    @server.tool()
+    @_safe_tool
+    async def receipt(
+        media: bool = False,
+        out: str | None = None,
+        baseline: str | None = None,
+        baseline_sidecar: str | None = None,
+    ) -> mcp_types.CallToolResult:
+        """Close the perception loop for the live session (#271).
+
+        Writes one artifact directory (default: ``<session frames>/receipt``,
+        pass ``out`` to keep it after ``close_session``) containing the v5
+        sidecar for the steps recorded so far, ``assertions.json``, and the
+        ``receipt/1`` summary — returned as the single ``TextContent`` block.
+
+        ``media=True`` encodes the recorded frames as a playable ``tour.mp4``
+        through the shared render kernel and writes the sidecar beside it.
+        ``baseline`` (an assertions JSON) adds the ``assertions.drift`` block;
+        ``baseline_sidecar`` pixel-diffs the fresh sidecar against that
+        baseline and adds ``visual_diff``.
+
+        This tool does **not** close the session — keep driving it, or call
+        ``close_session`` explicitly. It also appends no step to the
+        transcript (receipt is a read).
+        """
+        if state.session is None or state.builder is None or state.frames_dir is None:
+            return _error_result("other", _ERROR_NO_SESSION)
+
+        out_dir = Path(out) if out else state.frames_dir / "receipt"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        builder = state.builder
+        media_path: Path | None = None
+
+        if media:
+            media_path = out_dir / "tour.mp4"
+            # The recorded live frames are one PNG per action with no
+            # frames.json manifest; the kernel encodes them in sorted order at
+            # 1 fps (a slide per step). No second encode path (#261).
+            _write_live_frames_manifest(state.frames_dir)
+            plan = RenderPlan(
+                out=media_path,
+                fps=1,
+                interpolate=False,
+                annotate=_NO_OVERLAY_ANNOTATE,
+            )
+            rendered = render_reel(state.frames_dir, plan)
+            report = finalize_report(builder, make_media(rendered.enc, rendered.encode_fps))
+            if report is None:  # pragma: no cover — builder is always present here
+                return _error_result("other", "no recorded steps to summarize")
+            sidecar = write_sidecar(media_path, report)
+        else:
+            report = finalize_report(builder, transcript_media(len(builder.steps)))
+            if report is None:  # pragma: no cover — builder is always present here
+                return _error_result("other", "no recorded steps to summarize")
+            target = out_dir / "transcript.json"
+            sidecar = write_sidecar(target, report, target=target)
+
+        visual = None
+        if baseline_sidecar is not None:
+            if sidecar is None:  # pragma: no cover — a report is always present
+                return _error_result("other", "no sidecar to diff")
+            visual = _visual_diff(
+                sidecar,
+                baseline_sidecar,
+                out_dir=out_dir / "visual-diff",
+            )
+
+        summary = _write_receipt(
+            report,
+            out_dir,
+            media_path=media_path,
+            sidecar_path=sidecar,
+            baseline=baseline,
+            visual_diff=visual,
+        )
+        return mcp_types.CallToolResult(
+            content=[mcp_types.TextContent(type="text", text=json.dumps(summary))]
         )
 
     return server

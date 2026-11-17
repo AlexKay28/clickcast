@@ -23,6 +23,7 @@ _EXPECTED_TOOLS = {
     "screenshot",
     "settle",
     "observe",
+    "receipt",
 }
 
 
