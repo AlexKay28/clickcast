@@ -49,6 +49,7 @@ from clickcast.core.session import Session, WaitArg
 from clickcast.core.viewport import Viewport
 from clickcast.feedback import PageState, ReportBuilder
 from clickcast.kernel import finalize_report, transcript_media, write_sidecar
+from clickcast.perception import observe as _observe
 from clickcast.perception import settle as settle_session
 from mcp import types as mcp_types
 
@@ -64,7 +65,8 @@ _INSTRUCTIONS = (
     "first, then goto/click/dblclick/hover/type/press/select/scroll/wait/"
     "screenshot as needed, then close_session when done. Every action tool "
     "returns an annotated PNG frame plus a JSON page_state/error_code block "
-    "— gate on error_code, not on message text."
+    "— gate on error_code, not on message text. observe returns a text-only, "
+    "token-bounded snapshot with stable ref=eN handles."
 )
 
 
@@ -560,7 +562,25 @@ def create_server(
             return _error_result("other", _ERROR_NO_SESSION)
         result = await settle_session(state.session, budget_ms=budget_ms)
         return mcp_types.CallToolResult(
-            content=[mcp_types.TextContent(type="text", text=json.dumps(result.to_dict()))],
+            content=[mcp_types.TextContent(type="text", text=json.dumps(result.to_dict()))]
+        )
+
+    @server.tool()
+    @_safe_tool
+    async def observe(token_budget: int = 800) -> mcp_types.CallToolResult:
+        """Return a compact, token-bounded snapshot of the current page.
+
+        Text only — no image. Each node carries a stable opaque ``ref``
+        (``eN``) for the live session, plus role/name/bbox/disabled state.
+        Refs stay identical across repeated calls, and refs whose elements
+        disappeared are reported in the top-level ``removed`` list. See
+        ``docs/mcp-tool-schema.md`` for the full ``observe/1`` contract.
+        """
+        if state.session is None:
+            return _error_result("other", _ERROR_NO_SESSION)
+        payload = await _observe(state.session, token_budget=token_budget)
+        return mcp_types.CallToolResult(
+            content=[mcp_types.TextContent(type="text", text=json.dumps(payload))]
         )
 
     return server

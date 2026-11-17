@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Stress — Clickcast Fixture</title>
+  <style>
+    body { font-family: sans-serif; margin: 20px; color: #222; }
+    nav { background: #eef2f7; padding: 12px; margin-bottom: 20px; border-radius: 4px; }
+    nav a { margin-right: 16px; color: #14509d; text-decoration: none; font-weight: 600; }
+    #grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+    #grid button { padding: 8px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <nav aria-label="Primary">
+    <a href="/">Home</a>
+    <a href="/form.html">Form</a>
+    <a href="/tabs.html">Tabs</a>
+  </nav>
+
+  <main>
+    <h1>Stress — 200 interactive elements</h1>
+    <p>An adversarial observation target: far more actions than a snapshot can ship.</p>
+    <div id="grid"></div>
+  </main>
+
+  <script>
+    const grid = document.getElementById('grid');
+    for (let i = 1; i <= 200; i += 1) {
+      const button = document.createElement('button');
+      button.id = `action-${i}`;
+      button.textContent = `Action ${String(i).padStart(3, '0')}`;
+      grid.appendChild(button);
+    }
+  </script>
+</body>
+</html>

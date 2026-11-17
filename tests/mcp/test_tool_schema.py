@@ -22,6 +22,7 @@ _EXPECTED_TOOLS = {
     "wait",
     "screenshot",
     "settle",
+    "observe",
 }
 
 
