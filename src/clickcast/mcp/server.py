@@ -28,7 +28,7 @@ from typing import Any, TypeVar, cast
 
 from mcp.server.fastmcp import FastMCP
 
-from clickcast.annotate import AnnotateConfig, Annotator, GridConfig
+from clickcast.annotate import AnnotateConfig, Annotator, GridConfig, ripple_stage_for
 from clickcast.core.actions import (
     BaseStep,
     ClickStep,
@@ -218,7 +218,15 @@ def create_server(
                 if step.action in ("click", "dblclick") and result.status == "ok"
                 else None
             )
-            ripple_stage = annotator.config.ripple.stages if click_at else 0
+            # One shared rule with the batch pipeline (#262): a live frame is
+            # a single post-click frame, so it is ripple stage 1 — not the
+            # fully-expanded final stage this used to pass.
+            ripple_stage = ripple_stage_for(
+                click_at=click_at,
+                sub_index=0,
+                pre_click_count=0,
+                stages=annotator.config.ripple.stages,
+            )
             annotator.annotate(
                 frame_path,
                 out_path=frame_path,
