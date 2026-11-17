@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `--annotations` YAML/JSON input (also available as a scenario-level
   `annotations:` list) draws rectangles, circles, arrows, text callouts, and
   spotlights by step range. See `docs/smooth-video.md`.
+- **Reproducible benchmarks for the two headline numbers.**
+  `scripts/bench_metrics.py` measures install -> verified report (fresh venv,
+  `pip install`, `doctor`, a real tour, then schema-validation in the venv under
+  test) and sidecar cost per step, reporting browser download separately and
+  failing on a 2x regression. Baseline: ~32 s warm, ~1.5 KB/step
+  (~380 estimated tokens). See `docs/benchmarks.md`.
 - **Harness-discoverable `SKILL.md`.** Added a root-level Agent Skills
   manifest with a detailed AI-agent runbook, split with
   `references/REFERENCE.md` so harnesses can load the manifest and deepen

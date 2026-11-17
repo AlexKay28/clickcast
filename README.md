@@ -560,6 +560,15 @@ Consumers that don't want to import `clickcast` can parse the JSON directly agai
 
 See [`docs/ai-integration.md`](docs/ai-integration.md) for the two-line agent-integration example and [`docs/feedback-schema.md`](docs/feedback-schema.md) for the full field-by-field walkthrough.
 
+### Measured cost, not claimed cost
+
+Two numbers matter and both are reproducible with one command:
+
+- **M1 — `pip install` → verified report:** ~32 s on a warm pip cache with the browser already present (browser download timed separately).
+- **M2 — context per step:** ~1.5 KB of sidecar per step (≈380 estimated tokens at 4 chars/token).
+
+`python scripts/bench_metrics.py` re-measures both, validates the sidecar through the shipped schema, and fails on a 2× regression. Methodology, exclusions and ceilings: [`docs/benchmarks.md`](docs/benchmarks.md).
+
 ---
 
 ## CI: 2-line regression gate
