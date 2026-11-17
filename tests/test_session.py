@@ -4,7 +4,13 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from clickcast.core.session import EngineNotInstalledError, Session, hostname_matches
+from clickcast.core.engines import EngineCheck
+from clickcast.core.session import (
+    EngineNotInstalledError,
+    EngineStaleError,
+    Session,
+    hostname_matches,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -17,10 +23,36 @@ async def test_aenter_raises_clear_error_when_engine_missing(
     "Executable doesn't exist" traceback — every entry point (CLI, Python
     API, MCP server) goes through Session.__aenter__, so this one check
     covers all of them."""
-    monkeypatch.setattr("clickcast.core.session.find_installed_engine", lambda engine: None)
+    monkeypatch.setattr(
+        "clickcast.core.session.check_engine",
+        lambda engine: EngineCheck(engine=engine, state="missing"),
+    )
     with pytest.raises(EngineNotInstalledError, match="chromium isn't installed"):
         async with Session(engine="chromium"):
             pass
+
+
+async def test_aenter_raises_stale_error_when_revision_mismatches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#254: a browser on disk at the wrong revision is not "installed" —
+    Playwright would launch a path that does not exist. The stale error must
+    still be an EngineNotInstalledError so the CLI's install-and-retry path
+    fixes it without extra plumbing."""
+    monkeypatch.setattr(
+        "clickcast.core.session.check_engine",
+        lambda engine: EngineCheck(
+            engine=engine,
+            state="stale",
+            found_revision="999",
+            required_revision="1234",
+        ),
+    )
+    with pytest.raises(EngineStaleError, match="out of date") as exc_info:
+        async with Session(engine="chromium"):
+            pass
+    assert isinstance(exc_info.value, EngineNotInstalledError)
+    assert "chromium-1234" in str(exc_info.value)
 
 
 async def test_aenter_proceeds_past_preflight_when_engine_is_found(
@@ -36,8 +68,15 @@ async def test_aenter_proceeds_past_preflight_when_engine_is_found(
         pass
 
     monkeypatch.setattr(
-        "clickcast.core.session.find_installed_engine",
-        lambda engine: (Path("/fake/chrome"), "executable"),
+        "clickcast.core.session.check_engine",
+        lambda engine: EngineCheck(
+            engine=engine,
+            state="ok",
+            path=Path("/fake/chrome"),
+            kind="executable",
+            required_revision="1",
+            found_revision="1",
+        ),
     )
 
     def _boom() -> None:
