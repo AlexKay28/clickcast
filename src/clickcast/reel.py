@@ -30,7 +30,7 @@ from typing import Any, cast
 
 from PIL import Image
 
-from clickcast.annotate import AnnotateConfig, StepAnnotation
+from clickcast.annotate import AnnotateConfig, GrammarConfig, StepAnnotation
 from clickcast.capture import FrameRef, Recorder
 from clickcast.core.actions import (
     BaseStep,
@@ -565,6 +565,12 @@ async def _run_and_encode(
             fps=scenario.meta.fps,
             smooth=smooth,
             video_fps=video_fps,
+            # Scenario steps carry labels but no post-step URL history, so the
+            # grammar pass gets captions/click feedback/timeline and treats
+            # every boundary as a dissolve (the honest reading of "we did not
+            # record the URL"). Only in smooth mode; legacy output is untouched.
+            grammar=_scenario_grammar(scenario, smooth=smooth),
+            step_labels=_scenario_step_labels(scenario) if smooth else (),
             interpolate=annotating,
             # `AnnotateConfig`'s layer toggles all default to on, so "no
             # annotation requested" has to be spelled out or the kernel would
@@ -603,6 +609,30 @@ async def _run_only(scenario: Scenario, *, builder: ReportBuilder) -> Any:
         result = await run_scenario(scenario, recorder=rec, builder=builder)
         rec.flush()
     return result
+
+
+def _scenario_grammar(scenario: Scenario, *, smooth: bool) -> GrammarConfig | None:
+    """The grammar pass config for a scenario run, or ``None`` when off.
+
+    ``render.grammar`` defaults to ``True`` but the pass only exists in smooth
+    mode: without retiming there is nothing for a ripple or a slide to play
+    over, and legacy output must stay byte-identical.
+    """
+    return GrammarConfig() if smooth and scenario.meta.render.grammar else None
+
+
+def _scenario_step_labels(scenario: Scenario) -> tuple[str | None, ...]:
+    """Per-recorder-step labels, expanded by ``repeat``.
+
+    The recorder bumps ``step_index`` once per ``pre_action`` call, mirroring
+    ``_step_annotations_from_run``'s indexing, so a ``repeat=3`` step owns
+    three consecutive slots.
+    """
+    labels: list[str | None] = []
+    for step in scenario.steps:
+        for _ in range(step.repeat):
+            labels.append(step.label or None)
+    return tuple(labels)
 
 
 def _step_annotations_from_run(scenario: Scenario, result: Any) -> dict[int, StepAnnotation]:

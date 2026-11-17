@@ -712,3 +712,24 @@ class TestReelPipelineIntegration:
             assert img.info["duration"] % round(1000 / 20) == 0
         payload = json.loads(out.with_suffix(out.suffix + ".json").read_text())
         assert payload["media"]["fps"] == 20
+
+
+@pytest.mark.unit
+def test_scenario_step_labels_expand_repeat() -> None:
+    """Reel-grammar captions are indexed per recorder step, not per scenario step."""
+    from clickcast.reel import _scenario_step_labels
+    from clickcast.scenario.scenario import loads
+
+    scenario = loads(
+        """
+steps:
+  - goto: https://example.test/
+    label: Open home
+  - click: "#a"
+    label: Open A
+    repeat: 3
+  - click: "#b"
+"""
+    )
+
+    assert _scenario_step_labels(scenario) == ("Open home", "Open A", "Open A", "Open A", None)

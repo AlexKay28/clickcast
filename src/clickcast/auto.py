@@ -37,6 +37,7 @@ import typer
 from clickcast.annotate import (
     AnnotateConfig,
     CardStyle,
+    GrammarConfig,
     GridConfig,
     StepAnnotation,
     SummaryStats,
@@ -174,7 +175,18 @@ class AutoConfig:
     # encoding. ``annotations`` contains declarative region primitives.
     smooth: bool = False
     video_fps: int = 30
+    #: Reel grammar (#302): click feedback, transition grammar, captions from
+    #: step labels and a timeline. Only applied in smooth mode; ``--no-grammar``
+    #: restores the plain retimed output.
+    grammar: bool = True
     annotations: list[Any] = field(default_factory=list)
+
+
+def _step_url(step: StepReport) -> str | None:
+    """The URL a step ended on, for the reel-grammar transition classifier."""
+    state = step.page_state
+    url = getattr(state, "url", None)
+    return url if isinstance(url, str) else None
 
 
 # ---------------------------------------------------------------------------
@@ -754,6 +766,7 @@ async def run_tour(cfg: AutoConfig) -> None:
                         )
 
             out_path = Path(cfg.out)
+            recorded_steps = builder.steps if builder is not None else []
             rendered = render_reel(
                 rec.frames_dir,
                 RenderPlan(
@@ -770,6 +783,9 @@ async def run_tour(cfg: AutoConfig) -> None:
                     regions=cfg.annotations,
                     zoom_factor=cfg.zoom_on_click_factor,
                     zoom_frames_after_click=cfg.zoom_frames_after_click,
+                    grammar=(GrammarConfig() if cfg.smooth and cfg.grammar else None),
+                    step_labels=tuple(step.label for step in recorded_steps),
+                    step_urls=tuple(_step_url(step) for step in recorded_steps),
                 ),
                 before_encode=_bookends,
             )

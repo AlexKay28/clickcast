@@ -32,6 +32,34 @@ meta:
 Explicit `--smooth` / `--no-smooth` and `--video-fps` override scenario values.
 Without smooth mode, existing capture and encoding behaviour is unchanged.
 
+### Reel grammar
+
+In smooth mode `clickcast` also composites a small amount of **reel grammar**
+over the retimed frames, so the result reads as someone operating the product
+rather than a slideshow:
+
+| Effect | What it does |
+|---|---|
+| Click feedback | a press cue on the frame before an action, then a short expanding ripple at the cursor |
+| Transition grammar | cross-dissolve for same-URL (SPA) changes, a short directional slide for cross-document navigation |
+| Captions | a lower-third caption for every step that carries a label |
+| Timeline | a thin progress bar along the bottom edge |
+
+All four are post-capture, deterministic and pixel-only: frame count, duration
+and the sidecar's step attribution are untouched. Turn the whole pass off with
+`--no-grammar` (or `render.grammar: false` in a scenario) to get the plain
+retimed output:
+
+```bash
+clickcast auto https://example.com -o tour.mp4 --smooth --video-fps 30 --no-grammar
+```
+
+Captions come from `StepReport.label` and the slide/dissolve decision from the
+step's recorded URL, so a scenario only gets slide transitions where the URL
+actually changed. `scripts/bench_motion.py` measures the effect: the pass adds
+real new frames, but the headline jump in `unique%` comes from the screencast
+capture backend, which records page motion instead of holding stills.
+
 ## Region annotations
 
 Annotations draw attention to stable page regions with simple, deterministic

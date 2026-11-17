@@ -96,3 +96,7 @@ class RenderOpts:
     # existing GIF output byte-for-byte compatible.
     smooth: bool = False
     video_fps: int = 30
+    #: Reel grammar (#302) — click feedback, transition grammar, captions from
+    #: step labels, timeline. Only consulted when ``smooth`` is on; ``False``
+    #: keeps the plain retimed output.
+    grammar: bool = True
