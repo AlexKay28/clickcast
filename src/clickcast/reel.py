@@ -65,6 +65,8 @@ from clickcast.kernel import (
     render_reel,
     write_sidecar,
 )
+from clickcast.perception.observe import observe as _async_observe
+from clickcast.perception.tokens import DEFAULT_TOKEN_BUDGET
 from clickcast.scenario import Meta, Scenario
 from clickcast.scenario import run as run_scenario
 from clickcast.serving import serve_directory
@@ -826,6 +828,22 @@ class AsyncReel(_BaseReel):
             frame_picker=lambda frames: _last_frame_for_step(frames, step_index),
         )
 
+    async def observe(self, *, token_budget: int = DEFAULT_TOKEN_BUDGET) -> dict[str, Any]:
+        """Return a token-bounded perception snapshot of the reel's target page.
+
+        Opens a throwaway :class:`Session` with this reel's browser/viewport
+        settings, navigates to the reel's construction URL, and returns the
+        ``observe/1`` payload documented in
+        :mod:`clickcast.perception.observe`. Builder steps are **not**
+        executed — this observes the page's initial state; call
+        :func:`clickcast.perception.observe.observe` on a live :class:`Session`
+        to snapshot an interactive state (e.g. after opening a menu).
+        """
+        scenario = self.build_scenario()
+        async with Session(**_session_kwargs_for_bbox(scenario)) as sess:
+            await sess.goto(self._url, wait="networkidle")
+            return await _async_observe(sess, token_budget=token_budget)
+
     async def save(
         self,
         path: str | Path,
@@ -983,6 +1001,15 @@ class Reel(_BaseReel):
                 step_index, selector, out, padding=padding, format=format
             )
         )
+
+    def observe(self, *, token_budget: int = DEFAULT_TOKEN_BUDGET) -> dict[str, Any]:
+        """Sync counterpart to :meth:`AsyncReel.observe`.
+
+        Returns the token-bounded ``observe/1`` dict; raises if called from a
+        running event loop — use :class:`AsyncReel` there.
+        """
+        _fail_if_running_loop("Reel.observe()")
+        return asyncio.run(self._as_async().observe(token_budget=token_budget))
 
     # ------------------------------------------------------------------
     # Local static file serving — QoL for the pre-push iteration loop

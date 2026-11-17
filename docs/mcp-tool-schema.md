@@ -284,6 +284,61 @@ settles with `ok: true` around 1.3 s. Earlier engines without
 signal (`signals.raf.supported` is `false`); `ok` can still be `true`.
 
 
+### `observe`
+
+| | |
+|---|---|
+| Args | `token_budget` (`int`, default `800`) |
+| Returns | **Text only** (no image/screenshot) — one `TextContent` block containing the `observe/1` snapshot below. |
+| Errors | `other` — no active session; `other` — a non-positive budget. |
+
+`observe` is the perception counterpart to the image-returning action tools:
+it answers "what can I act on, compactly?" without an annotated PNG and
+without asking the agent to carry raw selectors. It has no `core/actions.py`
+step counterpart (it does not mutate the page), so it is listed separately
+from the parity table above.
+
+```jsonc
+{
+  "schema": "observe/1",
+  "url": "https://example.com/",
+  "title": "Example",
+  "viewport": [1280, 800],
+  "nodes": [
+    {"ref": "e3", "role": "button", "name": "Buy now",
+     "bbox": [890, 612, 120, 40], "state": {"disabled": false}}
+  ],
+  "text_hash": "a1b2c3d4e5f60718",   // sha256(body.innerText)[:16]
+  "truncated": {"omitted": 6, "total": 9},
+  "tokens": {"budget": 800, "estimated": 312},
+  "removed": ["e2"]                   // refs whose elements disappeared since the last observe
+}
+```
+
+- **Ranking**: interactive role → visible + fully in viewport → the
+  discovery `_score` → y, then x. Node names are truncated to 40 characters
+  and at most 20 nodes ship.
+- **Budget**: `tokens.estimated` is `ceil(len(compact_json)/4)` measured on
+  the exact serialized payload the tool returns (the fixed point is
+  computed in `perception/tokens.py`), with a hard `3200`-character ceiling
+  for the default 800 budget. Nodes are dropped lowest-ranked-first until
+  both limits hold. `len(nodes) + truncated.omitted == truncated.total`.
+- **Refs**: session-scoped opaque handles (`eN`). Identity is
+  role + accessible name, tie-broken by the 64px bbox bucket from
+  `feedback/graph.py` (`dom_signature`), with a document-order ordinal for
+  otherwise-identical duplicates. Refs are stable across observations and
+  across in-page layout shifts.
+- **`removed`**: a ref that was alive in the previous observation but whose
+  element no longer appears anywhere in the page's interactive candidate set
+  transitions to removed and is listed **once**. Hidden-but-present elements
+  are simply absent from `nodes`; they are not `removed`.
+- Playwright 1.64's native `page.get_by_ref()` is **not** used —
+  `playwright>=1.49` remains the supported floor. Native refs are documented
+  as a future fast-path behind the same `ref=eN` handles.
+
+`observe` does not append a step to the transcript (it is a read, not an
+action), so it never changes the sidecar shape written by `close_session`.
+
 ## Confirmed against `core/actions.py`
 
 - Every `Step` subclass except `WaitForStep`, `EvaluateStep`, `WheelStep` has
