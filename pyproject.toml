@@ -44,7 +44,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "playwright>=1.44",
+    "playwright>=1.49",
     "Pillow>=10.0",
     "imageio[ffmpeg]>=2.34",
     "PyYAML>=6.0",
