@@ -33,7 +33,7 @@ DOCS_URL = f"{REPO_URL}/blob/main/docs/for-agents.md"
 # (which is capped at ~900 words). Every subcommand's --help epilog points
 # agents at this file so they can pull the full workflow patterns from a
 # canonical URL without running the CLI first.
-SKILL_URL = f"{REPO_URL}/blob/main/skill.md"
+SKILL_URL = f"{REPO_URL}/blob/main/SKILL.md"
 DIAGNOSTICS_COMMAND = "clickcast report-bug <sidecar.json>"
 
 _MESSAGE = (

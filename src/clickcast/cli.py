@@ -131,7 +131,8 @@ app = typer.Typer(
 
 # #40 Track A: every subcommand ends its --help with these pointer lines so
 # a stranded AI-agent user always sees where to file feedback. The `skill
-# guide` line points at skill.md (added post-#166) — the long-form
+# guide` line points at the Agent Skills manifest `SKILL.md` (added
+# post-#166 as `skill.md`, renamed in this branch) — the long-form
 # agent-facing usage guide with workflow patterns that don't fit in the
 # 900-word `clickcast skill` brief.
 _FEEDBACK_EPILOG = "\n".join(

@@ -196,7 +196,7 @@ Do not:
 ## Further reading in this repository
 
 - Root README overview: `README.md`
-- Full long-form guide: `skill.md`
+- Full long-form guide: `references/agent-guide.md`
 - Human docs for agents: `docs/for-agents.md`
 - Smooth MP4 and annotation guide: `docs/smooth-video.md`
 - MCP server guide: `docs/mcp.md`

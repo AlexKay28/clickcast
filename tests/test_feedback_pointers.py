@@ -68,10 +68,12 @@ class TestBuildFeedback:
 
     def test_skill_url_points_at_skill_md(self) -> None:
         """Regression guard: the epilog's skill-guide pointer must resolve
-        to `skill.md` at the repo root — the file the agent expects to
-        find when it follows the link from `<any-command> --help`."""
+        to the Agent Skills manifest `SKILL.md` at the repo root — the
+        file the agent expects to find when it follows the link from
+        `<any-command> --help` (and a path that stays unique on
+        case-insensitive macOS/Windows checkouts)."""
         assert SKILL_URL.startswith(REPO_URL)
-        assert SKILL_URL.endswith("/skill.md")
+        assert SKILL_URL.endswith("/SKILL.md")
 
     def test_new_issue_url_prefills_environment(self) -> None:
         fb = build_feedback(_report())

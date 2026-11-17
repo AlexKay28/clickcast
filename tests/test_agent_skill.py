@@ -62,8 +62,7 @@ class TestAgentSkillManifest:
         refs = {
             ref
             for ref in re.findall(r"`([^`\n]+\.(?:md|json|toml))`", text)
-            if "/" in ref
-            or ref in {"README.md", "SKILL.md", "skill.md", "server.json", "pyproject.toml"}
+            if "/" in ref or ref in {"README.md", "SKILL.md", "server.json", "pyproject.toml"}
         }
         for ref in refs:
             if "/" in ref:
@@ -80,6 +79,17 @@ class TestAgentSkillManifest:
         assert "references/REFERENCE.md" in text
         assert reference.is_file()
         assert reference.stat().st_size > 0
+
+    def test_no_case_insensitive_filename_collisions(self) -> None:
+        """Two repo files differing only by case unify on macOS/Windows and
+        silently clobber each other on checkout (this branch's original
+        `SKILL.md` + `skill.md` pair broke macOS CI)."""
+        seen: dict[str, str] = {}
+        for path in sorted(ROOT.rglob("*")):
+            if path.is_file() and ".git" not in path.parts:
+                lower = str(path.relative_to(ROOT)).lower()
+                assert lower not in seen, f"case collision: {seen[lower]} vs {path}"
+                seen[lower] = str(path.relative_to(ROOT))
 
     def test_size_stays_reasonable_for_harness_contexts(self) -> None:
         lines = SKILL_PATH.read_text().splitlines()

@@ -40,6 +40,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   of silently changing playback speed; discovery gotos use a dedicated
   navigation timeout instead of the click timeout; scenario `video_fps` is
   validated at load time; the selector-hint scorer is now a public API.
+- **`skill.md` renamed to `references/agent-guide.md`.** Keeping a root
+  `skill.md` next to the Agent Skills `SKILL.md` unified the two files on
+  macOS/Windows case-insensitive checkouts, clobbering `SKILL.md` and
+  breaking the macOS CI job. Help epilogs now point at `SKILL.md`, and a
+  regression test rejects any future case-only filename collisions.
 - `GotoStep.timeout_ms` now reaches navigation and subsequent waits. Browser
   detection honors `PLAYWRIGHT_BROWSERS_PATH` and numeric version ordering.
 - `serve_directory` binds port 0 atomically instead of racing to reuse a port
@@ -79,7 +84,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   artifact (``kind: clickcast/explore``, `schema_version: 1`, documented
   in `docs/explore-schema.md`) — the reel sidecar and the `assertions`
   byte-stability contract are untouched. Also registered in the embedded
-  skill brief (`clickcast skill`) and `skill.md`.
+  skill brief (`clickcast skill`) and `references/agent-guide.md`.
 - **The npm install path is registered in the MCP registry.** `server.json`
   gains a second `packages[]` entry (`registryType: npm`, `identifier:
   clickcast-mcp`, `runtimeHint: npx`) alongside the existing PyPI one, so
