@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Slow transition fixture</title>
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; font-family: system-ui, sans-serif; }
+    body { background: #eef2fa; }
+
+    /* Full-viewport pulsing overlay: compositor-only (opacity), so Chromium
+       keeps pushing screencast frames for the entire tour. Gives the motion
+       benchmark a large, high-contrast area that changes every frame. */
+    .pulse {
+      position: fixed; inset: 0; pointer-events: none;
+      background: radial-gradient(circle at 30% 30%, #1b3a8a 0%, #7aa2ff 45%, #0b1b3a 100%);
+      animation: pulse 1.6s ease-in-out infinite alternate;
+      opacity: 0.18;
+    }
+    @keyframes pulse { from { opacity: 0.12; } to { opacity: 0.62; } }
+
+    .sweep {
+      position: fixed; top: 0; width: 340px; height: 100%;
+      background: linear-gradient(90deg, transparent, #ffd166, #ef476f, transparent);
+      animation: sweep 2.4s linear infinite;
+      opacity: 0.75;
+    }
+    @keyframes sweep {
+      from { transform: translateX(-360px); }
+      to { transform: translateX(100vw); }
+    }
+
+    main { position: relative; padding: 48px; }
+    h1 { font-size: 22px; margin: 0 0 8px; color: #0b1b3a; }
+    p { color: #33415c; max-width: 46ch; }
+    button {
+      font: inherit; padding: 12px 20px; border-radius: 10px; border: 0;
+      background: #1b3a8a; color: white; cursor: pointer;
+    }
+
+    /* The 300 ms transition under test. */
+    #panel {
+      margin-top: 24px; width: 420px; height: 220px; border-radius: 16px;
+      background: #ffffff; box-shadow: 0 18px 40px rgba(11, 27, 58, 0.25);
+      transform: translateX(-520px);
+      transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1);
+      display: grid; place-items: center; color: #0b1b3a; font-weight: 600;
+    }
+    #panel.open { transform: translateX(0); }
+  </style>
+</head>
+<body>
+  <div class="pulse"></div>
+  <div class="sweep"></div>
+  <main>
+    <h1>Slow transition fixture</h1>
+    <p>A panel slides in over 300 ms. The two background layers animate
+       continuously so a screencast stream sees real motion.</p>
+    <button id="toggle" type="button">Open panel</button>
+    <div id="panel">Settings panel</div>
+  </main>
+  <script>
+    const button = document.querySelector('#toggle');
+    const panel = document.querySelector('#panel');
+    button.addEventListener('click', () => {
+      panel.classList.toggle('open');
+      button.textContent = panel.classList.contains('open') ? 'Close panel' : 'Open panel';
+    });
+  </script>
+</body>
+</html>

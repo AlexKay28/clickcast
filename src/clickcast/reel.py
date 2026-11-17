@@ -556,13 +556,20 @@ async def _run_and_encode(
     to the pre-#261 SDK output. ``interpolate`` is likewise off unless the
     caller opted into annotation — frame insertion changes the reel.
     """
-    with Recorder(fps=scenario.meta.fps, default_dwell=scenario.meta.dwell) as rec:
+    with Recorder(
+        fps=scenario.meta.fps,
+        default_dwell=scenario.meta.dwell,
+        capture=scenario.meta.render.capture,  # type: ignore[arg-type]
+        video_fps=scenario.meta.render.video_fps,
+        screencast_quality=scenario.meta.render.screencast_quality,
+    ) as rec:
         result = await run_scenario(scenario, recorder=rec, builder=builder)
         rec.flush()
         annotating = annotate is not None
         plan = RenderPlan(
             out=out,
             fps=scenario.meta.fps,
+            capture=scenario.meta.render.capture,  # type: ignore[arg-type]
             smooth=smooth,
             video_fps=video_fps,
             # Scenario steps carry labels but no post-step URL history, so the
@@ -605,7 +612,13 @@ async def _run_only(scenario: Scenario, *, builder: ReportBuilder) -> Any:
     so the recorder is driven directly here. The single encode path in the
     package stays :func:`clickcast.kernel.render.render_reel`.
     """
-    with Recorder(fps=scenario.meta.fps, default_dwell=scenario.meta.dwell) as rec:
+    with Recorder(
+        fps=scenario.meta.fps,
+        default_dwell=scenario.meta.dwell,
+        capture=scenario.meta.render.capture,  # type: ignore[arg-type]
+        video_fps=scenario.meta.render.video_fps,
+        screencast_quality=scenario.meta.render.screencast_quality,
+    ) as rec:
         result = await run_scenario(scenario, recorder=rec, builder=builder)
         rec.flush()
     return result

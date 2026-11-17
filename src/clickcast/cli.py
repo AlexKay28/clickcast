@@ -18,7 +18,7 @@ import sys
 import time
 from collections.abc import Callable, Coroutine
 from pathlib import Path
-from typing import Annotated, Any, TypeVar
+from typing import Annotated, Any, NoReturn, TypeVar, cast
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -36,7 +36,7 @@ from clickcast.annotate import (
     StepAnnotation,
 )
 from clickcast.auto import AutoConfig, run_tour
-from clickcast.capture import Recorder
+from clickcast.capture import CaptureBackend, Recorder, ScreencastUnavailable
 from clickcast.config import (
     Config as ConfigModel,
 )
@@ -337,7 +337,7 @@ def _parse_viewport(v: str) -> tuple[int, int]:
         raise typer.BadParameter(f"invalid viewport {v!r}; expected WxH") from e
 
 
-def _die(msg: str, code: int = 1) -> None:
+def _die(msg: str, code: int = 1) -> NoReturn:
     typer.secho(msg, fg=typer.colors.RED, err=True)
     raise typer.Exit(code)
 
@@ -398,6 +398,10 @@ def _run(factory: Callable[[], Coroutine[Any, Any, _T]]) -> _T:
     except EngineNotInstalledError as exc:
         _handle_missing_engine(exc)
         return asyncio.run(factory())
+    except ScreencastUnavailable as exc:
+        # Chromium-only backend chosen on Firefox/WebKit. Print the documented
+        # message instead of a protocol traceback.
+        _die(str(exc))
 
 
 def _version_callback(value: bool) -> None:
@@ -825,6 +829,27 @@ def auto(
             "and a timeline. --no-grammar keeps the plain retimed output.",
         ),
     ] = True,
+    capture: Annotated[
+        str,
+        typer.Option(
+            "--capture",
+            help=(
+                "Frame source: 'shots' (default) captures one PNG per action "
+                "boundary; 'screencast' streams continuous Chromium frames at "
+                "--video-fps so transitions and animations are real. "
+                "Screencast is Chromium-only; --smooth becomes a no-op."
+            ),
+        ),
+    ] = "shots",
+    screencast_quality: Annotated[
+        int,
+        typer.Option(
+            "--screencast-quality",
+            min=0,
+            max=100,
+            help="JPEG quality for the CDP screencast stream (default 80).",
+        ),
+    ] = 80,
     annotations: Annotated[
         Path | None,
         typer.Option(
@@ -854,6 +879,8 @@ def auto(
         _die(f"--traversal must be 'dfs' or 'bfs', got {traversal!r}")
     if pace not in _PACE_TABLE:
         _die(f"--pace must be one of {sorted(_PACE_TABLE)}, got {pace!r}")
+    if capture not in ("shots", "screencast"):
+        _die(f"--capture must be 'shots' or 'screencast', got {capture!r}")
     compiled_redacts = _compile_redact_patterns(redact_pattern)
     extra_headers = _parse_header_flags(header)
     grid_cfg = _build_grid_config(grid, grid_pitch, grid_color, grid_style)
@@ -919,6 +946,8 @@ def auto(
             smooth=smooth,
             video_fps=video_fps,
             grammar=grammar,
+            capture=cast(CaptureBackend, capture),
+            screencast_quality=screencast_quality,
             annotations_path=annotations,
             loop=loop,
             no_sidecar=no_sidecar,
@@ -959,6 +988,8 @@ async def _do_auto(
     smooth: bool = False,
     video_fps: int = 30,
     grammar: bool = True,
+    capture: CaptureBackend = "shots",
+    screencast_quality: int = 80,
     annotations_path: Path | None = None,
     with_feedback: bool = False,
     redact_patterns: list[re.Pattern[str]] | None = None,
@@ -1013,6 +1044,8 @@ async def _do_auto(
             title_card=title_card,
             summary_card=summary_card,
             emit_events=emit_events,
+            capture=capture,
+            screencast_quality=screencast_quality,
             annotations=region_annotations,
         )
     )
@@ -1042,6 +1075,25 @@ def run(
         int,
         typer.Option("--video-fps", min=1, max=120, help="Output FPS used with --smooth."),
     ] = 30,
+    capture: Annotated[
+        str,
+        typer.Option(
+            "--capture",
+            help=(
+                "Override scenario capture backend: 'shots' (default) or "
+                "'screencast' (continuous Chromium frames; --smooth is a no-op)."
+            ),
+        ),
+    ] = "shots",
+    screencast_quality: Annotated[
+        int,
+        typer.Option(
+            "--screencast-quality",
+            min=0,
+            max=100,
+            help="JPEG quality for the CDP screencast stream (default 80).",
+        ),
+    ] = 80,
     annotations: Annotated[
         Path | None,
         typer.Option(
@@ -1130,6 +1182,16 @@ def run(
         meta.render.smooth = smooth
     if _is_explicit(ctx, "video_fps"):
         meta.render.video_fps = video_fps
+    if _is_explicit(ctx, "capture"):
+        if capture not in ("shots", "screencast"):
+            _die(f"--capture must be 'shots' or 'screencast', got {capture!r}")
+        meta.render.capture = capture
+    if _is_explicit(ctx, "screencast_quality"):
+        meta.render.screencast_quality = screencast_quality
+    if meta.render.capture not in ("shots", "screencast"):
+        _die(
+            f"scenario render.capture must be 'shots' or 'screencast', got {meta.render.capture!r}"
+        )
 
     # `--url` rewrites the first `goto` step's URL. Wins over any `--var URL=...`
     # substitution because it lands after `load()` has already substituted vars.
@@ -1257,7 +1319,13 @@ async def _do_run(
             region_annotations.extend(load_annotations(annotations_path))
     except (OSError, TypeError, ValueError) as exc:
         _die(f"annotations: {exc}")
-    with Recorder(fps=scenario.meta.fps, default_dwell=scenario.meta.dwell) as rec:
+    with Recorder(
+        fps=scenario.meta.fps,
+        default_dwell=scenario.meta.dwell,
+        capture=scenario.meta.render.capture,
+        video_fps=scenario.meta.render.video_fps,
+        screencast_quality=scenario.meta.render.screencast_quality,
+    ) as rec:
         result = await run_scenario(scenario, recorder=rec, builder=builder)
         rec.flush()
         # Same pipeline as `auto`, through the shared kernel: smoothing,
@@ -1270,6 +1338,7 @@ async def _do_run(
             RenderPlan(
                 out=out_path,
                 fps=scenario.meta.fps,
+                capture=scenario.meta.render.capture,
                 smooth=scenario.meta.render.smooth,
                 video_fps=scenario.meta.render.video_fps,
                 quality=scenario.meta.render.quality,

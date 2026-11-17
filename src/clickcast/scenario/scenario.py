@@ -55,7 +55,7 @@ _BROWSER_FIELDS: frozenset[str] = frozenset(
     }
 )
 _RENDER_FIELDS: frozenset[str] = frozenset(
-    {"fps", "quality", "loop", "format", "smooth", "video_fps"}
+    {"fps", "quality", "loop", "format", "smooth", "video_fps", "capture", "screencast_quality"}
 )
 
 
@@ -124,6 +124,16 @@ class Meta(BaseModel):
                 or not 1 <= video_fps <= 120
             ):
                 raise ValueError("render.video_fps must be an integer between 1 and 120")
+            capture = render.get("capture")
+            if "capture" in render and capture not in ("shots", "screencast"):
+                raise ValueError("render.capture must be 'shots' or 'screencast'")
+            screencast_quality = render.get("screencast_quality")
+            if "screencast_quality" in render and (
+                isinstance(screencast_quality, bool)
+                or not isinstance(screencast_quality, int)
+                or not 0 <= screencast_quality <= 100
+            ):
+                raise ValueError("render.screencast_quality must be an integer between 0 and 100")
             values["render"] = RenderOpts(**render)
         return values
 
