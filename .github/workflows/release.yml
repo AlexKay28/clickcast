@@ -91,7 +91,7 @@ jobs:
         # tag on that action would otherwise publish arbitrary code to PyPI
         # under our Trusted-Publishing OIDC identity. Bump the SHA + version
         # comment together when upgrading. See #46 item 5.
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
         with:
           repository-url: https://test.pypi.org/legacy/
 
@@ -213,7 +213,7 @@ jobs:
 
       - name: Publish to PyPI
         # SHA-pinned; see the same-named step in `test-release`. See #46 item 5.
-        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
 
   # ------------------------------------------------------------------
   # Cut a GitHub release with auto-generated notes + attached artifacts
