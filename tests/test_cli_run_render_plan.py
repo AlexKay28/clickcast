@@ -36,6 +36,9 @@ class _FakeRecorder:
     def flush(self) -> None:
         return None
 
+    async def stop_capture(self) -> None:
+        return None
+
 
 async def test_run_forwards_quality_loop_smooth_and_video_fps(tmp_path: Path) -> None:
     encoded = SimpleNamespace(

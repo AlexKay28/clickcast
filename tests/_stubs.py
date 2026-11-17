@@ -146,3 +146,6 @@ class FakeRecorder:
 
     def flush(self) -> list[Path]:
         return []
+
+    async def stop_capture(self) -> None:
+        return None

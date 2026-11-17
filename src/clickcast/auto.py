@@ -44,7 +44,7 @@ from clickcast.annotate import (
     render_summary_card,
     render_title_card,
 )
-from clickcast.capture import Recorder
+from clickcast.capture import CaptureBackend, Recorder
 from clickcast.core.actions import ClickStep, GotoStep, ScrollStep, execute
 from clickcast.core.session import Session
 from clickcast.discovery import Element, capture_accessibility_batch, discover
@@ -180,6 +180,14 @@ class AutoConfig:
     #: restores the plain retimed output.
     grammar: bool = True
     annotations: list[Any] = field(default_factory=list)
+    # Frame source. ``shots`` is the historical one-PNG-per-boundary backend;
+    # ``screencast`` streams continuous Chromium frames (#303). Screencast
+    # frames are resampled to ``video_fps`` and need no retiming.
+    capture: CaptureBackend = "shots"
+    #: JPEG quality for the CDP screencast stream (0-100).
+    screencast_quality: int = 80
+    #: Hard cap on screencast frames — protects the disk from runaway pages.
+    screencast_max_frames: int = 6000
 
 
 def _step_url(step: StepReport) -> str | None:
@@ -622,6 +630,8 @@ async def run_tour(cfg: AutoConfig) -> None:
         _die("--max-pages must be >= 1")
     if cfg.max_duration <= 0:
         _die("--max-duration must be > 0")
+    if cfg.capture not in ("shots", "screencast"):
+        _die(f"--capture must be 'shots' or 'screencast', got {cfg.capture!r}")
 
     seeded = bool(cfg.seed_urls)
     tour_started = time.monotonic()
@@ -655,7 +665,14 @@ async def run_tour(cfg: AutoConfig) -> None:
             if cfg.annotate.grid is not None:
                 builder.set_grid(cfg.annotate.grid)
 
-        with Recorder(fps=cfg.fps, default_dwell=cfg.dwell) as rec:
+        with Recorder(
+            fps=cfg.fps,
+            default_dwell=cfg.dwell,
+            capture=cfg.capture,
+            video_fps=cfg.video_fps,
+            screencast_quality=cfg.screencast_quality,
+            screencast_max_frames=cfg.screencast_max_frames,
+        ) as rec:
             step_annotations: dict[int, StepAnnotation] = {}
             step_index = 0
             visited: set[str] = set()
@@ -740,6 +757,7 @@ async def run_tour(cfg: AutoConfig) -> None:
                 cfg.traversal.upper(),
                 len(step_annotations),
             )
+            await rec.stop_capture()
             rec.flush()
 
             # Bookend the annotated frames with title / summary cards so a
@@ -772,6 +790,7 @@ async def run_tour(cfg: AutoConfig) -> None:
                 RenderPlan(
                     out=out_path,
                     fps=cfg.fps,
+                    capture=cfg.capture,
                     smooth=cfg.smooth,
                     video_fps=cfg.video_fps,
                     cursor_style=cfg.annotate.cursor_style,

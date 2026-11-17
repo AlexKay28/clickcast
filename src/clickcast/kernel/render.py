@@ -21,6 +21,7 @@ import logging
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 
 from clickcast.annotate import (
     AnnotateConfig,
@@ -51,6 +52,9 @@ class RenderPlan:
 
     out: Path
     fps: int
+    #: Frame source that produced ``frames_dir``. ``screencast`` frames are
+    #: already continuous and real-time, so retiming is a passthrough no-op.
+    capture: Literal["shots", "screencast"] = "shots"
     #: Duration-preserving retiming; supersedes cursor interpolation.
     smooth: bool = False
     video_fps: int = 30
@@ -116,7 +120,19 @@ def render_reel(
     encode_fps = plan.fps
     smoothed = False
 
-    if plan.smooth:
+    if plan.capture == "screencast":
+        # Continuous, real-time frames: the recorder already resampled them
+        # onto ``video_fps``. Retiming them would hold/cross-dissolve real
+        # motion back into stills, and cursor interpolation would change the
+        # real duration, so both are passthrough no-ops here.
+        encode_fps = plan.video_fps
+        if plan.smooth:
+            message = (
+                "capture=screencast: --smooth is a passthrough no-op — "
+                f"frames are already continuous at {encode_fps} fps"
+            )
+            log.warning(message)
+    elif plan.smooth:
         result = smooth_frames_dir(
             frames_dir,
             SmoothConfig(output_fps=plan.video_fps),

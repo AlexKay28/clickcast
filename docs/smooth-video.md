@@ -5,6 +5,85 @@ expensive), then can retime the result into a smooth, high-FPS MP4. The capture
 sidecar keeps its action-level detail while `media.fps` reports the actual
 encoded frame rate.
 
+## Capture backends
+
+Two frame sources feed the same render kernel. Pick one with `--capture` on
+`auto` / `run`, or `render.capture` in a scenario:
+
+```bash
+clickcast auto https://example.com -o tour.mp4 --format mp4 \
+  --capture screencast --video-fps 30
+
+clickcast run demo.yml -o demo.mp4 --capture screencast
+```
+
+```yaml
+meta:
+  render:
+    format: mp4
+    capture: screencast   # default: shots
+    video_fps: 30
+```
+
+| | `shots` (default) | `screencast` |
+|---|---|---|
+| Frame source | one PNG per action boundary + held padding | Chromium CDP `Page.startScreencast`; the compositor pushes a frame when the page changes |
+| Shows | settled states before/after each action | continuous motion: CSS transitions, route cross-fades, charts, spinners, typed characters |
+| Cursor | synthetic overlay | same synthetic overlay (`cursor_xy`) on real footage |
+| Engines | Chromium, Firefox, WebKit | **Chromium only** |
+| Determinism | frame count is a function of `fps` × steps — reproducible | frame count follows wall time and compositor updates — **not** byte-reproducible |
+| `--smooth` | retimes held stills into 30/60 fps | **passthrough no-op**: frames are already continuous; the flag is accepted and a warning says so |
+| Cost | cheap: a few screenshots per step | roughly real time while recording, plus PNG writes |
+
+### Screencast details
+
+- Frames arrive as JPEG from `Page.startScreencast` (`--screencast-quality`,
+  default 80) and are converted to PNG on a small worker pool so the CDP ACK
+  is never stuck behind disk I/O. Every frame is ACKed, otherwise Chromium
+  stops after one frame.
+- At flush, frames are **resampled onto a fixed `video_fps` grid over the real
+  capture duration**: each output slot uses the most recent captured frame at
+  or before its timestamp (hold-last-frame). A 300 ms transition therefore
+  spans ~9 distinct frames at 30 fps, and a static page correctly produces
+  held frames rather than invented motion.
+- Step attribution is by **timestamp interval**, not frame count: the recorder
+  knows when each step started and when its action completed, and
+  `frames.json` gains an optional per-frame `captured_at` (seconds since the
+  screencast started) alongside `path` / `step_index` / `sub_index` /
+  `cursor_xy`.
+- `screencast_max_frames` (default 6000) is a hard disk guard for runaway
+  animations. Hitting it logs a warning and drops the remaining frames.
+- `--smooth` and cursor interpolation are skipped for screencast reels: both
+  add or hold frames, which would destroy the real timing the stream recorded.
+
+### Engine fallback
+
+`Page.startScreencast` is part of the Chromium DevTools Protocol; Firefox and
+WebKit do not expose an equivalent. Rather than silently recording a slideshow
+(or adding a second ffmpeg extraction + encode path), clickcast **fails fast**
+with a documented error:
+
+```
+ScreencastUnavailable: screencast capture requires Chromium: CDP
+Page.startScreencast is not available on 'firefox'. Use --capture shots (the
+default) for Firefox/WebKit. See docs/smooth-video.md.
+```
+
+Use `--capture shots` (the default) on those engines.
+
+### Measured on the 300 ms transition fixture
+
+Tour: `clickcast auto .../slow-transition.html --max-steps 2`, 30 fps MP4,
+`scripts/bench_motion.py` (duplicate cutoff 0.5/255):
+
+| backend | frames | fps | unique % | duplicate % |
+|---|---|---|---|---|
+| `shots --smooth` | 45 | 30 | 20.5 | 79.5 |
+| `screencast` | 126 | 30 | **99.2** | 0.8 |
+
+The screencast reel has ~4.8× more unique frames on the same tour; see the
+issue #303 PR for wall time and artifact-size numbers.
+
 ## Smooth MP4
 
 ```bash

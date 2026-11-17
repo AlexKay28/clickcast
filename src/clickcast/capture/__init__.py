@@ -1,5 +1,17 @@
 """Frame capture pipeline."""
 
-from clickcast.capture.recorder import FrameRef, Recorder
+from clickcast.capture.recorder import CaptureBackend, FrameRef, Recorder
+from clickcast.capture.screencast import (
+    CapturedFrame,
+    ScreencastSource,
+    ScreencastUnavailable,
+)
 
-__all__ = ["FrameRef", "Recorder"]
+__all__ = [
+    "CaptureBackend",
+    "CapturedFrame",
+    "FrameRef",
+    "Recorder",
+    "ScreencastSource",
+    "ScreencastUnavailable",
+]

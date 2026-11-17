@@ -100,3 +100,8 @@ class RenderOpts:
     #: step labels, timeline. Only consulted when ``smooth`` is on; ``False``
     #: keeps the plain retimed output.
     grammar: bool = True
+    # Frame source: ``shots`` (one PNG per action boundary, the default) or
+    # ``screencast`` (Chromium CDP continuous capture; see docs/smooth-video.md).
+    capture: str = "shots"
+    #: JPEG quality for the CDP screencast stream (0-100; ignored for shots).
+    screencast_quality: int = 80
