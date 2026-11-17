@@ -8,6 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Structured action deltas (`steps[].delta`, sidecar v5).** Every MCP action
+  tool now observes the page before and after the action, settles, and returns
+  a compact `StepDelta` — `{url, title, added, removed, text_changes,
+  console_errors, network_failed, layout_shift, settled}` — telling an agent
+  what the action actually changed instead of leaving it to guess from a
+  screenshot. Node identity reuses the 64px `dom_signature` (plus a ref
+  fallback), so sub-threshold bbox jitter and remounted nodes do not churn
+  `added`/`removed`; lists are capped (5, or 3 for errors), ranked, empty
+  blocks omitted, and the whole block is fitted to ≤300 estimated tokens. It
+  is also written to `steps[].delta` in live transcripts. Schema v5 is
+  strictly additive: v1–v4 sidecars round-trip with `delta: null`. MCP action
+  tools accept `ref=` in place of `selector=`/`into=` (resolved through the
+  `observe` registry; removed/unknown refs are clean `other` errors), and the
+  `click-no-dom-reaction` advisory consumes the delta, removing the same-URL
+  SPA false-positive class from #228.
 - **Smooth high-FPS MP4 reels and declarative region annotations.** `auto` and
   `run` accept `--smooth --video-fps 30` for duration-preserving frame holds,
   eased cursor motion, and cross-dissolved page transitions. The new

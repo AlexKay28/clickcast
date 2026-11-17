@@ -132,6 +132,79 @@ class PageState(BaseModel):
     network_failed: list[str] = Field(default_factory=list, max_length=50)
 
 
+class DeltaNode(BaseModel):
+    """One element in :class:`StepDelta`'s ``added`` / ``removed`` lists.
+
+    ``ref`` is the session-scoped ``eN`` handle the observation carried (for
+    a removed node, the handle that just disappeared). ``name`` is truncated
+    to 40 characters — the same wire limit ``observe/1`` uses.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    ref: str = ""
+    role: str = ""
+    name: str = ""
+
+
+class DeltaSettled(BaseModel):
+    """The compact quiescence verdict embedded in :class:`StepDelta`.
+
+    The full :class:`clickcast.perception.settle.SettleResult` (per-signal
+    detail) stays on the ``settle`` tool response; a per-step delta only
+    carries the two values an agent gates on.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    ok: bool
+    ms: int = Field(ge=0)
+
+
+class StepDelta(BaseModel):
+    """What one action changed — the v5 additive per-step block (#264).
+
+    Produced by :func:`clickcast.perception.delta.diff_observations` from a
+    before/after observation pair plus the step's collected console/network
+    state. Lists are already capped (5 items; 3 for the error lists) and
+    ranked by the producer; the whole block is fitted to ≤300 estimated
+    tokens. Empty blocks are omitted, so consumers must use ``.get()`` /
+    ``[]``-style access rather than assuming every list is present.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    url: str = ""
+    title: str = ""
+    added: list[DeltaNode] = Field(default_factory=list, max_length=5)
+    removed: list[DeltaNode] = Field(default_factory=list, max_length=5)
+    text_changes: list[str] = Field(default_factory=list, max_length=5)
+    console_errors: list[str] = Field(default_factory=list, max_length=3)
+    network_failed: list[str] = Field(default_factory=list, max_length=3)
+    layout_shift: bool = False
+    settled: DeltaSettled | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_empty_blocks(self, handler: Any) -> dict[str, Any]:
+        """Omit empty lists / false-y optional keys from the wire payload.
+
+        ``Report.model_dump()`` normally emits every field (that is why old
+        sidecars carry ``"error": null``), but a delta is a signal, not a
+        record: an absent block means "nothing to report". The caps and the
+        ≤300-token budget rely on this, so it is enforced at the model
+        boundary rather than only in the producer.
+        """
+        data: dict[str, Any] = handler(self)
+        for key in ("added", "removed", "text_changes", "console_errors", "network_failed"):
+            if not data.get(key):
+                data.pop(key, None)
+        if not data.get("layout_shift"):
+            data.pop("layout_shift", None)
+        if data.get("settled") is None:
+            data.pop("settled", None)
+        return data
+
+
 class StepReport(BaseModel):
     """One step's outcome + metadata.
 
@@ -157,6 +230,10 @@ class StepReport(BaseModel):
     skip_reason: SkipReason | None = None
     # See :data:`ErrorCode` for the enumerated values and their meanings.
     error_code: ErrorCode | None = None
+    # v5 additive (#264): structured before/after delta for this step. ``None``
+    # for batch sidecars (which do not capture a before-observation) and for
+    # every v1-v4 sidecar, so the block is purely optional.
+    delta: StepDelta | None = None
 
 
 class FeedbackTemplate(BaseModel):
@@ -337,11 +414,16 @@ class Report(BaseModel):
     interactive-state resolution fused with the element's grid cell (see
     :class:`ElementAccessibility`). Defaults ``None``, so v1/v2/v3
     sidecars round-trip through the v4 model unchanged.
+
+    v5 (this release, #264) adds one optional per-step block:
+    :attr:`StepReport.delta` — the structured before/after change set a live
+    action produced (see :class:`StepDelta`). Defaults ``None``, so every
+    v1-v4 sidecar round-trips through the v5 model unchanged.
     """
 
     # No extra="forbid" here — see docstring above.
 
-    schema_version: int = 4
+    schema_version: int = 5
     clickcast_version: str
     url: str | None = None
     engine: str = "chromium"

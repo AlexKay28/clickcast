@@ -255,11 +255,10 @@ class TestV1Backcompat:
         )
         path = write(report, tmp_path / "v2.gif.json")
         loaded = load(path)
-        # Shipped default bumped to v4 in #196 (elements[].accessibility).
-        # v2 fixtures with an explicit ``schema_version: 2`` still
-        # round-trip; this fixture constructs a fresh Report so it picks
-        # up the current default.
-        assert loaded.schema_version == 4
+        # Shipped default bumped to v5 in #264 (steps[].delta). v2 fixtures
+        # with an explicit ``schema_version: 2`` still round-trip; this
+        # fixture constructs a fresh Report so it picks up the current default.
+        assert loaded.schema_version == 5
         assert loaded.graph is not None
         assert len(loaded.graph.nodes) == 2
         assert len(loaded.graph.edges) == 1

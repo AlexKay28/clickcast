@@ -29,8 +29,9 @@ Shipped advisory ids (see individual builder functions below for the exact
 trigger rules):
 
 - ``nav-heavy-tour`` — >50% of clicks caused a page navigation.
-- ``click-no-dom-reaction`` — a click's ``page_state`` shows no observable
-  change (title / url identical to the pre-click state).
+- ``click-no-dom-reaction`` — a click produced no observable change. Uses the
+  per-step structured delta when the writer captured one (#264); falls back to
+  the original ``page_state`` url/title comparison otherwise.
 - ``very-short-reel`` — encoded reel is < 20 frames.
 - ``cross-origin-bounce`` — a step navigated cross-origin and the tour
   returned to the previous origin (an ``auto`` ``go_back``).
@@ -58,7 +59,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
-from clickcast.feedback.models import Media, PageState, StepReport
+from clickcast.feedback.models import Media, PageState, StepDelta, StepReport
 
 if TYPE_CHECKING:
     from clickcast.annotate import AnnotateConfig
@@ -173,15 +174,25 @@ def _check_short_reel(media: Media) -> Advisory | None:
     )
 
 
-def no_dom_reaction(prev: PageState | None, current: PageState | None) -> bool:
+def no_dom_reaction(
+    prev: PageState | None,
+    current: PageState | None,
+    delta: StepDelta | None = None,
+) -> bool:
     """True when ``current`` shows no observable change from ``prev``.
 
-    Conservative heuristic: we only compare ``PageState.url_after`` and
-    ``PageState.title`` today — a real reaction that changes neither (an
-    inline validation message, a same-page toggle) won't be caught. See
-    the module docstring for the richer-signal follow-up (#228). ``None``
-    on either side means "no baseline to compare", which is treated as
-    NOT flaggable.
+    When a structured :class:`~clickcast.feedback.models.StepDelta` is
+    available (#264) it is authoritative: it already compares the page
+    before and after *this* action, so a same-URL SPA reaction (a revealed
+    panel, a new row, changed text) is no longer a false positive — the
+    exact class of bug tracked in #228. The delta path also trusts the
+    step's own console/network errors and a genuine layout shift as
+    reaction evidence.
+
+    With no delta (batch runs, older transcripts, failed steps) the
+    original conservative url/title comparison still applies: ``None`` on
+    either side means "no baseline to compare", which is treated as NOT
+    flaggable.
 
     Shared between :func:`_check_click_no_dom_reaction` (the tour-level
     stderr advisory, every click) and
@@ -189,18 +200,31 @@ def no_dom_reaction(prev: PageState | None, current: PageState | None) -> bool:
     per-step ``skip_reason="optional_no_reaction"`` gate, optional clicks
     only) so the two never drift on what counts as "no reaction".
     """
+    if delta is not None:
+        return not _delta_shows_reaction(prev, delta)
+
     if prev is None or current is None:
         return False
-    # #228: a console/page error or failed request recorded *for this step*
-    # is direct evidence something happened even when url/title didn't
-    # change — cheap, zero-schema-change signal using data already
-    # collected per-step. Doesn't catch a purely visual DOM reaction (an
-    # inline validation message with no console signal); that needs a
-    # richer signal (e.g. a body-text hash) and is tracked as a separate,
-    # heavier follow-up rather than folded into this conservative check.
+    # A console/page error or failed request recorded *for this step* is
+    # direct evidence something happened even when url/title didn't change —
+    # cheap, zero-schema-change signal using data already collected per-step.
     if current.console_errors or current.page_errors or current.network_failed:
         return False
     return current.url_after == prev.url_after and current.title == prev.title
+
+
+def _delta_shows_reaction(prev: PageState | None, delta: StepDelta) -> bool:
+    """True when ``delta`` carries evidence the action did something."""
+    if delta.console_errors or delta.network_failed:
+        return True
+    if prev is not None:
+        # ``delta.url`` / ``delta.title`` are the post-action values; compare
+        # against the previous step's state when both sides are known.
+        if delta.url and prev.url_after and delta.url != prev.url_after:
+            return True
+        if delta.title and prev.title and delta.title != prev.title:
+            return True
+    return bool(delta.added or delta.removed or delta.text_changes or delta.layout_shift)
 
 
 def _check_click_no_dom_reaction(steps: list[StepReport]) -> list[Advisory]:
@@ -218,14 +242,18 @@ def _check_click_no_dom_reaction(steps: list[StepReport]) -> list[Advisory]:
     prev_state = None
     for step in steps:
         current = step.page_state
-        if step.action == "click" and step.status == "ok" and no_dom_reaction(prev_state, current):
+        if (
+            step.action == "click"
+            and step.status == "ok"
+            and no_dom_reaction(prev_state, current, step.delta)
+        ):
             label = step.label or step.args.get("selector", "step")
             out.append(
                 Advisory(
                     id="click-no-dom-reaction",
                     message=(
-                        f"Step {step.index} clicked '{label}' but the page URL "
-                        "and title didn't change. The click may have been a no-op."
+                        f"Step {step.index} clicked '{label}' but nothing on the "
+                        "page changed. The click may have been a no-op."
                     ),
                     doc_url=_TIPS_URL,
                 )

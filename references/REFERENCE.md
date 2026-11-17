@@ -12,7 +12,7 @@ Important fields:
 
 | Field | Meaning |
 |---|---|
-| `schema_version` | Stable schema version marker, currently 4 |
+| `schema_version` | Stable schema version marker, currently 5 |
 | `clickcast_version`, `engine`, `viewport`, `url`, `started_at`, `duration_s` | Run metadata |
 | `steps[]` | One entry per executed step |
 | `steps[].status` | `ok`, `failed`, or `skipped` |
@@ -200,7 +200,7 @@ Do not:
 - Human docs for agents: `docs/for-agents.md`
 - Smooth MP4 and annotation guide: `docs/smooth-video.md`
 - MCP server guide: `docs/mcp.md`
-- Schema v4: `src/clickcast/feedback/schema/v4.json`
+- Schema v5: `src/clickcast/feedback/schema/v5.json`
 - Explore schema: `docs/explore-schema.md`
 - Assertions schema: `docs/assertions-schema/v1.json`
 - Scenario examples: `docs/scenarios/`

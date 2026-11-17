@@ -37,6 +37,12 @@
       toggle.setAttribute('aria-expanded', expanded ? 'false' : 'true');
       menu.hidden = expanded;
     });
+
+    // Detaches itself when clicked — gives the ref/delta tests a real
+    // in-page removal caused by an action (#264).
+    document.getElementById('detach-me').addEventListener('click', (event) => {
+      event.currentTarget.remove();
+    });
   </script>
 </body>
 </html>

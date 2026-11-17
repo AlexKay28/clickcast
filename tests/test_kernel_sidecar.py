@@ -94,7 +94,7 @@ class TestWriteSidecar:
         report = await self._report(tmp_path)
         written = write_sidecar(tmp_path / "reel.gif", report)
         assert written == tmp_path / "reel.gif.json"
-        assert json.loads(written.read_text())["schema_version"] == 4
+        assert json.loads(written.read_text())["schema_version"] == 5
 
     async def test_no_sidecar_and_missing_report_are_no_ops(self, tmp_path: Path) -> None:
         report = await self._report(tmp_path)

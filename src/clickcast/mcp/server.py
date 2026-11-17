@@ -47,10 +47,13 @@ from clickcast.core.actions import (
 from clickcast.core.opts import BrowserOpts
 from clickcast.core.session import Session, WaitArg
 from clickcast.core.viewport import Viewport
-from clickcast.feedback import PageState, ReportBuilder
+from clickcast.feedback import PageState, ReportBuilder, StepDelta
 from clickcast.kernel import finalize_report, transcript_media, write_sidecar
 from clickcast.perception import observe as _observe
 from clickcast.perception import settle as settle_session
+from clickcast.perception.delta import capture as _capture_observation
+from clickcast.perception.delta import diff_observations as _diff_observations
+from clickcast.perception.refs import registry_for
 from mcp import types as mcp_types
 
 __all__ = ["ClickcastSessionState", "create_server", "serve_stdio"]
@@ -210,10 +213,45 @@ def create_server(
     )
     server = FastMCP(name, instructions=_INSTRUCTIONS)
 
+    def _target(
+        selector: str | None, ref: str | None, tool: str
+    ) -> tuple[str | None, mcp_types.CallToolResult | None]:
+        """Resolve an action's ``selector``/``ref`` pair to one selector.
+
+        ``ref`` is the opaque ``eN`` handle from ``observe`` (#264). A ref
+        that is unknown, or that was reported removed by a later
+        observation, is a clean ``other`` error payload — never a traceback
+        and never a silently-empty selector.
+        """
+        if selector is not None and ref is not None:
+            return None, _error_result("other", f"{tool}: pass either selector or ref, not both")
+        if ref is None:
+            if selector is None:
+                return None, _error_result("other", f"{tool}: requires selector or ref")
+            return selector, None
+        if state.session is None:
+            return None, _error_result("other", _ERROR_NO_SESSION)
+        registry = registry_for(state.session)
+        if registry.is_removed(ref):
+            return None, _error_result(
+                "other", f"{tool}: ref {ref!r} was removed — call observe for current refs"
+            )
+        resolved = registry.lookup(ref)
+        if resolved is None:
+            return None, _error_result(
+                "other", f"{tool}: unknown ref {ref!r} — call observe for current refs"
+            )
+        return resolved, None
+
     async def _run_step(step: BaseStep, *, full_page: bool = False) -> mcp_types.CallToolResult:
         """Execute one step against the live session and build its response.
 
-        Reused by every action tool below — see module docstring.
+        Reused by every action tool below — see module docstring. Each call
+        also captures a before/after :class:`~clickcast.perception.delta.Observation`
+        pair (plus a :func:`~clickcast.perception.settle.settle` verdict) and
+        ships the resulting ``delta`` in the response and on the recorded
+        step, so a live transcript carries the same v5 ``steps[].delta``
+        block a consumer sees (#264).
         """
         if state.session is None or state.builder is None or state.annotator is None:
             return _error_result("other", _ERROR_NO_SESSION)
@@ -225,6 +263,12 @@ def create_server(
 
         index = state.step_index
         state.step_index += 1
+
+        try:
+            before = await _capture_observation(session)
+        except Exception as exc:  # a crashed/blank page must not break the action
+            _log.warning("delta before-capture failed for step %d: %r", index, exc)
+            before = None
 
         result = await execute(step, session, step_index=index)
 
@@ -280,6 +324,27 @@ def create_server(
         )
         page_state: PageState | None = builder.steps[-1].page_state
 
+        # #264: one delta per action. Settle first so the after-observation
+        # reflects the same quiescence the agent is told about; a broken page
+        # degrades to `delta: null` rather than masking the ActionResult.
+        settled = await settle_session(session)
+        delta: StepDelta | None = None
+        try:
+            after = await _capture_observation(session)
+            if before is not None:
+                delta = StepDelta.model_validate(
+                    _diff_observations(
+                        before,
+                        after,
+                        console_errors=page_state.console_errors if page_state else (),
+                        network_failed=page_state.network_failed if page_state else (),
+                        settled=settled,
+                    )
+                )
+                builder.steps[-1].delta = delta
+        except Exception as exc:
+            _log.warning("delta capture failed for step %d (%s): %r", index, step.action, exc)
+
         payload: dict[str, Any] = {
             "ok": result.ok,
             "status": result.status,
@@ -291,6 +356,7 @@ def create_server(
             "error_code": result.error_code,
             "skip_reason": result.skip_reason,
             "page_state": page_state.model_dump(mode="json") if page_state else None,
+            "delta": delta.model_dump(mode="json") if delta is not None else None,
         }
         if state.grid is not None:
             payload["grid"] = {
@@ -432,12 +498,14 @@ def create_server(
     @server.tool()
     @_safe_tool
     async def click(
-        selector: str,
+        selector: str | None = None,
         wait: WaitArg | None = None,
         timeout_ms: int | None = None,
         label: str | None = None,
+        ref: str | None = None,
     ) -> mcp_types.CallToolResult:
-        """Click the first element matching ``selector``.
+        """Click the first element matching ``selector`` (or the ``ref`` from
+        ``observe``).
 
         Pass ``wait`` (a load state like "networkidle", a selector, or a
         number of seconds) when the click triggers client-side (SPA)
@@ -445,46 +513,65 @@ def create_server(
         rather than settled, since a route change with no full page load
         gives no other signal that it's still in flight (#226).
         """
+        target, error = _target(selector, ref, "click")
+        if error is not None:
+            return error
+        assert target is not None
         return await _run_step(
-            ClickStep(selector=selector, wait=wait, timeout_ms=timeout_ms, label=label)
+            ClickStep(selector=target, wait=wait, timeout_ms=timeout_ms, label=label)
         )
 
     @server.tool()
     @_safe_tool
     async def dblclick(
-        selector: str,
+        selector: str | None = None,
         wait: WaitArg | None = None,
         timeout_ms: int | None = None,
         label: str | None = None,
+        ref: str | None = None,
     ) -> mcp_types.CallToolResult:
-        """Double-click the first element matching ``selector``. See
-        ``click``'s ``wait`` for triggering client-side navigation."""
+        """Double-click the first element matching ``selector`` (or ``ref``).
+        See ``click``'s ``wait`` for triggering client-side navigation."""
+        target, error = _target(selector, ref, "dblclick")
+        if error is not None:
+            return error
+        assert target is not None
         return await _run_step(
-            DblClickStep(selector=selector, wait=wait, timeout_ms=timeout_ms, label=label)
+            DblClickStep(selector=target, wait=wait, timeout_ms=timeout_ms, label=label)
         )
 
     @server.tool()
     @_safe_tool
     async def hover(
-        selector: str,
+        selector: str | None = None,
         timeout_ms: int | None = None,
         label: str | None = None,
+        ref: str | None = None,
     ) -> mcp_types.CallToolResult:
-        """Hover the first element matching ``selector``."""
-        return await _run_step(HoverStep(selector=selector, timeout_ms=timeout_ms, label=label))
+        """Hover the first element matching ``selector`` (or ``ref``)."""
+        target, error = _target(selector, ref, "hover")
+        if error is not None:
+            return error
+        assert target is not None
+        return await _run_step(HoverStep(selector=target, timeout_ms=timeout_ms, label=label))
 
     @server.tool(name="type")
     @_safe_tool
     async def type_text(
-        into: str,
         text: str,
+        into: str | None = None,
         delay: float = 0.0,
         timeout_ms: int | None = None,
         label: str | None = None,
+        ref: str | None = None,
     ) -> mcp_types.CallToolResult:
-        """Type ``text`` into the first element matching ``into``."""
+        """Type ``text`` into the first element matching ``into`` (or ``ref``)."""
+        target, error = _target(into, ref, "type")
+        if error is not None:
+            return error
+        assert target is not None
         return await _run_step(
-            TypeStep(into=into, text=text, delay=delay, timeout_ms=timeout_ms, label=label)
+            TypeStep(into=target, text=text, delay=delay, timeout_ms=timeout_ms, label=label)
         )
 
     @server.tool()
@@ -494,23 +581,33 @@ def create_server(
         selector: str | None = None,
         timeout_ms: int | None = None,
         label: str | None = None,
+        ref: str | None = None,
     ) -> mcp_types.CallToolResult:
-        """Press ``key``. Page-level keyboard when ``selector`` is omitted."""
+        """Press ``key``. Page-level keyboard when neither ``selector`` nor
+        ``ref`` is given."""
+        target, error = _target(selector, ref, "press") if ref is not None else (selector, None)
+        if error is not None:
+            return error
         return await _run_step(
-            PressStep(key=key, selector=selector, timeout_ms=timeout_ms, label=label)
+            PressStep(key=key, selector=target, timeout_ms=timeout_ms, label=label)
         )
 
     @server.tool()
     @_safe_tool
     async def select(
-        into: str,
         value: str | list[str],
+        into: str | None = None,
         timeout_ms: int | None = None,
         label: str | None = None,
+        ref: str | None = None,
     ) -> mcp_types.CallToolResult:
-        """Select ``value`` on the ``<select>`` matching ``into``."""
+        """Select ``value`` on the ``<select>`` matching ``into`` (or ``ref``)."""
+        target, error = _target(into, ref, "select")
+        if error is not None:
+            return error
+        assert target is not None
         return await _run_step(
-            SelectStep(into=into, value=value, timeout_ms=timeout_ms, label=label)
+            SelectStep(into=target, value=value, timeout_ms=timeout_ms, label=label)
         )
 
     @server.tool()
@@ -521,10 +618,14 @@ def create_server(
         selector: str | None = None,
         dx: int = 0,
         label: str | None = None,
+        ref: str | None = None,
     ) -> mcp_types.CallToolResult:
-        """Scroll ``to`` a selector into view, or ``by`` pixels (window, or
-        ``selector``'s container when given)."""
-        return await _run_step(ScrollStep(to=to, by=by, selector=selector, dx=dx, label=label))
+        """Scroll ``to`` a selector into view (or the element behind ``ref``),
+        or ``by`` pixels (window, or ``selector``'s container when given)."""
+        target, error = _target(selector, ref, "scroll") if ref is not None else (selector, None)
+        if error is not None:
+            return error
+        return await _run_step(ScrollStep(to=to, by=by, selector=target, dx=dx, label=label))
 
     @server.tool()
     @_safe_tool

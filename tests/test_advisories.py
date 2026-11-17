@@ -8,7 +8,14 @@ recorder, no file I/O.
 from __future__ import annotations
 
 from clickcast.annotate import AnnotateConfig, CursorStyle
-from clickcast.feedback import Advisory, Media, PageState, StepReport, build_advisories
+from clickcast.feedback import (
+    Advisory,
+    Media,
+    PageState,
+    StepDelta,
+    StepReport,
+    build_advisories,
+)
 from clickcast.feedback.advisories import no_dom_reaction
 
 
@@ -147,6 +154,48 @@ class TestNoDomReaction:
     """Direct unit tests for the shared `no_dom_reaction` predicate —
     reused by both this module's tour-level advisory and
     `ReportBuilder.record_step`'s per-step `optional_no_reaction` gate."""
+
+    def test_delta_with_a_revealed_panel_is_a_reaction(self) -> None:
+        # #228's false positive: an SPA click that keeps the same url/title
+        # but visibly reveals a panel. The structured delta (#264) proves
+        # the reaction, so the advisory must not fire.
+        prev = PageState(url_after="https://x/", title="T")
+        current = PageState(url_after="https://x/", title="T")
+        delta = StepDelta(url="https://x/", title="T", text_changes=["+ Details content"])
+        assert no_dom_reaction(prev, current, delta) is False
+
+    def test_delta_with_added_nodes_is_a_reaction(self) -> None:
+        prev = PageState(url_after="https://x/", title="T")
+        current = PageState(url_after="https://x/", title="T")
+        delta = StepDelta(
+            url="https://x/",
+            title="T",
+            added=[{"ref": "e9", "role": "button", "name": "New"}],  # type: ignore[list-item]
+        )
+        assert no_dom_reaction(prev, current, delta) is False
+
+    def test_empty_delta_is_still_no_reaction(self) -> None:
+        prev = PageState(url_after="https://x/", title="T")
+        current = PageState(url_after="https://x/", title="T")
+        delta = StepDelta(url="https://x/", title="T", settled={"ok": True, "ms": 3})  # type: ignore[arg-type]
+        assert no_dom_reaction(prev, current, delta) is True
+
+    def test_delta_with_a_navigation_is_a_reaction(self) -> None:
+        prev = PageState(url_after="https://x/", title="T")
+        current = PageState(url_after="https://x/next", title="T")
+        delta = StepDelta(url="https://x/next", title="T")
+        assert no_dom_reaction(prev, current, delta) is False
+
+    def test_delta_console_error_is_a_reaction(self) -> None:
+        prev = PageState(url_after="https://x/", title="T")
+        current = PageState(url_after="https://x/", title="T")
+        delta = StepDelta(url="https://x/", title="T", console_errors=["boom"])
+        assert no_dom_reaction(prev, current, delta) is False
+
+    def test_without_a_delta_the_shipped_behaviour_is_unchanged(self) -> None:
+        same = PageState(url_after="https://x/", title="T")
+        assert no_dom_reaction(same, same) is True
+        assert no_dom_reaction(same, PageState(url_after="https://x/", title="T - open")) is False
 
     def test_none_on_either_side_is_not_flaggable(self) -> None:
         same = PageState(url_after="https://x/", title="T")

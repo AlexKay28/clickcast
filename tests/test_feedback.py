@@ -23,7 +23,7 @@ from clickcast.feedback import (
 )
 
 REPO_ROOT = Path(__file__).parent.parent
-SCHEMA_PATH = REPO_ROOT / "src" / "clickcast" / "feedback" / "schema" / "v4.json"
+SCHEMA_PATH = REPO_ROOT / "src" / "clickcast" / "feedback" / "schema" / "v5.json"
 V3_SCHEMA_PATH = REPO_ROOT / "src" / "clickcast" / "feedback" / "schema" / "v3.json"
 V2_SCHEMA_PATH = REPO_ROOT / "src" / "clickcast" / "feedback" / "schema" / "v2.json"
 
@@ -80,12 +80,11 @@ class TestModels:
         with pytest.raises(ValidationError):
             StepReport(index=0, action="goto", duration_ms=1.0)  # type: ignore[call-arg]
 
-    def test_report_default_schema_version_is_4(self) -> None:
-        # Bumped to 4 in #196/#199: the optional `elements[].accessibility`
-        # block ships on `DiscoveredElement`. v1/v2/v3 sidecars still
-        # validate under this model (see the forward-compat test below and
-        # the v1/v2/v3-backcompat tests further down).
-        assert _valid_report().schema_version == 4
+    def test_report_default_schema_version_is_5(self) -> None:
+        # Bumped to 5 in #264: the optional per-step `delta` block ships on
+        # `StepReport`. v1-v4 sidecars still validate under this model (see
+        # the forward-compat tests below).
+        assert _valid_report().schema_version == 5
 
     def test_report_defaults_are_forward_compatible(self) -> None:
         # Roadmap #29 Track C adds a top-level `graph` block. The base model
@@ -188,6 +187,51 @@ class TestModels:
         )
         assert el.accessibility is None
 
+    def test_v4_sidecar_validates_under_v5_model(self) -> None:
+        # See #264: a v4 sidecar (no `steps[].delta`, no schema_version bump)
+        # must round-trip cleanly through the v5 model — the new block is
+        # optional and defaults to None.
+        v4_payload = {
+            "schema_version": 4,
+            "clickcast_version": "0.5.0",
+            "started_at": "2026-10-01T15:00:00+00:00",
+            "duration_s": 5.5,
+            "media": {
+                "path": "tour.gif",
+                "format": "gif",
+                "size_bytes": 1024,
+                "frame_count": 12,
+                "duration_s": 1.0,
+                "fps": 12,
+            },
+            "steps": [
+                {
+                    "index": 0,
+                    "action": "click",
+                    "args": {"selector": "#go"},
+                    "status": "ok",
+                    "duration_ms": 1200.0,
+                    "frames": ["frame-0000-000.png"],
+                    "page_state": {
+                        "title": "Home",
+                        "url_after": "https://x/",
+                        "console_errors": [],
+                        "page_errors": [],
+                        "network_failed": [],
+                    },
+                    "skip_reason": None,
+                    "error_code": None,
+                }
+            ],
+        }
+        # Should NOT raise — the new per-step delta defaults to None.
+        report = Report.model_validate(v4_payload)
+        assert report.schema_version == 4  # writer's value preserved
+        assert report.steps[0].delta is None
+
+    def test_step_delta_defaults_to_none(self) -> None:
+        assert _valid_report().steps[0].delta is None
+
     def test_discovered_element_accessibility_populated(self) -> None:
         el = DiscoveredElement(
             selector='role=button[name="Get started"]',
@@ -240,10 +284,18 @@ class TestJsonSchema:
             "and commit the update"
         )
 
-    def test_schema_advertises_v4(self) -> None:
+    def test_schema_advertises_v5(self) -> None:
         schema = json.loads(SCHEMA_PATH.read_text())
-        # schema_version has default 4 in the model — check the default made it
-        assert schema["properties"]["schema_version"]["default"] == 4
+        # schema_version has default 5 in the model — check the default made it
+        assert schema["properties"]["schema_version"]["default"] == 5
+
+    def test_schema_carries_step_delta_block(self) -> None:
+        schema = json.loads(SCHEMA_PATH.read_text())
+        defs = schema["$defs"]
+        assert "StepDelta" in defs
+        assert "DeltaNode" in defs
+        assert "DeltaSettled" in defs
+        assert "delta" in defs["StepReport"]["properties"]
 
     def test_schema_carries_element_accessibility_block(self) -> None:
         schema = json.loads(SCHEMA_PATH.read_text())
@@ -265,6 +317,10 @@ class TestJsonSchema:
         # v3.json must NOT carry the v4 accessibility block — it's a frozen
         # snapshot of the schema BEFORE #196 landed.
         assert "ElementAccessibility" not in v3_schema.get("$defs", {})
+        v4_path = REPO_ROOT / "src" / "clickcast" / "feedback" / "schema" / "v4.json"
+        assert v4_path.exists(), "v4.json must never be deleted (historical contract)"
+        # v4.json must NOT carry the v5 StepDelta block.
+        assert "StepDelta" not in json.loads(v4_path.read_text()).get("$defs", {})
 
 
 # ------------------------------------------------------------------
@@ -283,7 +339,7 @@ class TestRoundTrip:
         path = write(_valid_report(), tmp_path / "tour.gif.json")
         # Must be valid JSON with predictable indentation
         payload = json.loads(path.read_text())
-        assert payload["schema_version"] == 4
+        assert payload["schema_version"] == 5
         assert payload["media"]["format"] == "gif"
 
     def test_load_missing_file_raises(self, tmp_path: Path) -> None:
