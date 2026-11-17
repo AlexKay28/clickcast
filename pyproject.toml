@@ -97,7 +97,7 @@ dev = [
 # targets the widely-deployed, well-documented 1.x `FastMCP` API that every
 # current MCP client config (Claude Code / Claude Desktop) is written against.
 mcp = [
-    "mcp>=1.9.0,<2",
+    "mcp>=1.9.0,<3",
 ]
 # `publish` is release-only: what the release workflow needs to build
 # and upload a wheel, without pulling in test or lint tooling.
