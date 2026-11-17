@@ -163,3 +163,43 @@ def test_empty_annotations_pass_none_not_an_empty_mapping(tmp_path: Path) -> Non
     ):
         render_reel(tmp_path, plan)
     assert annotate.call_args.kwargs["steps"] is None
+
+
+def test_reel_grammar_is_off_by_default(tmp_path: Path) -> None:
+    """Legacy rendering must not touch pixels for the grammar pass (#302)."""
+    plan = _plan(tmp_path)
+    with (
+        patch("clickcast.kernel.render.apply_reel_grammar") as grammar,
+        patch("clickcast.kernel.render.encode", return_value=_enc(plan.out)),
+    ):
+        render_reel(tmp_path, plan)
+    grammar.assert_not_called()
+
+
+def test_reel_grammar_receives_labels_and_urls(tmp_path: Path) -> None:
+    """The grammar pass is fed the sidecar's labels/URLs and runs pre-annotation."""
+    from clickcast.annotate import GrammarConfig
+
+    plan = _plan(
+        tmp_path,
+        grammar=GrammarConfig(),
+        step_labels=("Open home", None),
+        step_urls=("https://example.test/", "https://example.test/about"),
+    )
+    with (
+        patch("clickcast.kernel.render.apply_reel_grammar") as grammar,
+        patch("clickcast.kernel.render.annotate_frames_dir", return_value=0) as annotate,
+        patch("clickcast.kernel.render.encode", return_value=_enc(plan.out)),
+    ):
+        render_reel(tmp_path, plan)
+
+    grammar.assert_called_once()
+    assert grammar.call_args.args[0] == tmp_path
+    assert grammar.call_args.kwargs["step_labels"] == ("Open home", None)
+    assert grammar.call_args.kwargs["step_urls"] == (
+        "https://example.test/",
+        "https://example.test/about",
+    )
+    # Cursor/label overlays must land on top of the grammar compositing.
+    assert grammar.call_count == 1
+    annotate.assert_called_once()

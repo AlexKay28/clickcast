@@ -817,6 +817,14 @@ def auto(
         int,
         typer.Option("--video-fps", min=1, max=120, help="Output FPS used with --smooth."),
     ] = 30,
+    grammar: Annotated[
+        bool,
+        typer.Option(
+            "--grammar/--no-grammar",
+            help="In --smooth mode, add click feedback, transition grammar, captions "
+            "and a timeline. --no-grammar keeps the plain retimed output.",
+        ),
+    ] = True,
     annotations: Annotated[
         Path | None,
         typer.Option(
@@ -910,6 +918,7 @@ def auto(
             quality=quality,
             smooth=smooth,
             video_fps=video_fps,
+            grammar=grammar,
             annotations_path=annotations,
             loop=loop,
             no_sidecar=no_sidecar,
@@ -949,6 +958,7 @@ async def _do_auto(
     no_sidecar: bool,
     smooth: bool = False,
     video_fps: int = 30,
+    grammar: bool = True,
     annotations_path: Path | None = None,
     with_feedback: bool = False,
     redact_patterns: list[re.Pattern[str]] | None = None,
@@ -990,6 +1000,9 @@ async def _do_auto(
             format=format_,
             quality=quality,
             loop=loop,
+            smooth=smooth,
+            video_fps=video_fps,
+            grammar=grammar,
             no_sidecar=no_sidecar,
             with_feedback=with_feedback,
             redact_patterns=list(redact_patterns or []),
@@ -1000,8 +1013,6 @@ async def _do_auto(
             title_card=title_card,
             summary_card=summary_card,
             emit_events=emit_events,
-            smooth=smooth,
-            video_fps=video_fps,
             annotations=region_annotations,
         )
     )

@@ -31,6 +31,7 @@ from clickcast.annotate import (
     apply_zoom_on_click,
     interpolate_cursor_motion,
 )
+from clickcast.annotate.reel_grammar import GrammarConfig, apply_reel_grammar
 from clickcast.annotate.smooth import SmoothConfig, smooth_frames_dir
 from clickcast.encode import EncodeResult, Format, encode
 
@@ -66,6 +67,14 @@ class RenderPlan:
     #: `auto --zoom-on-click`; None disables the crop-and-upscale pass.
     zoom_factor: float | None = None
     zoom_frames_after_click: int = 0
+    #: Reel grammar (click feedback, transition grammar, captions, timeline).
+    #: ``None`` keeps the legacy rendering untouched; surfaces enable it only
+    #: in smooth mode (#302).
+    grammar: GrammarConfig | None = None
+    #: Step labels / URLs indexed by ``step_index``; used by the grammar pass
+    #: for captions and for telling a SPA change from a navigation.
+    step_labels: tuple[str | None, ...] = ()
+    step_urls: tuple[str | None, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -131,6 +140,24 @@ def render_reel(
                 plan.cursor_style.interpolate_easing,
                 plan.cursor_style.interpolate_min_distance,
             )
+
+    # Reel grammar runs after retiming (it must see the final frame sequence)
+    # and before annotation, so cursor/ring/label overlays stay on top.
+    if plan.grammar is not None:
+        grammar = apply_reel_grammar(
+            frames_dir,
+            plan.grammar,
+            step_urls=plan.step_urls or None,
+            step_labels=plan.step_labels or None,
+        )
+        log.info(
+            "reel grammar: %d ripple, %d press, %d slide / %d dissolve, %d caption frames",
+            grammar.ripple_frames,
+            grammar.press_frames,
+            grammar.slide_transitions,
+            grammar.dissolve_transitions,
+            grammar.caption_frames,
+        )
 
     log.info("annotating frames...")
     annotate_frames_dir(
