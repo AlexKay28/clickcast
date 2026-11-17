@@ -120,7 +120,7 @@ pages. Follow this exact sequence:
    `--for-humans` gives a legible reel for the user to watch;
    `--emit-events` prints a machine-readable JSONL line you can parse.
 
-4. READ THE SIDECAR (JSON at `<gif>.json`, schema v4)
+4. READ THE SIDECAR (JSON at `<gif>.json`, schema v5)
    For each step, gate on the structured fields — NOT regex over prose:
      - `status`      : "ok" | "failed" | "skipped"
      - `error_code`  : "timeout" | "locator_missing" | "cross_origin" |
@@ -175,6 +175,19 @@ pip install 'clickcast[mcp]'
 
 Reach for `mcp` when an agent needs to explore and react live; reach for `auto`/`run` for a repeatable, one-shot artifact (CI, docs, release notes). Full tool reference, client config for Claude Code / Claude Desktop, and the schema doc: [`docs/mcp.md`](docs/mcp.md) · [`docs/mcp-tool-schema.md`](docs/mcp-tool-schema.md).
 
+### The agent loop: `observe → act → settle → receipt`
+
+Live driving is token-bounded end to end, so an agent can iterate dozens of times without its context filling with DOM dumps and screenshots:
+
+| Call | What you get |
+|---|---|
+| `observe` | a ranked snapshot of what you can act on, addressed by stable `ref=eN` handles — ≤800 estimated tokens, ≤20 nodes, truthful truncation counts |
+| `click(ref=…)` / `type(ref=…)` / … | one action, plus a `delta` telling you what actually changed (added/removed nodes, text changes, errors, layout shift, `settled`) |
+| `settle` | "has the page stopped changing?" across network, DOM mutations and compositor activity — timeouts reported, never hangs |
+| `receipt` | one artifact directory (reel, v5 sidecar, assertions, visual diff) and a ≤200-token summary with the first failed step's `error_code` |
+
+Every primitive is also on the Python SDK (`Reel.observe()`, `Reel.receipt()`). Loop doc and artifact layout: [`docs/perception.md`](docs/perception.md).
+
 ---
 
 ## First run — 30 seconds
@@ -186,7 +199,7 @@ clickcast auto https://example.com --out tour.gif
 Produces two files:
 
 - `tour.gif` — the reel
-- `tour.gif.json` — the AI-consumable sidecar (`schema_version: 4`, spec at [`docs/feedback-schema.md`](docs/feedback-schema.md))
+- `tour.gif.json` — the AI-consumable sidecar (`schema_version: 5`, spec at [`docs/feedback-schema.md`](docs/feedback-schema.md))
 
 For a walkthrough of how an LLM agent consumes both, see [`docs/ai-integration.md`](docs/ai-integration.md).
 
@@ -556,7 +569,7 @@ for step in report.steps:
             print("  console errors:", step.page_state.console_errors)
 ```
 
-Consumers that don't want to import `clickcast` can parse the JSON directly against the schema at [`src/clickcast/feedback/schema/v4.json`](src/clickcast/feedback/schema/v4.json). A standalone reference implementation lives at [`tests/consumer/read_sidecar.py`](tests/consumer/read_sidecar.py).
+Consumers that don't want to import `clickcast` can parse the JSON directly against the schema at [`src/clickcast/feedback/schema/v5.json`](src/clickcast/feedback/schema/v5.json). A standalone reference implementation lives at [`tests/consumer/read_sidecar.py`](tests/consumer/read_sidecar.py).
 
 See [`docs/ai-integration.md`](docs/ai-integration.md) for the two-line agent-integration example and [`docs/feedback-schema.md`](docs/feedback-schema.md) for the full field-by-field walkthrough.
 
@@ -564,8 +577,8 @@ See [`docs/ai-integration.md`](docs/ai-integration.md) for the two-line agent-in
 
 Two numbers matter and both are reproducible with one command:
 
-- **M1 — `pip install` → verified report:** ~32 s on a warm pip cache with the browser already present (browser download timed separately).
-- **M2 — context per step:** ~1.5 KB of sidecar per step (≈380 estimated tokens at 4 chars/token).
+- **M1 — `pip install` → verified report:** **31.4 s** measured (fresh venv → schema-validated sidecar, cold pip, browser already present; the ~180 MB browser download is timed separately).
+- **M2 — context per step:** **1,530 B** of sidecar per step (≈382 estimated tokens at 4 chars/token); the live-loop calls are capped separately (observe ≤800, delta ≤300, receipt ≤200).
 
 `python scripts/bench_metrics.py` re-measures both, validates the sidecar through the shipped schema, and fails on a 2× regression. Methodology, exclusions and ceilings: [`docs/benchmarks.md`](docs/benchmarks.md).
 
@@ -746,7 +759,7 @@ The annotator (`clickcast.annotate.Annotator` — click ripples, cursor trail, c
 - **Selector not found** — `clickcast elements <url>` shows what's actually clickable. Or mark the step `optional: true`.
 - **Can't reach an internal site** — set `CLICKCAST_PROXY`, or `proxy` in the scenario `meta:` block.
 - **Chromium missing** — `clickcast install`. On Linux CI add `--with-deps`.
-- **Sidecar shape changed** — the current schema is versioned at `src/clickcast/feedback/schema/v4.json`; every bump from v1 has been strictly additive (the `graph` block landed in v2), so older sidecars keep parsing. See [`docs/feedback-schema.md`](docs/feedback-schema.md) for each version's additive contract.
+- **Sidecar shape changed** — the current schema is versioned at `src/clickcast/feedback/schema/v5.json`; every bump from v1 has been strictly additive (the `graph` block landed in v2, `steps[].delta` in v5), so older sidecars keep parsing. See [`docs/feedback-schema.md`](docs/feedback-schema.md) for each version's additive contract.
 
 ---
 
@@ -780,14 +793,14 @@ Cutting a release is documented in [`RELEASING.md`](RELEASING.md).
 
 - On-frame HUD — shipped as the `--for-humans` composite (`--highlight-target`, `--title-card`, `--summary-card`, `--zoom-on-click`, onboarding pace) with the annotation pipeline wired into `auto`/`run`.
 - BFS UI exploration — shipped as `auto --traversal bfs` (plus `--seed-url` for deterministic paths, `visited`-dedup, and the top-level `graph` sidecar block). No separate `explore` command yet — see below.
-- Sidecar schema v2 with the `graph` block — shipped (schema is now at v4; every bump strictly additive).
+- Sidecar schema v2 with the `graph` block — shipped (schema is now at v5; every bump strictly additive).
 - Automatic annotation of `auto` / `run` outputs — shipped (`annotate.pipeline` + `AnnotateConfig`).
 
 **v0.5** (in development on the v0.5 line):
 
 - **Flagship: first-class `clickcast explore <url>` — implemented** (see [Unreleased](CHANGELOG.md) in the CHANGELOG): the state-graph command the v0.2 plan only gestured at. Same traversal/dedup internals as `auto --traversal bfs`, minus recording + encoding — returns a fast `explore.json` (nodes = distinct page states, edges = `(from, to, action, transition_kind)`, plus top discoveries per state). Structured-only, agent-first — the reel is opt-in. Contract: [`docs/explore-schema.md`](docs/explore-schema.md).
 - ~~Pillow 14 deprecation cleanup~~ — done: the 28 `Image.getdata` deprecation warnings in pixel-assertion tests migrated to a `flattened_pixels` helper (`tests/_stubs.py`) that prefers `get_flattened_data` and falls back across the supported `Pillow>=10.0` range.
-- Sidecar schema maturity — the v0.1-era plan for a graph block (originally tracked in #29) landed at schema v2 and the schema has since matured to v4 with strictly additive bumps; any future v5 keeps that contract.
+- Sidecar schema maturity — the v0.1-era plan for a graph block (originally tracked in #29) landed at schema v2 and the schema has since matured to v5 with strictly additive bumps; any future v6 keeps that contract.
 
 ---
 
