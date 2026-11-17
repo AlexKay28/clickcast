@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -150,8 +151,11 @@ async def test_run_failure_stderr_uses_sidecar_redaction(
     with (
         patch.object(cli, "run_scenario", AsyncMock(return_value=run_result)),
         patch.object(cli, "Recorder", FakeRecorder),
-        patch.object(cli, "annotate_frames_dir"),
-        patch.object(cli, "encode", return_value=encoded),
+        patch.object(
+            cli,
+            "render_reel",
+            MagicMock(return_value=SimpleNamespace(enc=encoded, encode_fps=12)),
+        ),
         pytest.raises(typer.Exit) as raised,
     ):
         await cli._do_run(

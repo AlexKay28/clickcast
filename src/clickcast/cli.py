@@ -34,7 +34,6 @@ from clickcast.annotate import (
     AnnotateConfig,
     GridConfig,
     StepAnnotation,
-    annotate_frames_dir,
 )
 from clickcast.auto import AutoConfig, run_tour
 from clickcast.capture import Recorder
@@ -56,7 +55,6 @@ from clickcast.core.opts import BrowserOpts
 from clickcast.core.session import Session
 from clickcast.core.viewport import Viewport
 from clickcast.discovery import AccessibleElement, Element, capture_accessibility_batch, discover
-from clickcast.encode import encode
 from clickcast.explore import ExploreConfig, explore_site
 from clickcast.feedback import Media, ReportBuilder, feedback_pointer_lines
 from clickcast.feedback import write as write_report
@@ -73,6 +71,7 @@ from clickcast.feedback.redact import strip_query_strings as strip_url_queries
 from clickcast.feedback.session.cli import feedback_app
 from clickcast.feedback.session.storage import record_invocation_safe
 from clickcast.feedback.visual_diff import DEFAULT_THRESHOLD as DEFAULT_VISUAL_DIFF_THRESHOLD
+from clickcast.kernel import RenderPlan, render_reel
 from clickcast.scenario import ScenarioError, load
 from clickcast.scenario import run as run_scenario
 
@@ -1257,6 +1256,7 @@ async def _do_run(
     grid: GridConfig | None = None,
     annotations_path: Path | None = None,
 ) -> None:
+    run_started = time.monotonic()
     builder: ReportBuilder | None = None
     if not no_sidecar:
         vp = scenario.meta.viewport
@@ -1284,32 +1284,28 @@ async def _do_run(
     with Recorder(fps=scenario.meta.fps, default_dwell=scenario.meta.dwell) as rec:
         result = await run_scenario(scenario, recorder=rec, builder=builder)
         rec.flush()
-        encode_fps = scenario.meta.fps
-        if scenario.meta.render.smooth:
-            from clickcast.annotate.smooth import SmoothConfig, smooth_frames_dir
-
-            smoothed = smooth_frames_dir(
-                rec.frames_dir,
-                SmoothConfig(output_fps=scenario.meta.render.video_fps),
-                source_fps=scenario.meta.fps,
-            )
-            encode_fps = smoothed.output_fps
-        # Overlays for scenario reels — same pipeline as `auto`. Every executed
-        # step maps to one recorder step_index (repeat counts multiply); walk
-        # them in parallel with `result.results` to build per-step annotations.
-        annotate_frames_dir(
-            rec.frames_dir,
-            steps=_scenario_step_annotations(scenario, result),
-            config=annotate_cfg,
-            regions=region_annotations,
-        )
+        # Same pipeline as `auto`, through the shared kernel: smoothing,
+        # cursor interpolation, annotations, encode-FPS decision, encode.
+        # `format_`/`render.*` are forwarded in full — this call used to drop
+        # `quality` and `loop` on the floor (#256).
         out_path = Path(out)
-        enc = encode(
+        rendered = render_reel(
             rec.frames_dir,
-            out_path,
-            fps=encode_fps,
-            format=format_,  # type: ignore[arg-type]
+            RenderPlan(
+                out=out_path,
+                fps=scenario.meta.fps,
+                smooth=scenario.meta.render.smooth,
+                video_fps=scenario.meta.render.video_fps,
+                quality=scenario.meta.render.quality,
+                loop=scenario.meta.render.loop,
+                format=format_,  # type: ignore[arg-type]
+                annotate=annotate_cfg,
+                step_annotations=_scenario_step_annotations(scenario, result),
+                regions=region_annotations,
+            ),
         )
+        enc = rendered.enc
+        encode_fps = rendered.encode_fps
     if builder is not None and not result.ok:
         builder.add_warning(f"scenario failed at step {result.failed_at}")
     media = _make_media(enc, encode_fps)
@@ -1362,7 +1358,7 @@ async def _do_run(
             duration_s=enc.duration_s,
             pages=pages,
             clicks=clicks,
-            wall_s=enc.duration_s,
+            wall_s=time.monotonic() - run_started,
             sidecar_path=str(sidecar) if sidecar else None,
         )
     if not result.ok:
