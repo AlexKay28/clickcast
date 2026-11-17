@@ -66,6 +66,27 @@ def main() -> None:
         help="Hard wall-time cap on the whole tour in seconds.",
     )
     parser.add_argument(
+        "--format",
+        default="gif",
+        choices=["gif", "mp4", "webp"],
+        help="Output container. MP4 + --capture screencast is the human-facing preset.",
+    )
+    parser.add_argument(
+        "--capture",
+        default="shots",
+        choices=["shots", "screencast"],
+        help="Frame source (Chromium-only for screencast).",
+    )
+    parser.add_argument(
+        "--smooth",
+        action="store_true",
+        help="Retime cursor/transitions to --video-fps (no-op for screencast).",
+    )
+    parser.add_argument("--video-fps", type=int, default=30, help="Encoded FPS for video output.")
+    parser.add_argument(
+        "--screencast-quality", type=int, default=80, help="JPEG quality for the screencast stream."
+    )
+    parser.add_argument(
         "--click-timeout",
         type=float,
         default=5.0,
@@ -136,9 +157,13 @@ def main() -> None:
                 initial_wait=args.initial_wait,
                 session_kwargs={"viewport": vp.as_tuple()},
                 fps=args.fps,
-                format="gif",
+                format=args.format,
                 quality=8,
                 loop=0,
+                smooth=args.smooth,
+                video_fps=args.video_fps,
+                capture=args.capture,
+                screencast_quality=args.screencast_quality,
                 no_sidecar=False,
             )
         )
