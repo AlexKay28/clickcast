@@ -52,12 +52,12 @@ from clickcast.core.viewport import Viewport
 from clickcast.discovery import Element
 from clickcast.discovery import discover as _async_discover
 from clickcast.encode import EncodeResult, Format, encode
-from clickcast.feedback import Media, Report, ReportBuilder
-from clickcast.feedback import write as write_report
+from clickcast.feedback import Report, ReportBuilder
 from clickcast.feedback.assertions import build_assertions, diff_assertions, load_assertions
 from clickcast.feedback.models import VisualDiffReport
 from clickcast.feedback.visual_diff import DEFAULT_THRESHOLD
 from clickcast.feedback.visual_diff import visual_diff as _visual_diff
+from clickcast.kernel import finalize_report, make_media, write_sidecar
 from clickcast.scenario import Meta, Scenario
 from clickcast.scenario import run as run_scenario
 from clickcast.serving import serve_directory
@@ -619,51 +619,6 @@ def _crop_and_save(
     return out
 
 
-def _build_report_if_needed(
-    builder: ReportBuilder | None,
-    enc: EncodeResult,
-    fps: int,
-) -> Report | None:
-    """Build the finalized Report from a builder + encoder result.
-
-    Split so callers that want to inspect the report post-run
-    (``Reel.assertions()``) can share the same finalization path —
-    ``ReportBuilder.build`` detaches listeners and must run at most
-    once per builder.
-    """
-    if builder is None:
-        return None
-    media = Media(
-        path=str(enc.path),
-        format=enc.format,
-        size_bytes=enc.size_bytes,
-        frame_count=enc.frame_count,
-        duration_s=enc.duration_s,
-        fps=fps,
-    )
-    return builder.build(media)
-
-
-def _write_sidecar_from_report(
-    out: Path,
-    no_sidecar: bool,
-    report: Report | None,
-    *,
-    redact_patterns: list[re.Pattern[str]] | None = None,
-    strip_query_strings: bool = False,
-) -> Path | None:
-    if no_sidecar or report is None:
-        return None
-    sidecar = out.with_suffix(out.suffix + ".json")
-    write_report(
-        report,
-        sidecar,
-        redact_patterns=redact_patterns,
-        strip_query_strings=strip_query_strings,
-    )
-    return sidecar
-
-
 # --------------------------------------------------------------------------
 # AsyncReel — for callers already inside a running event loop
 # --------------------------------------------------------------------------
@@ -746,6 +701,7 @@ class AsyncReel(_BaseReel):
         quality: int = 8,
         loop: int = 0,
         no_sidecar: bool = False,
+        with_feedback: bool = False,
     ) -> Path:
         out = Path(path)
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -768,12 +724,15 @@ class AsyncReel(_BaseReel):
         )
         if not result.ok:
             builder.add_warning(f"scenario failed at step {result.failed_at}")
-        report = _build_report_if_needed(builder, enc, scenario.meta.fps)
+        # Finalize once: `assertions()` needs the report even with
+        # `no_sidecar=True`, and ReportBuilder.build must run at most once.
+        report = finalize_report(builder, make_media(enc, scenario.meta.fps))
         self._last_report = report
-        _write_sidecar_from_report(
+        write_sidecar(
             out,
-            no_sidecar,
             report,
+            no_sidecar=no_sidecar,
+            with_feedback=with_feedback,
             redact_patterns=self._redact_patterns,
             strip_query_strings=self._strip_query_strings,
         )
@@ -806,6 +765,7 @@ class Reel(_BaseReel):
         quality: int = 8,
         loop: int = 0,
         no_sidecar: bool = False,
+        with_feedback: bool = False,
     ) -> Path:
         _fail_if_running_loop("Reel.save()")
         # Reuse AsyncReel's implementation to avoid drift. Use `_as_async` to
@@ -819,6 +779,7 @@ class Reel(_BaseReel):
                 quality=quality,
                 loop=loop,
                 no_sidecar=no_sidecar,
+                with_feedback=with_feedback,
             )
         )
         # Propagate the finalized report so post-run inspection APIs on the

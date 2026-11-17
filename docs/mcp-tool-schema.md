@@ -69,6 +69,9 @@ v1 is single-session, single-process (see #191 "Out of scope"): one
 3. `close_session` tears the session down. If `save_transcript` was passed,
    the accumulated transcript (see below) is written to that path in the
    same JSON shape `feedback/builder.py` produces for a batch run.
+   `redact_patterns` / `strip_query_strings` / `with_feedback` behave exactly
+   as they do for `clickcast run`: an agent that drove an authenticated URL
+   can scrub tokens before the transcript hits disk.
 
 ### Transcript accumulation
 
@@ -81,11 +84,15 @@ per-call `page_state` in the tool response, so building the full sidecar
 list is free. Whether it hits disk is controlled by `close_session`'s
 optional `save_transcript` argument — most live sessions are exploratory
 and don't need one, so nothing is written unless asked. When a path is
-given, `close_session` calls the same `feedback.write()` used by every
-other clickcast entrypoint, so the artifact this produces is a first-class
-sidecar (schema v3) — just without an accompanying `media` (no GIF/video is
-recorded in a live session; `media.format` is `"none"` and `media.path` is
-empty in that written sidecar).
+given, `close_session` writes through the shared kernel sidecar writer
+(`clickcast.kernel.sidecar`), so the artifact is a first-class sidecar — just
+without an accompanying media file (no GIF/video is recorded in a live
+session; `media.format` is `"none"`, `media.path` is empty, and
+`media.frame_count` is the number of recorded steps).
+
+Transcripts carry the same fields a batch sidecar does: the report-level
+`url` is the first `goto` target, and each step's `frames` list points at the
+PNG that tool call returned.
 
 ## Per-call response shape
 

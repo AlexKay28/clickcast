@@ -56,8 +56,7 @@ from clickcast.core.session import Session
 from clickcast.core.viewport import Viewport
 from clickcast.discovery import AccessibleElement, Element, capture_accessibility_batch, discover
 from clickcast.explore import ExploreConfig, explore_site
-from clickcast.feedback import Media, ReportBuilder, feedback_pointer_lines
-from clickcast.feedback import write as write_report
+from clickcast.feedback import ReportBuilder, feedback_pointer_lines
 from clickcast.feedback.models import VisualDiffReport
 from clickcast.feedback.pointers import (
     DIAGNOSTICS_COMMAND,
@@ -71,7 +70,7 @@ from clickcast.feedback.redact import strip_query_strings as strip_url_queries
 from clickcast.feedback.session.cli import feedback_app
 from clickcast.feedback.session.storage import record_invocation_safe
 from clickcast.feedback.visual_diff import DEFAULT_THRESHOLD as DEFAULT_VISUAL_DIFF_THRESHOLD
-from clickcast.kernel import RenderPlan, render_reel
+from clickcast.kernel import RenderPlan, render_reel, write_media_sidecar
 from clickcast.scenario import ScenarioError, load
 from clickcast.scenario import run as run_scenario
 
@@ -466,41 +465,6 @@ def _session_kwargs(
         extra_headers=dict(extra_headers or {}),
         header_host=header_host,
     ).to_session_kwargs()
-
-
-def _make_media(enc: Any, fps: int) -> Media:
-    return Media(
-        path=str(enc.path),
-        format=enc.format,
-        size_bytes=enc.size_bytes,
-        frame_count=enc.frame_count,
-        duration_s=enc.duration_s,
-        fps=fps,
-    )
-
-
-def _write_sidecar(
-    out: Path,
-    no_sidecar: bool,
-    builder: ReportBuilder | None,
-    media: Media,
-    *,
-    with_feedback: bool = False,
-    redact_patterns: list[re.Pattern[str]] | None = None,
-    strip_query_strings: bool = False,
-) -> Path | None:
-    if no_sidecar or builder is None:
-        return None
-    sidecar = out.with_suffix(out.suffix + ".json")
-    report = builder.build(media)
-    write_report(
-        report,
-        sidecar,
-        with_feedback=with_feedback,
-        redact_patterns=redact_patterns,
-        strip_query_strings=strip_query_strings,
-    )
-    return sidecar
 
 
 def _build_grid_config(
@@ -1308,12 +1272,12 @@ async def _do_run(
         encode_fps = rendered.encode_fps
     if builder is not None and not result.ok:
         builder.add_warning(f"scenario failed at step {result.failed_at}")
-    media = _make_media(enc, encode_fps)
-    sidecar = _write_sidecar(
+    sidecar = write_media_sidecar(
         out_path,
-        no_sidecar,
         builder,
-        media,
+        enc,
+        encode_fps,
+        no_sidecar=no_sidecar,
         with_feedback=with_feedback,
         redact_patterns=redact_patterns,
         strip_query_strings=strip_query_strings,

@@ -26,6 +26,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   context on demand, making this repo directly installable as an agent skill.
 
 ### Changed
+- **One sidecar writer for every surface.** `auto`, `run`, the `Reel` SDK and
+  the MCP server each assembled the v4 sidecar themselves; the copies had
+  drifted. New `clickcast.kernel.sidecar` (`make_media`, `finalize_report`,
+  `write_sidecar`, `write_media_sidecar`) is now the only implementation. Drift
+  fixed with it: scenario (`run`) and MCP transcripts now record the start
+  `url` (derived from the first `goto`) instead of `null`, MCP steps carry
+  their frame paths instead of `frames: []`, `close_session` accepts
+  `redact_patterns` / `strip_query_strings` / `with_feedback`, and
+  `Reel.save(..., with_feedback=True)` exists.
 - **`clickcast run` renders through the same kernel as `auto`.** New
   `clickcast.kernel.render`: surfaces build a `RenderPlan` and get one media
   pipeline (zoom → smooth *or* interpolate → annotate → encode) with the encode

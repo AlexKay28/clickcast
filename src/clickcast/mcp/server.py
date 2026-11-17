@@ -19,6 +19,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from functools import wraps
@@ -46,8 +47,8 @@ from clickcast.core.actions import (
 from clickcast.core.opts import BrowserOpts
 from clickcast.core.session import Session, WaitArg
 from clickcast.core.viewport import Viewport
-from clickcast.feedback import Media, PageState, ReportBuilder
-from clickcast.feedback import write as write_report
+from clickcast.feedback import PageState, ReportBuilder
+from clickcast.kernel import finalize_report, transcript_media, write_sidecar
 from mcp import types as mcp_types
 
 __all__ = ["ClickcastSessionState", "create_server", "serve_stdio"]
@@ -111,6 +112,23 @@ def _error_result(error_code: str, message: str) -> mcp_types.CallToolResult:
         content=[mcp_types.TextContent(type="text", text=json.dumps(payload))],
         isError=True,
     )
+
+
+def _compile_redact_patterns(raw: list[str] | None) -> list[re.Pattern[str]]:
+    """Compile transcript redaction patterns.
+
+    A malformed regex raises :class:`ValueError`, which ``_safe_tool`` turns
+    into the standard ``other`` error payload rather than a traceback.
+    """
+    if not raw:
+        return []
+    compiled: list[re.Pattern[str]] = []
+    for source in raw:
+        try:
+            compiled.append(re.compile(source))
+        except re.error as exc:
+            raise ValueError(f"invalid redact_patterns entry {source!r}: {exc}") from exc
+    return compiled
 
 
 _F = TypeVar("_F", bound="Callable[..., Awaitable[mcp_types.CallToolResult]]")
@@ -206,11 +224,10 @@ def create_server(
         state.step_index += 1
 
         result = await execute(step, session, step_index=index)
-        await builder.record_step(index=index, step=step, result=result)
-        page_state: PageState | None = builder.steps[-1].page_state
 
         content: list[mcp_types.ContentBlock] = []
         frame_path = frames_dir / f"step-{index:04d}.png"
+        captured = False
         try:
             await session.screenshot(path=frame_path, full_page=full_page)
             click_at = (
@@ -229,6 +246,7 @@ def create_server(
                 click_at=click_at,
                 ripple_stage=ripple_stage,
             )
+            captured = True
             image_b64 = base64.b64encode(frame_path.read_bytes()).decode("ascii")
             content.append(
                 mcp_types.ImageContent(type="image", data=image_b64, mimeType="image/png")
@@ -239,6 +257,17 @@ def create_server(
             # degrade to a text-only response rather than masking the real
             # ActionResult with a frame-capture error.
             _log.warning("frame capture failed for step %d (%s): %r", index, step.action, exc)
+
+        # Record after the screenshot so the step carries its frame path: the
+        # transcript used to report `frames: []` for every MCP step while batch
+        # sidecars pointed at their PNGs.
+        await builder.record_step(
+            index=index,
+            step=step,
+            result=result,
+            frames=[frame_path] if captured else None,
+        )
+        page_state: PageState | None = builder.steps[-1].page_state
 
         payload: dict[str, Any] = {
             "ok": result.ok,
@@ -331,12 +360,22 @@ def create_server(
 
     @server.tool()
     @_safe_tool
-    async def close_session(save_transcript: str | None = None) -> mcp_types.CallToolResult:
+    async def close_session(
+        save_transcript: str | None = None,
+        redact_patterns: list[str] | None = None,
+        strip_query_strings: bool = False,
+        with_feedback: bool = False,
+    ) -> mcp_types.CallToolResult:
         """Close the live session. Optionally flush the accumulated
         sidecar-shaped transcript (see ``docs/mcp-tool-schema.md``) to
         ``save_transcript`` — same JSON shape a batch ``run``/``auto``
-        sidecar has, minus the ``media`` block (no reel is encoded from a
-        live session)."""
+        sidecar has, with a zeroed ``media`` block (no reel is encoded from a
+        live session).
+
+        ``redact_patterns`` / ``strip_query_strings`` / ``with_feedback``
+        behave exactly as they do for ``clickcast run``: an agent that drove
+        an authenticated URL can scrub tokens before the transcript hits disk.
+        """
         if state.session is None:
             return _error_result("other", _ERROR_NO_SESSION)
 
@@ -345,16 +384,16 @@ def create_server(
         saved_path: str | None = None
         try:
             if builder is not None and save_transcript:
-                media = Media(
-                    path="",
-                    format="none",
-                    size_bytes=0,
-                    frame_count=state.step_index,
-                    duration_s=0.0,
-                    fps=1,
+                report = finalize_report(builder, transcript_media(state.step_index))
+                written = write_sidecar(
+                    save_transcript,
+                    report,
+                    target=save_transcript,
+                    redact_patterns=_compile_redact_patterns(redact_patterns),
+                    strip_query_strings=strip_query_strings,
+                    with_feedback=with_feedback,
                 )
-                report = builder.build(media)
-                saved_path = str(write_report(report, save_transcript))
+                saved_path = str(written) if written is not None else None
         finally:
             await session.close()
             state.reset()

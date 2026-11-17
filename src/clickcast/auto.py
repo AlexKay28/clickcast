@@ -48,9 +48,14 @@ from clickcast.core.actions import ClickStep, GotoStep, ScrollStep, execute
 from clickcast.core.session import Session
 from clickcast.discovery import Element, capture_accessibility_batch, discover
 from clickcast.discovery.urlutil import is_same_origin, normalize_url
-from clickcast.feedback import Media, ReportBuilder, StepReport, build_advisories
-from clickcast.feedback import write as write_report
-from clickcast.kernel import RenderPlan, render_reel
+from clickcast.feedback import ReportBuilder, StepReport, build_advisories
+from clickcast.kernel import (
+    RenderPlan,
+    finalize_report,
+    make_media,
+    render_reel,
+    write_sidecar,
+)
 
 __all__ = ["AutoConfig", "explore_page", "run_tour"]
 
@@ -770,12 +775,12 @@ async def run_tour(cfg: AutoConfig) -> None:
             )
             enc = rendered.enc
             encode_fps = rendered.encode_fps
-            media = _make_media(enc, encode_fps)
-            sidecar = _write_sidecar(
+            # One media block serves both the sidecar and the advisories pass.
+            media = make_media(enc, encode_fps)
+            sidecar = write_sidecar(
                 out_path,
-                cfg.no_sidecar,
-                builder,
-                media,
+                finalize_report(builder, media),
+                no_sidecar=cfg.no_sidecar,
                 with_feedback=cfg.with_feedback,
                 redact_patterns=cfg.redact_patterns,
                 strip_query_strings=cfg.strip_query_strings,
@@ -884,41 +889,6 @@ def _count_nav_clicks(steps: list[StepReport]) -> int:
         if current_url:
             prev_url = current_url
     return nav
-
-
-def _make_media(enc: Any, fps: int) -> Media:
-    return Media(
-        path=str(enc.path),
-        format=enc.format,
-        size_bytes=enc.size_bytes,
-        frame_count=enc.frame_count,
-        duration_s=enc.duration_s,
-        fps=fps,
-    )
-
-
-def _write_sidecar(
-    out: Path,
-    no_sidecar: bool,
-    builder: ReportBuilder | None,
-    media: Media,
-    *,
-    with_feedback: bool = False,
-    redact_patterns: list[re.Pattern[str]] | None = None,
-    strip_query_strings: bool = False,
-) -> Path | None:
-    if no_sidecar or builder is None:
-        return None
-    sidecar = out.with_suffix(out.suffix + ".json")
-    report = builder.build(media)
-    write_report(
-        report,
-        sidecar,
-        with_feedback=with_feedback,
-        redact_patterns=redact_patterns,
-        strip_query_strings=strip_query_strings,
-    )
-    return sidecar
 
 
 # ---------------------------------------------------------------------------

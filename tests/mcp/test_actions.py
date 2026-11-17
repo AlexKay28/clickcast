@@ -65,6 +65,46 @@ class TestSessionLifecycle:
         assert len(data["steps"]) == 1
         assert data["steps"][0]["action"] == "goto"
         assert data["media"]["format"] == "none"
+        # #257: batch sidecars always carried the start url and per-step frame
+        # paths; MCP transcripts used to report `url: null` and `frames: []`.
+        assert data["url"] == fixture_site_url + "/"
+        assert data["steps"][0]["frames"]
+
+    async def test_close_session_transcript_redacts_and_adds_feedback(
+        self, fixture_site_url: str, tmp_path
+    ) -> None:
+        url = fixture_site_url + "/?token=super-secret-value"
+        out = tmp_path / "transcript.json"
+        async with open_client() as client:
+            await client.call_tool("start_session", {})
+            await client.call_tool("goto", {"url": url})
+            result = await client.call_tool(
+                "close_session",
+                {
+                    "save_transcript": str(out),
+                    "redact_patterns": ["super-secret-value"],
+                    "with_feedback": True,
+                },
+            )
+        assert result.isError is not True
+        raw = out.read_text()
+        assert "super-secret-value" not in raw
+        data = json.loads(raw)
+        assert "«redacted»" in data["url"]
+        assert data["feedback"]["report_url"]
+
+    async def test_close_session_rejects_a_bad_redact_pattern(
+        self, fixture_site_url: str, tmp_path
+    ) -> None:
+        out = tmp_path / "transcript.json"
+        async with open_client() as client:
+            await client.call_tool("start_session", {})
+            result = await client.call_tool(
+                "close_session",
+                {"save_transcript": str(out), "redact_patterns": ["("]},
+            )
+        assert result.isError is True
+        assert "invalid redact_patterns" in result_json(result)["error"]
 
     async def test_action_after_close_session_errors(self) -> None:
         async with open_client() as client:
