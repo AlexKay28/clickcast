@@ -9,11 +9,16 @@ This script decodes any GIF/MP4/WebP via imageio (Pillow for GIF, the bundled
 ffmpeg for video) and reports, over consecutive frame pairs:
 
 * ``unique_pct``   — share of frames that differ from their predecessor
-* ``dup_pct``      — share that are (near-)identical, i.e. held frames
+* ``dup_pct``      — share that are held frames (essentially nothing changed)
 * ``mean_diff``    — mean absolute luminance difference (0-255 scale)
 
-``--threshold`` sets the per-pixel-mean cutoff below which a pair counts as a
-duplicate (default 0.5/255, i.e. imperceptible).
+A pair counts as a duplicate when fewer than ``--min-changed`` of its pixels
+changed by more than ``--pixel-delta`` levels (defaults: 0.01% of the frame,
+4/255 — above H.264 noise on a held frame, below a drawn ring). The whole-frame
+mean is deliberately *not* the criterion: a cursor
+move or a click ripple repaints a few hundred pixels, which is real motion but
+averages away to ~0.07/255, so averaging calls that static and quietly rewards
+slideshows.
 
 Usage::
 
@@ -99,20 +104,23 @@ def _luma(frame: np.ndarray) -> np.ndarray:
     return frame[..., 0].astype(np.float32)
 
 
-def measure(path: str | Path, *, threshold: float = 0.5) -> MotionStats:
+def measure(path: str | Path, *, min_changed: float = 0.0001, pixel_delta: int = 2) -> MotionStats:
     path = Path(path)
     if not path.exists():
         raise SystemExit(f"no such file: {path}")
 
     count = 0
     diffs: list[float] = []
+    moved: list[float] = []
     previous: np.ndarray | None = None
     try:
         for frame in iio.imiter(path):
             gray = _luma(frame)
             count += 1
             if previous is not None:
-                diffs.append(float(np.abs(gray - previous).mean()))
+                delta = np.abs(gray - previous)
+                diffs.append(float(delta.mean()))
+                moved.append(float((delta > pixel_delta).mean()))
             previous = gray
     except Exception as exc:  # pragma: no cover - codec/plugin specific
         raise SystemExit(f"{path}: cannot decode frames: {exc}") from exc
@@ -120,7 +128,7 @@ def measure(path: str | Path, *, threshold: float = 0.5) -> MotionStats:
     if count < 2:
         raise SystemExit(f"{path}: needs at least two frames")
 
-    duplicates = sum(1 for d in diffs if d < threshold)
+    duplicates = sum(1 for share in moved if share < min_changed)
     fps, duration = _timing(path)
 
     return MotionStats(
@@ -141,7 +149,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("media", nargs="+", help="GIF/MP4/WebP reel(s) to measure")
     parser.add_argument(
-        "--threshold", type=float, default=0.5, help="duplicate cutoff, 0-255 (default 0.5)"
+        "--min-changed",
+        type=float,
+        default=0.0001,
+        help="share of changed pixels below which a pair is a duplicate (default 0.01%%)",
+    )
+    parser.add_argument(
+        "--pixel-delta",
+        type=int,
+        default=4,
+        help="per-pixel luminance change that counts as motion, 0-255 (default 4)",
     )
     parser.add_argument("--json", action="store_true", help="emit JSON instead of a table")
     parser.add_argument(
@@ -149,7 +166,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    results = [measure(p, threshold=args.threshold) for p in args.media]
+    results = [
+        measure(p, min_changed=args.min_changed, pixel_delta=args.pixel_delta) for p in args.media
+    ]
 
     if args.json:
         print(json.dumps([asdict(r) for r in results], indent=2))

@@ -65,7 +65,7 @@ def test_static_frames_are_all_duplicates(tmp_path: Path) -> None:
     path = tmp_path / "static.gif"
     _write_gif(path, _near_identical(8))
 
-    stats = bench.measure(path, threshold=0.5)
+    stats = bench.measure(path)
 
     assert stats.frames == 8
     assert stats.dup_pct == 100.0
@@ -80,7 +80,7 @@ def test_alternating_frames_are_all_unique(tmp_path: Path) -> None:
     path = tmp_path / "alternating.gif"
     _write_gif(path, [black if i % 2 == 0 else white for i in range(8)])
 
-    stats = bench.measure(path, threshold=0.5)
+    stats = bench.measure(path)
 
     assert stats.dup_pct == 0.0
     assert stats.unique_pct == 100.0
@@ -95,6 +95,43 @@ def test_fail_under_gate(tmp_path: Path) -> None:
 
     assert bench.main([str(path), "--fail-under", "90"]) == 1
     assert bench.main([str(path), "--fail-under", "0"]) == 0
+
+
+@pytest.mark.unit
+def test_small_visible_change_is_motion_not_a_duplicate(tmp_path: Path) -> None:
+    """A click ripple repaints a few hundred pixels — that is real motion.
+
+    The whole-frame mean of such a change is ~0.07/255, which is why the
+    criterion is a pixel count rather than an average: averaging would call a
+    ripple static and reward slideshows.
+    """
+    frames = []
+    for index in range(6):
+        image = Image.new("RGB", (128, 96), (40, 40, 40))
+        # A 10x10 ring (0.8% of the frame) at a different position per frame.
+        box = (4 + index * 10, 30, 14 + index * 10, 40)
+        image.paste((220, 180, 70), box)
+        frames.append(image)
+    path = tmp_path / "ripple.gif"
+    _write_gif(path, frames)
+
+    stats = bench.measure(path)
+
+    assert stats.unique_pct == 100.0
+    assert stats.mean_diff < 2.0  # averages away — the point of the test
+
+
+@pytest.mark.unit
+def test_codec_noise_is_not_motion(tmp_path: Path) -> None:
+    """A 2-level dither is compression noise, not something a viewer sees."""
+    frames = []
+    for index in range(6):
+        image = Image.new("RGB", (64, 48), (40 + index % 2, 40, 40))
+        frames.append(image)
+    path = tmp_path / "noise.gif"
+    _write_gif(path, frames)
+
+    assert bench.measure(path).dup_pct == 100.0
 
 
 @pytest.mark.unit
