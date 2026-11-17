@@ -26,6 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   deterministically.
 
 ### Fixed
+- **Playwright floor raised to `>=1.49`.** `capture_accessibility` calls
+  `Locator.aria_snapshot()`, which only exists from 1.49; on 1.44–1.48 the call
+  failed inside a blanket `except Exception: pass`, so the v4 `accessibility`
+  block silently degraded to all-null role/name/state in `elements --json` and
+  in sidecars. API-drift failures now log a warning naming the required
+  version, while transient locator errors stay silent.
 - **Security/privacy:** discovery-generated scenarios use safe YAML
   serialization (hostile element labels cannot inject steps); feedback issue
   reports redact URLs/errors/diagnostics throughout; feedback pointer URLs no
