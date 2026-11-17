@@ -135,6 +135,28 @@ def test_codec_noise_is_not_motion(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
+def test_timing_falls_back_when_ffprobe_is_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CI images ship ffmpeg but not ffprobe; fps must still be readable.
+
+    A ``0.0`` fps silently disables every real assertion in callers, which is
+    how the screencast test first failed on CI.
+    """
+    import imageio.v3 as iio
+    import numpy as np
+
+    path = tmp_path / "reel.mp4"
+    iio.imwrite(path, np.full((8, 64, 96, 3), 120, dtype=np.uint8), fps=30)
+    monkeypatch.setattr(bench, "_ffprobe_timing", lambda _path: (0.0, 0.0))
+
+    fps, duration = bench._timing(path)
+
+    assert fps == pytest.approx(30.0, abs=0.5)
+    assert duration > 0
+
+
+@pytest.mark.unit
 def test_missing_file_is_a_clean_exit() -> None:
     with pytest.raises(SystemExit):
         bench.measure("/nonexistent/reel.mp4")

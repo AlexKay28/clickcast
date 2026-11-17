@@ -58,6 +58,27 @@ class MotionStats:
 
 
 def _timing(path: Path) -> tuple[float, float]:
+    """``(fps, duration_s)`` from ffprobe, falling back to imageio's metadata.
+
+    ffprobe is not installed everywhere (notably the CI images), and a video
+    whose frame rate reads as ``0.0`` makes callers skip real assertions, so
+    the container metadata is the fallback rather than a zero.
+    """
+    fps, duration = _ffprobe_timing(path)
+    if fps > 0 and duration > 0:
+        return fps, duration
+    try:
+        meta = iio.immeta(path, plugin="FFMPEG")
+    except Exception:  # pragma: no cover - plugin/format specific
+        return fps, duration
+    if fps <= 0:
+        fps = float(meta.get("fps") or 0.0)
+    if duration <= 0:
+        duration = float(meta.get("duration") or 0.0)
+    return fps, duration
+
+
+def _ffprobe_timing(path: Path) -> tuple[float, float]:
     """``(fps, duration_s)`` from ffprobe, or ``(0, 0)`` when it is absent."""
     exe = shutil.which("ffprobe")
     if not exe:
