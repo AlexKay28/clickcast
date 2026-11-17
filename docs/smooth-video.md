@@ -74,15 +74,22 @@ Use `--capture shots` (the default) on those engines.
 ### Measured on the 300 ms transition fixture
 
 Tour: `clickcast auto .../slow-transition.html --max-steps 2`, 30 fps MP4,
-`scripts/bench_motion.py` (duplicate cutoff 0.5/255):
+`scripts/bench_motion.py`. A frame pair counts as a duplicate when fewer than
+0.01% of its pixels changed by more than 4/255 levels — a whole-frame average
+would call a click ripple static, which is how this metric was first measured
+wrong (#306).
 
-| backend | frames | fps | unique % | duplicate % |
-|---|---|---|---|---|
-| `shots --smooth` | 45 | 30 | 20.5 | 79.5 |
-| `screencast` | 126 | 30 | **99.2** | 0.8 |
+| backend | frames | fps | unique % | duplicate % | MP4 |
+|---|---|---|---|---|---|
+| `shots --smooth --no-grammar` | 60 | 30 | 27.1 | 72.9 | 136 KB |
+| `shots --smooth` (grammar on) | 45 | 30 | 43.2 | 56.8 | 139 KB |
+| `screencast` | 126 | 30 | **99.2** | 0.8 | 1056 KB |
+| `screencast --smooth` (grammar on) | 126 | 30 | **99.2** | 0.8 | 1074 KB |
 
-The screencast reel has ~4.8× more unique frames on the same tour; see the
-issue #303 PR for wall time and artifact-size numbers.
+`unique%` over a whole reel that ends in idle dwells cannot reach 100 even with
+perfect capture: a static page is legitimately a held frame. During a 300 ms
+transition the screencast backend records at least 8 distinct frames at 30 fps,
+which is what the test asserts.
 
 ## Smooth MP4
 
@@ -135,9 +142,19 @@ clickcast auto https://example.com -o tour.mp4 --smooth --video-fps 30 --no-gram
 
 Captions come from `StepReport.label` and the slide/dissolve decision from the
 step's recorded URL, so a scenario only gets slide transitions where the URL
-actually changed. `scripts/bench_motion.py` measures the effect: the pass adds
-real new frames, but the headline jump in `unique%` comes from the screencast
-capture backend, which records page motion instead of holding stills.
+actually changed. Scripted scenarios get the same pass (labels expanded by
+`repeat`); they have no post-step URL history, so their boundaries dissolve.
+
+The grammar pass also applies on top of screencast footage — pass `--smooth`
+alongside `--capture screencast` to opt in. That combination is the
+human-facing preset: real page motion plus synthesized cursor, click and
+caption cues.
+
+```bash
+# What a demo reel should look like
+clickcast auto https://example.com -o tour.mp4 --format mp4 \
+  --capture screencast --smooth --video-fps 30
+```
 
 ## Region annotations
 

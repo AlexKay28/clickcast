@@ -30,6 +30,14 @@ clickcast install              # fetch browser engines (wraps playwright install
 clickcast auto https://example.com --out tour.gif
 ```
 
+For a reel a human will actually watch — continuous page motion plus cursor,
+click and caption cues — switch to the screencast preset:
+
+```bash
+clickcast auto https://example.com -o tour.mp4 --format mp4 \
+  --capture screencast --smooth --video-fps 30
+```
+
 Two files land next to each other:
 
 - `tour.gif` — the reel
