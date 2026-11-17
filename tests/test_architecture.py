@@ -8,8 +8,10 @@ than grepping, and fail with the offending file and line.
 Four invariants:
 
 1. Playwright may only be imported by the session layer (the real browser API).
-2. The ``clickcast.encode`` facade is only used by the render kernel (plus
-   ``reel.py`` until #261 routes the SDK through the kernel).
+2. The ``clickcast.encode.encode()`` callable is only called by the render
+   kernel (plus ``reel.py`` until #261 routes the SDK through the kernel).
+   The facade's result *types* (``EncodeResult``, ``Format``) are plain data
+   and may be imported anywhere.
 3. Engine/layer packages never import the CLI framework (``typer``).
 4. Nothing under ``src/`` imports ``clickcast.cli`` except the entry point.
 """
@@ -38,7 +40,9 @@ _PLAYWRIGHT_ALLOWLIST = {
     "core/session.py": "the single browser seam; owns Playwright launch and page lifecycle",
 }
 
-#: Modules allowed to import the ``clickcast.encode`` facade.
+#: Modules allowed to import the ``encode()`` callable from the
+#: ``clickcast.encode`` facade. Type-only imports (``EncodeResult``, ``Format``)
+#: are not restricted: they carry no encoder behaviour.
 _ENCODE_ALLOWLIST = {
     "kernel/render.py": "the one render pipeline; the only supported encoder caller",
     # TODO(#261): the SDK still encodes directly. Drop this entry once reel.py
@@ -95,18 +99,28 @@ def _resolved_module(path: Path, node: ast.ImportFrom) -> str | None:
     return ".".join(base)
 
 
-def _imports(path: Path) -> Iterator[tuple[str, int]]:
-    """Yield ``(module, line)`` for every import anywhere in ``path``."""
+def _imports_detailed(path: Path) -> Iterator[tuple[str, int, frozenset[str]]]:
+    """Yield ``(module, line, imported_names)`` for every import in ``path``.
+
+    ``imported_names`` is the set of names bound from that module (``"*"`` for
+    a star import); ``ast.Import`` yields the dotted name itself.
+    """
     source = path.read_text(encoding="utf-8")
     tree = ast.parse(source, filename=str(path))
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                yield alias.name, node.lineno
+                yield alias.name, node.lineno, frozenset({alias.name})
         elif isinstance(node, ast.ImportFrom):
             module = _resolved_module(path, node)
             if module:
-                yield module, node.lineno
+                yield module, node.lineno, frozenset(a.name for a in node.names)
+
+
+def _imports(path: Path) -> Iterator[tuple[str, int]]:
+    """Yield ``(module, line)`` for every import anywhere in ``path``."""
+    for module, line, _names in _imports_detailed(path):
+        yield module, line
 
 
 def _matches(module: str, root: str, *, include_submodules: bool = True) -> bool:
@@ -151,17 +165,25 @@ def test_playwright_is_confined_to_the_session_seam() -> None:
     )
 
 
-def test_encoder_facade_has_one_caller() -> None:
-    # Exact-module match: ``clickcast/encode/__init__.py`` importing its own
-    # submodule is the facade's own wiring, not a caller of the facade.
-    violations = _violations(
-        _all_modules(),
-        lambda module: module == "clickcast.encode",
-        _ENCODE_ALLOWLIST,
-    )
+def test_encode_callable_has_one_caller() -> None:
+    """Only the render kernel may *reach the encoder*, not merely name its types.
+
+    Exact-module match: ``clickcast/encode/__init__.py`` importing its own
+    submodule is the facade's own wiring, not a caller of the facade.
+    """
+    violations: list[str] = []
+    for path in _all_modules():
+        rel = path.relative_to(_SRC).as_posix()
+        if rel in _ENCODE_ALLOWLIST:
+            continue
+        for module, line, names in _imports_detailed(path):
+            if module == "clickcast.encode" and ("encode" in names or "*" in names):
+                violations.append(f"{_display(path)}:{line}: imports encode from clickcast.encode")
     _assert_no(
         violations,
-        "clickcast.encode may only be imported by " + ", ".join(sorted(_ENCODE_ALLOWLIST)),
+        "clickcast.encode.encode() may only be called by "
+        + ", ".join(sorted(_ENCODE_ALLOWLIST))
+        + " (types EncodeResult/Format are unrestricted)",
     )
 
 
