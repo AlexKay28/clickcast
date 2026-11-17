@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import pytest
 
+from clickcast.core.engines import EngineCheck
 from tests.mcp.conftest import open_client, result_json
 
 pytestmark = pytest.mark.unit
@@ -53,7 +54,10 @@ async def test_start_session_with_missing_engine_returns_actionable_error(
     must never try one — the missing-engine case degrades to the same
     `_safe_tool` error-payload channel every other MCP failure uses, with
     the fix command in the message text (see EngineNotInstalledError)."""
-    monkeypatch.setattr("clickcast.core.session.find_installed_engine", lambda engine: None)
+    monkeypatch.setattr(
+        "clickcast.core.session.check_engine",
+        lambda engine: EngineCheck(engine=engine, state="missing"),
+    )
     async with open_client() as client:
         result = await client.call_tool("start_session", {})
     assert result.isError is True

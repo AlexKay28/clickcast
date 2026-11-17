@@ -9,11 +9,21 @@ report and a friendly pre-flight error instead of Playwright's raw
 
 from __future__ import annotations
 
+import importlib.util
+import json
 import os
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
-__all__ = ["EngineNotInstalledError", "find_installed_engine"]
+__all__ = [
+    "EngineCheck",
+    "EngineNotInstalledError",
+    "EngineStaleError",
+    "check_engine",
+    "find_installed_engine",
+    "required_revision",
+]
 
 
 class EngineNotInstalledError(RuntimeError):
@@ -27,6 +37,27 @@ class EngineNotInstalledError(RuntimeError):
     def __init__(self, engine: str) -> None:
         self.engine = engine
         super().__init__(f"{engine} isn't installed. Run: clickcast install --with-deps {engine}")
+
+
+class EngineStaleError(EngineNotInstalledError):
+    """Raised when a browser is installed but not the revision Playwright launches.
+
+    A stale shared cache is the most common real-world state for anyone who has
+    used Playwright before: an older ``chromium-<rev>`` sits on disk, the newly
+    installed Playwright wants a newer one, and the old pre-flight check said
+    "ok" anyway. Subclasses :class:`EngineNotInstalledError` so every existing
+    install-and-retry path fixes it without extra plumbing.
+    """
+
+    def __init__(self, engine: str, found: str | None, required: str) -> None:
+        self.found = found
+        self.required = required
+        RuntimeError.__init__(
+            self,
+            f"{engine} {found or ''} is out of date; the installed Playwright needs "
+            f"{engine}-{required}. Run: clickcast install --with-deps {engine}",
+        )
+        self.engine = engine
 
 
 # Per-engine, per-platform executable path components relative to the Playwright
@@ -103,6 +134,164 @@ def _candidate_executable_parts(engine: str) -> list[tuple[str, ...]]:
     return out
 
 
+def _cache_root() -> Path:
+    """Playwright's browser cache root, honouring ``PLAYWRIGHT_BROWSERS_PATH``."""
+    configured_root = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
+    if configured_root and configured_root != "0":
+        return Path(configured_root).expanduser()
+    cache_root = Path.home() / ".cache" / "ms-playwright"
+    if not cache_root.exists():
+        alt = Path.home() / "Library" / "Caches" / "ms-playwright"
+        cache_root = alt if alt.exists() else cache_root
+    return cache_root
+
+
+def _engine_dirs(engine: str) -> list[tuple[int, Path]]:
+    """Installed ``<engine>-<revision>`` dirs, newest first.
+
+    Restricting to ``<prefix>-<digits>`` filters out sibling installs that share
+    the prefix but have a different exec layout, e.g. ``chromium_headless_shell-*``
+    and ``chromium-tip-of-tree-*``.
+    """
+    cache_root = _cache_root()
+    if not cache_root.exists():
+        return []
+    prefix = {"chromium": "chromium", "firefox": "firefox", "webkit": "webkit"}.get(engine)
+    if not prefix:
+        return []
+    matches = [
+        (int(p.name[len(prefix) + 1 :]), p)
+        for p in cache_root.glob(f"{prefix}-*")
+        if p.is_dir() and p.name[len(prefix) + 1 :].isdigit()
+    ]
+    return sorted(matches, key=lambda item: item[0], reverse=True)
+
+
+def required_revision(engine: str) -> str | None:
+    """Revision the *installed* Playwright driver bundle expects for ``engine``.
+
+    Read from Playwright's ``driver/package/browsers.json`` via
+    :func:`importlib.util.find_spec` — no ``import playwright`` here, so this
+    module stays outside the Playwright import allowlist.
+
+    Returns ``None`` when Playwright isn't installed or ships no such entry, in
+    which case callers must fall back to "any install is good enough".
+    """
+    try:
+        spec = importlib.util.find_spec("playwright")
+    except (ImportError, ValueError):  # pragma: no cover — broken install
+        return None
+    if spec is None or not spec.origin:
+        return None
+    manifest = Path(spec.origin).parent / "driver" / "package" / "browsers.json"
+    try:
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    name = {"chromium": "chromium", "firefox": "firefox", "webkit": "webkit"}.get(engine)
+    if not name:
+        return None
+    for browser in data.get("browsers", []):
+        if browser.get("name") == name:
+            revision = browser.get("revision")
+            return str(revision) if revision is not None else None
+    return None
+
+
+@dataclass(frozen=True)
+class EngineCheck:
+    """What ``check_engine`` found: installed-at-the-right-revision or not.
+
+    ``state`` is ``"ok"`` (revision matches the installed Playwright),
+    ``"stale"`` (a browser is on disk but the wrong revision) or ``"missing"``.
+    ``headless_shell`` is the revision-matched headless-shell dir for chromium,
+    reported so ``doctor`` can flag a ``--no-shell`` cache without failing.
+    """
+
+    engine: str
+    state: str
+    path: Path | None = None
+    kind: str | None = None
+    found_revision: str | None = None
+    required_revision: str | None = None
+    headless_shell: Path | None = None
+
+    @property
+    def ok(self) -> bool:
+        return self.state == "ok"
+
+    @property
+    def detail(self) -> str:
+        if self.state == "ok":
+            text = f"{self.kind}: {self.path}"
+            if self.engine == "chromium" and self.required_revision and self.headless_shell is None:
+                text += (
+                    " (headless shell missing — headless runs need it;"
+                    f" run `clickcast install {self.engine}`)"
+                )
+            return text
+        if self.state == "stale":
+            return (
+                f"stale: found {self.engine}-{self.found_revision}, installed Playwright "
+                f"needs {self.engine}-{self.required_revision} "
+                f"(run `clickcast install {self.engine}`)"
+            )
+        return "not installed (run `clickcast install`)"
+
+
+def _revision_of(engine: str, path: Path) -> str | None:
+    """Extract the ``<rev>`` from a path inside ``<engine>-<rev>``."""
+    for parent in (path, *path.parents):
+        name = parent.name
+        if name.startswith(f"{engine}-") and name[len(engine) + 1 :].isdigit():
+            return name[len(engine) + 1 :]
+    return None
+
+
+def check_engine(engine: str) -> EngineCheck:
+    """Verify the browser Playwright will *actually launch* is on disk.
+
+    ``find_installed_engine`` answers "is any chromium on disk?" — good for a
+    diagnostic listing, wrong for a pre-flight gate: a stale cache from an older
+    Playwright passes it, then ``launch()`` dies with a raw
+    ``Executable doesn't exist`` traceback. This checks the revision the
+    installed Playwright expects.
+    """
+    required = required_revision(engine)
+    dirs = _engine_dirs(engine)
+    install = next((p for rev, p in dirs if required is None or str(rev) == required), None)
+    if install is None:
+        if not dirs:
+            return EngineCheck(engine=engine, state="missing", required_revision=required)
+        newest_rev, newest = dirs[0]
+        return EngineCheck(
+            engine=engine,
+            state="stale",
+            path=newest,
+            found_revision=str(newest_rev),
+            required_revision=required,
+        )
+    for parts in _candidate_executable_parts(engine):
+        candidate = install.joinpath(*parts)
+        if candidate.exists():
+            kind: str = "executable"
+            path = candidate
+            break
+    else:
+        kind = "install dir"
+        path = install
+    shell = _cache_root() / f"chromium_headless_shell-{required}" if engine == "chromium" else None
+    return EngineCheck(
+        engine=engine,
+        state="ok",
+        path=path,
+        kind=kind,
+        found_revision=required or str(dirs[0][0]),
+        required_revision=required,
+        headless_shell=shell if shell is not None and shell.exists() else None,
+    )
+
+
 def find_installed_engine(engine: str) -> tuple[Path, str] | None:
     """Locate a Playwright browser install and (best-effort) its executable.
 
@@ -118,34 +307,7 @@ def find_installed_engine(engine: str) -> tuple[Path, str] | None:
 
     Returns ``None`` if no matching browser is installed.
     """
-    # Playwright's standard override must agree with what Playwright itself
-    # will launch. "0" is its special in-package location, not a literal
-    # directory named 0; leave that layout to the normal fallback here.
-    configured_root = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
-    if configured_root and configured_root != "0":
-        cache_root = Path(configured_root).expanduser()
-    else:
-        cache_root = Path.home() / ".cache" / "ms-playwright"
-        if not cache_root.exists():
-            alt = Path.home() / "Library" / "Caches" / "ms-playwright"
-            cache_root = alt if alt.exists() else cache_root
-    if not cache_root.exists():
-        return None
-    prefix = {"chromium": "chromium", "firefox": "firefox", "webkit": "webkit"}.get(engine)
-    if not prefix:
-        return None
-    # Restrict to `<prefix>-<numeric-version>` dirs. This filters out sibling
-    # installs that share the prefix but have a different exec layout, e.g.
-    # `chromium-headless-shell-*` and `chromium-tip-of-tree-*`.
-    matches = sorted(
-        (
-            p
-            for p in cache_root.glob(f"{prefix}-*")
-            if p.is_dir() and p.name[len(prefix) + 1 :].isdigit()
-        ),
-        key=lambda p: int(p.name[len(prefix) + 1 :]),
-        reverse=True,
-    )
+    matches = [p for _rev, p in _engine_dirs(engine)]
     if not matches:
         return None
     for install_dir in matches:

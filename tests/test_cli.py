@@ -17,6 +17,7 @@ from clickcast.cli import (
     _setup_logging,
     app,
 )
+from clickcast.core.engines import EngineCheck, check_engine
 
 runner = CliRunner()
 
@@ -159,12 +160,19 @@ class TestDoctorEngineScoping:
     firefox/webkit it was never asked to use."""
 
     def test_missing_non_configured_engine_does_not_fail_overall_ok(self) -> None:
-        with patch(
-            "clickcast.cli._find_playwright_engine",
-            side_effect=lambda name: (
-                (Path("/fake/chrome"), "executable") if name == "chromium" else None
-            ),
-        ):
+        def fake_check(name: str) -> EngineCheck:
+            if name == "chromium":
+                return EngineCheck(
+                    engine=name,
+                    state="ok",
+                    path=Path("/fake/chrome"),
+                    kind="executable",
+                    required_revision="1",
+                    found_revision="1",
+                )
+            return EngineCheck(engine=name, state="missing")
+
+        with patch("clickcast.cli.check_engine", side_effect=fake_check):
             rep = _run_doctor_checks(configured_engine="chromium")
         assert rep["ok"] is True
         firefox = next(c for c in rep["checks"] if c["name"] == "engine.firefox")
@@ -174,7 +182,10 @@ class TestDoctorEngineScoping:
         assert chromium["required"] is True
 
     def test_missing_configured_engine_fails_overall_ok(self) -> None:
-        with patch("clickcast.cli._find_playwright_engine", return_value=None):
+        with patch(
+            "clickcast.cli.check_engine",
+            side_effect=lambda name: EngineCheck(engine=name, state="missing"),
+        ):
             rep = _run_doctor_checks(configured_engine="firefox")
         assert rep["ok"] is False
         firefox = next(c for c in rep["checks"] if c["name"] == "engine.firefox")
@@ -330,6 +341,95 @@ class TestFindPlaywrightEngine:
         path, kind = found
         assert path == exe
         assert kind == "executable"
+
+
+class TestCheckEngine:
+    """#254: the pre-flight gate must validate the revision Playwright will
+    actually launch, not just "is some chromium on disk?". A stale shared cache
+    used to pass pre-flight and then fail with a raw Playwright traceback."""
+
+    def _touch(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"")
+
+    def test_stale_cache_is_reported_stale(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("clickcast.cli.sys.platform", "linux")
+        monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", str(tmp_path))
+        self._touch(tmp_path / "chromium-999" / "chrome-linux64" / "chrome")
+        monkeypatch.setattr("clickcast.core.engines.required_revision", lambda engine: "1234")
+        status = check_engine("chromium")
+        assert status.state == "stale"
+        assert status.ok is False
+        assert status.found_revision == "999"
+        assert status.required_revision == "1234"
+        assert "stale" in status.detail
+        assert "chromium-1234" in status.detail
+
+    def test_matching_revision_is_ok(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("clickcast.cli.sys.platform", "linux")
+        monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", str(tmp_path))
+        # A newer, unrelated install must not mask the required one: a
+        # downgrade (cache has 1234 and 1255, Playwright wants 1234) is valid.
+        self._touch(tmp_path / "chromium-1255" / "chrome-linux64" / "chrome")
+        exe = tmp_path / "chromium-1234" / "chrome-linux64" / "chrome"
+        self._touch(exe)
+        monkeypatch.setattr("clickcast.core.engines.required_revision", lambda engine: "1234")
+        status = check_engine("chromium")
+        assert status.state == "ok"
+        assert status.path == exe
+        assert status.kind == "executable"
+
+    def test_missing_engine(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", str(tmp_path))
+        monkeypatch.setattr("clickcast.core.engines.required_revision", lambda engine: "1234")
+        status = check_engine("chromium")
+        assert status.state == "missing"
+        assert status.ok is False
+        assert "not installed" in status.detail
+
+    def test_missing_headless_shell_is_mentioned_in_detail(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("clickcast.cli.sys.platform", "linux")
+        monkeypatch.setenv("PLAYWRIGHT_BROWSERS_PATH", str(tmp_path))
+        self._touch(tmp_path / "chromium-1234" / "chrome-linux64" / "chrome")
+        monkeypatch.setattr("clickcast.core.engines.required_revision", lambda engine: "1234")
+        status = check_engine("chromium")
+        assert status.state == "ok"
+        assert status.headless_shell is None
+        assert "headless shell missing" in status.detail
+
+        (tmp_path / "chromium_headless_shell-1234").mkdir()
+        assert check_engine("chromium").headless_shell is not None
+
+    def test_required_revision_comes_from_installed_playwright(self) -> None:
+        from clickcast.core.engines import required_revision
+
+        revision = required_revision("chromium")
+        # Playwright is a hard dependency here; the manifest ships a numeric
+        # revision. None would silently disable the staleness gate.
+        assert revision is not None and revision.isdigit()
+
+    def test_doctor_marks_stale_engine_not_ok(self) -> None:
+        def fake_check(name: str) -> EngineCheck:
+            if name == "chromium":
+                return EngineCheck(
+                    engine=name,
+                    state="stale",
+                    found_revision="999",
+                    required_revision="1234",
+                )
+            return EngineCheck(engine=name, state="ok", path=Path("/fake"), kind="executable")
+
+        with patch("clickcast.cli.check_engine", side_effect=fake_check):
+            rep = _run_doctor_checks(configured_engine="chromium")
+        assert rep["ok"] is False
+        chromium = next(c for c in rep["checks"] if c["name"] == "engine.chromium")
+        assert chromium["ok"] is False
+        assert chromium["state"] == "stale"
+        assert "chromium-1234" in chromium["detail"]
 
 
 # ------------------------------------------------------------------
