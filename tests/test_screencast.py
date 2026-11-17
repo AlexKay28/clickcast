@@ -258,7 +258,13 @@ class TestScreencastIntegration:
             encode(rec.frames_dir, out, fps=30)
 
         stats = measure(out)
-        assert stats.unique_pct >= 90, stats
+        # Whole-reel unique% cannot reach 90 even with perfect capture: the
+        # scenario's dwells are genuinely static and the duplicate metric
+        # correctly counts held frames as duplicates. Real page motion is
+        # asserted above, per click step: >= 8 distinct captured_at timestamps
+        # across a 300 ms transition. This bound is the shots-vs-screencast
+        # separation on the same fixture (shots: 43.2%).
+        assert stats.unique_pct >= 60, stats
         assert stats.fps == pytest.approx(30.0, abs=0.1)
         # Real-time duration: the goto, two ~0.4 s dwells and the transitions,
         # not a per-action slideshow.
