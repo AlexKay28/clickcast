@@ -5,13 +5,19 @@
   "keywords": [
     "clickcast",
     "playwright",
+    "playwright-python",
     "screenshot",
     "gif",
+    "mp4",
     "browser-automation",
     "ai-agent",
+    "ai-agents",
+    "llm",
+    "claude",
+    "computer-use",
     "mcp"
   ],
-  "homepage": "https://github.com/AlexKay28/clickcast#readme",
+  "homepage": "https://alexkay28.github.io/clickcast/",
   "bugs": "https://github.com/AlexKay28/clickcast/issues",
   "repository": {
     "type": "git",
