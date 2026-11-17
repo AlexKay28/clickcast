@@ -1,0 +1,149 @@
+name: Bug report
+description: Something is broken — a command fails, output is wrong, or the sidecar says something it shouldn't. For machine-filed reports from `clickcast report-bug`, use the AI-agent template instead.
+title: ""
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. A partial report is much better than none — fill in what you can.
+
+        **Security issues must not be filed here.** Report them privately via
+        [`.github/SECURITY.md`](https://github.com/AlexKay28/clickcast/blob/main/.github/SECURITY.md).
+
+        If an AI agent hit this, consider the *AI-agent bug report* template — its fields map 1:1 to `docs/agent-report-schema/v1.json` and to what `clickcast report-bug <sidecar.json>` emits.
+
+  - type: input
+    id: clickcast_version
+    attributes:
+      label: clickcast version
+      description: Output of `clickcast --version`.
+      placeholder: "0.5.0"
+    validations:
+      required: true
+
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      description: Output of `python --version` (clickcast requires ≥ 3.10).
+      placeholder: "3.12.3"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      description: Include the distribution/version where it matters.
+      placeholder: "Ubuntu 24.04 / macOS 15.2 / Windows 11"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install_method
+    attributes:
+      label: Install method
+      options:
+        - pip / pipx (PyPI)
+        - npx (npm wrapper)
+        - Homebrew
+        - apt / .deb
+        - editable source checkout (`pip install -e`)
+        - GitHub Action
+        - other / unknown
+    validations:
+      required: true
+
+  - type: input
+    id: playwright_version
+    attributes:
+      label: playwright version
+      description: e.g. `1.44.0` — leave blank if unknown.
+      placeholder: "1.44.0"
+
+  - type: dropdown
+    id: browser_engine
+    attributes:
+      label: Browser engine
+      options:
+        - chromium (default)
+        - firefox
+        - webkit
+        - not applicable
+
+  - type: input
+    id: platform_package
+    attributes:
+      label: Platform package (optional)
+      description: For npx / Homebrew / apt installs — the package version shown by the wrapper.
+
+  - type: textarea
+    id: command
+    attributes:
+      label: Command or API call
+      description: The exact command or Python snippet that triggered the failure.
+      placeholder: "clickcast auto https://example.com --out tour.gif --with-feedback"
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      description: One or two sentences — concrete enough to assert on.
+      placeholder: "A GIF and a sidecar; discovery finds ≥ 1 button."
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: One or two sentences. Paste the error/traceback tail if there is one.
+      placeholder: "Discovery returned zero elements. Sidecar had page_errors."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Steps, a minimal scenario YAML, or a snippet. A public URL helps a lot; a local fixture is even better.
+      placeholder: |
+        1. `clickcast init repro.yaml`
+        2. add one `click` step against ...
+        3. `clickcast run repro.yaml`
+      render: shell
+
+  - type: textarea
+    id: sidecar_excerpt
+    attributes:
+      label: Sidecar / log excerpt
+      description: The failing step and its `page_state`, errors, warnings — not the whole sidecar. Redact URLs, selectors, and visible text if the target is private.
+      render: json
+
+  - type: input
+    id: doctor
+    attributes:
+      label: "`clickcast doctor` output"
+      description: Paste the failing lines, if relevant.
+
+  - type: textarea
+    id: environment_note
+    attributes:
+      label: Environment note
+      description: Anything unusual — proxy, TLS interception, custom DNS, air-gapped, headless vs headed, CI runner.
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Before submitting
+      options:
+        - label: This is not a security issue (those go through SECURITY.md, never a public issue).
+          required: true
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: Any pasted sidecar/log content has been redacted of private URLs, selectors, and text.
+          required: false

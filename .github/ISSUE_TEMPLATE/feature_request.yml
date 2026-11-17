@@ -1,0 +1,81 @@
+name: Feature request
+description: A new capability, command, flag, schema field, or docs improvement. Tell us the problem first — the proposed shape second.
+title: ""
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea. The most useful requests describe a concrete workflow that is awkward or impossible today, not only the API you'd like.
+
+        **Security issues must not be filed here.** Report them privately via
+        [`.github/SECURITY.md`](https://github.com/AlexKay28/clickcast/blob/main/.github/SECURITY.md).
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of clickcast does this touch? (Best guess is fine.)
+      options:
+        - CLI command / flag
+        - auto / discovery
+        - scenario runner
+        - recording / encoding / annotation
+        - sidecar schema / feedback
+        - MCP server (live agent control)
+        - Python API (`Reel`)
+        - CI action / assertions / diff
+        - packaging / install
+        - docs / agent experience
+        - other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and where does clickcast get in the way today? Concrete is better than abstract.
+      placeholder: "I want to gate CI on a specific sidecar field, but ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: The shape you have in mind — command, flag, API, schema field, behaviour. Sketch it even if it's rough.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds you tried, or other designs that seemed worse and why.
+
+  - type: textarea
+    id: agent_impact
+    attributes:
+      label: Impact on AI-agent use
+      description: clickcast's primary user is an AI agent. Does this change what an agent can observe or gate on? Would it need a sidecar/schema change (which must be versioned and strictly additive)?
+
+  - type: textarea
+    id: example
+    attributes:
+      label: Example usage
+      description: What would the command / snippet / sidecar field look like in use?
+      render: shell
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Before submitting
+      options:
+        - label: This is not a security issue (those go through SECURITY.md, never a public issue).
+          required: true
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: I'm willing to open a PR for this (optional — maintainers can also scope it as a `good first issue`).
+          required: false
