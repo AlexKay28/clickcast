@@ -752,23 +752,22 @@ The annotator (`clickcast.annotate.Annotator` — click ripples, cursor trail, c
 
 ## Contributing
 
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for dev setup, the lint/format/mypy/pytest loop, test markers, and the label taxonomy. In short:
+
 ```bash
 git clone https://github.com/AlexKay28/clickcast
 cd clickcast
 pip install -e ".[dev]"
 clickcast install
-```
 
-Before opening a PR:
-
-```bash
 ruff check .
 ruff format --check .
 mypy
-pytest -m "not integration"      # fast; ~2s
+pytest -m "not integration"      # fast; no browser needed
 pytest                            # full; needs chromium
 ```
 
+Security issues go through [`.github/SECURITY.md`](.github/SECURITY.md) — privately, never a public issue.
 Cutting a release is documented in [`RELEASING.md`](RELEASING.md).
 
 ---
