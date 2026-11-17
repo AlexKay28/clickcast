@@ -29,12 +29,25 @@ This module closes that gap for every element clickcast already discovers:
 from __future__ import annotations
 
 import asyncio
+import importlib.metadata
+import logging
 import re
 from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING, Any
 
 from clickcast.annotate.grid import GridConfig
 from clickcast.annotate.grid import grid_cell as _grid_cell
+
+_logger = logging.getLogger(__name__)
+
+
+def _installed_playwright_version() -> str:
+    """Best-effort version string for the logger message (never raises)."""
+    try:
+        return importlib.metadata.version("playwright")
+    except importlib.metadata.PackageNotFoundError:  # pragma: no cover — hard dep
+        return "unknown"
+
 
 if TYPE_CHECKING:
     from clickcast.core.session import Session
@@ -230,6 +243,15 @@ async def capture_accessibility(
         locator = session.locator(selector).first
         snapshot = await locator.aria_snapshot(timeout=timeout_ms)
         role, name, state = parse_aria_snapshot(snapshot)
+    except (AttributeError, NotImplementedError):
+        # API drift, not a transient locator failure: aria snapshots landed in
+        # Playwright 1.49. Older releases would otherwise degrade the whole
+        # accessibility block to silent nulls with no clue why.
+        _logger.warning(
+            "locator.aria_snapshot() is unavailable (playwright %s) — accessibility "
+            "capture needs playwright>=1.49; returning null role/name/state",
+            _installed_playwright_version(),
+        )
     except Exception:
         # See module docstring: graceful null, never a discovery failure.
         pass

@@ -46,7 +46,12 @@ from clickcast.config import (
 )
 from clickcast.config.cli import config_app
 from clickcast.core.actions import set_dump_elements
-from clickcast.core.engines import EngineNotInstalledError, find_installed_engine
+from clickcast.core.engines import (
+    EngineNotInstalledError,
+    EngineStaleError,
+    check_engine,
+    find_installed_engine,
+)
 from clickcast.core.opts import BrowserOpts
 from clickcast.core.session import Session
 from clickcast.core.viewport import Viewport
@@ -367,11 +372,18 @@ def _handle_missing_engine(exc: EngineNotInstalledError) -> None:
     """
     engine = exc.engine
     fix_cmd = f"clickcast install --with-deps {engine}"
+    if isinstance(exc, EngineStaleError):
+        problem = (
+            f"{engine}-{exc.found} is out of date; the installed Playwright "
+            f"needs {engine}-{exc.required}"
+        )
+    else:
+        problem = f"{engine} isn't installed"
     if not sys.stdin.isatty():
-        _die(f"{engine} isn't installed. Run: {fix_cmd}")
-    typer.secho(f"⚠ {engine} isn't installed.", fg=typer.colors.YELLOW, err=True)
+        _die(f"{problem}. Run: {fix_cmd}")
+    typer.secho(f"⚠ {problem}.", fg=typer.colors.YELLOW, err=True)
     if not typer.confirm(f"Install it now? ({fix_cmd})", default=True):
-        _die(f"{engine} isn't installed. Run: {fix_cmd}")
+        _die(f"{problem}. Run: {fix_cmd}")
     code = _install_engine([engine], with_deps=True)
     if code != 0:
         _die(f"install failed (exit {code}). Run manually: {fix_cmd}")
@@ -1825,18 +1837,18 @@ def _run_doctor_checks(*, configured_engine: str = "chromium") -> dict[str, Any]
         checks.append({"name": "playwright", "ok": False, "detail": f"import failed: {e}"})
 
     for engine_name in ("chromium", "firefox", "webkit"):
-        found = _find_playwright_engine(engine_name)
-        if found is None:
-            detail = "not installed (run `clickcast install`)"
-        else:
-            path, kind = found
-            detail = f"{kind}: {path}"
+        # check_engine, not find_installed_engine: doctor must agree with what
+        # Playwright will actually launch (#254). A stale cache passes the
+        # "is anything on disk?" test and then fails at launch time.
+        status = check_engine(engine_name)
         checks.append(
             {
                 "name": f"engine.{engine_name}",
-                "ok": found is not None,
-                "detail": detail,
+                "ok": status.ok,
+                "detail": status.detail,
                 "required": engine_name == configured_engine,
+                "state": status.state,
+                "revision": status.required_revision,
             }
         )
 

@@ -19,6 +19,7 @@ Covers:
 from __future__ import annotations
 
 import io
+import logging
 from collections.abc import AsyncIterator
 
 import pytest
@@ -151,6 +152,64 @@ class TestAccessibilityStateAndElement:
             state=AccessibilityState(),
         )
         assert el.to_dict()["grid_cell"] is None
+
+
+# ---------------------------------------------------------------------------
+# capture_accessibility — API-drift handling (no browser)
+# ---------------------------------------------------------------------------
+
+
+class _RaisingLocator:
+    def __init__(self, exc: Exception) -> None:
+        self._exc = exc
+
+    async def aria_snapshot(self, **kwargs: object) -> str:
+        raise self._exc
+
+
+class _StubSession:
+    def __init__(self, exc: Exception) -> None:
+        self._exc = exc
+
+    def locator(self, selector: str) -> object:
+        locator = self
+
+        class _Handle:
+            @property
+            def first(self) -> _RaisingLocator:
+                return _RaisingLocator(locator._exc)
+
+        return _Handle()
+
+
+@pytest.mark.unit
+async def test_missing_aria_snapshot_logs_a_warning(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Playwright 1.44-1.48 has no `aria_snapshot()`; the old blanket
+    `except Exception: pass` silently produced all-null accessibility data
+    for every element (#259). API drift must be observable."""
+    session = _StubSession(AttributeError("no attribute 'aria_snapshot'"))
+    with caplog.at_level(logging.WARNING, logger="clickcast.discovery.accessibility"):
+        acc = await capture_accessibility(session, selector="#x", bbox=(0, 0, 10, 10), score=0)
+    assert acc.role is None
+    assert acc.name is None
+    assert acc.state.is_empty
+    assert "aria_snapshot" in caplog.text
+    assert "1.49" in caplog.text
+
+
+@pytest.mark.unit
+async def test_transient_locator_errors_stay_silent(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A timeout / detached locator is expected during a discovery pass — the
+    element is still reported, with no warning noise per element."""
+    session = _StubSession(RuntimeError("locator timed out"))
+    with caplog.at_level(logging.WARNING, logger="clickcast.discovery.accessibility"):
+        acc = await capture_accessibility(session, selector="#x", bbox=(0, 0, 10, 10), score=0)
+    assert acc.role is None
+    assert caplog.text == ""
 
 
 # ---------------------------------------------------------------------------

@@ -22,12 +22,13 @@ from playwright.async_api import (
     TimeoutError as PlaywrightTimeoutError,
 )
 
-from clickcast.core.engines import EngineNotInstalledError, find_installed_engine
+from clickcast.core.engines import EngineNotInstalledError, EngineStaleError, check_engine
 from clickcast.core.viewport import Viewport
 
 __all__ = [
     "Engine",
     "EngineNotInstalledError",
+    "EngineStaleError",
     "LoadState",
     "Locator",
     "PlaywrightTimeoutError",
@@ -122,7 +123,10 @@ class Session:
         # rather than letting its raw "Executable doesn't exist" traceback
         # surface — every entry point (CLI, Python API, the MCP server) goes
         # through here, so this is the one place that needs the check.
-        if find_installed_engine(self.engine) is None:
+        status = check_engine(self.engine)
+        if not status.ok:
+            if status.state == "stale" and status.required_revision:
+                raise EngineStaleError(self.engine, status.found_revision, status.required_revision)
             raise EngineNotInstalledError(self.engine)
         stack = AsyncExitStack()
         await stack.__aenter__()
