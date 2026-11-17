@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import shutil
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -63,9 +64,11 @@ from clickcast.kernel import (
     finalize_report,
     make_media,
     render_reel,
+    transcript_media,
     write_sidecar,
 )
 from clickcast.perception.observe import observe as _async_observe
+from clickcast.perception.receipt import write_receipt as _write_receipt
 from clickcast.perception.tokens import DEFAULT_TOKEN_BUDGET
 from clickcast.scenario import Meta, Scenario
 from clickcast.scenario import run as run_scenario
@@ -588,6 +591,20 @@ _NO_OVERLAY_ANNOTATE = AnnotateConfig(
 )
 
 
+async def _run_only(scenario: Scenario, *, builder: ReportBuilder) -> Any:
+    """Execute ``scenario`` and finalize step reports — no encoding.
+
+    ``receipt(media=False)`` needs a report but no video: running through
+    :func:`_run_and_encode` would encode a throwaway file just to discard it,
+    so the recorder is driven directly here. The single encode path in the
+    package stays :func:`clickcast.kernel.render.render_reel`.
+    """
+    with Recorder(fps=scenario.meta.fps, default_dwell=scenario.meta.dwell) as rec:
+        result = await run_scenario(scenario, recorder=rec, builder=builder)
+        rec.flush()
+    return result
+
+
 def _step_annotations_from_run(scenario: Scenario, result: Any) -> dict[int, StepAnnotation]:
     """Build per-recorder-step annotation inputs from a completed run.
 
@@ -844,6 +861,129 @@ class AsyncReel(_BaseReel):
             await sess.goto(self._url, wait="networkidle")
             return await _async_observe(sess, token_budget=token_budget)
 
+    async def receipt(
+        self,
+        out: str | Path = "receipt",
+        *,
+        media: bool = False,
+        baseline: str | Path | None = None,
+        baseline_sidecar: str | Path | None = None,
+        threshold: float = DEFAULT_THRESHOLD,
+        quality: int = 8,
+        with_feedback: bool = False,
+    ) -> dict[str, Any]:
+        """Close the loop: run (if needed), write artifacts, return the summary.
+
+        This is the ``settle → receipt`` hand-off of the perception loop
+        (#271): one call produces an artifact directory and a ≤200-token
+        ``receipt/1`` summary whose paths are relative to that directory.
+
+        - Reuses :attr:`_last_report` when the reel already ran
+          (``save()``); otherwise runs the scenario once.
+        - ``media=True`` encodes a playable ``tour.mp4`` through the shared
+          render kernel (:func:`clickcast.kernel.render_reel`) — never a
+          direct ``encode()`` call — and writes the v5 sidecar next to it
+          with the shared sidecar writer.
+        - ``baseline`` is an assertions baseline (``clickcast assertions``
+          output); when given, the summary carries ``assertions.drift`` and
+          the artifact directory keeps both ``assertions.json`` and a copy of
+          the baseline.
+        - ``baseline_sidecar`` additionally pixel-diffs the fresh sidecar
+          against that baseline sidecar and adds the ``visual_diff`` block;
+          the diff images land in ``<out>/visual-diff/``.
+
+        The returned dict is exactly what
+        :func:`clickcast.perception.receipt.write_receipt` wrote to
+        ``<out>/receipt.json``.
+        """
+        out_dir = Path(out)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        scenario = self.build_scenario()
+        viewport = _viewport_list_from_meta(scenario)
+        builder = ReportBuilder(
+            url=self._url,
+            engine=scenario.meta.engine,
+            viewport=viewport,
+        )
+        report = self._last_report
+        media_path: Path | None = None
+
+        if media:
+            media_path = out_dir / "tour.mp4"
+            result, enc, encode_fps = await _run_and_encode(
+                scenario,
+                media_path,
+                format_=None,
+                quality=quality,
+                loop=0,
+                builder=builder,
+                annotate=None,
+            )
+            if not result.ok:
+                builder.add_warning(f"scenario failed at step {result.failed_at}")
+            report = finalize_report(builder, make_media(enc, encode_fps))
+            self._last_report = report
+        elif report is None:
+            result = await _run_only(scenario, builder=builder)
+            if not result.ok:
+                builder.add_warning(f"scenario failed at step {result.failed_at}")
+            # No media was requested: the sidecar is a transcript-shaped
+            # report (zeroed media block), exactly like close_session writes.
+            report = finalize_report(builder, transcript_media(len(builder.steps)))
+            self._last_report = report
+        elif report.media.path and Path(report.media.path).is_file():
+            # An already-saved reel: bring its media (and therefore a
+            # playable artifact) into the directory instead of pointing the
+            # summary outside it.
+            source = Path(report.media.path)
+            media_path = out_dir / source.name
+            if source.resolve() != media_path.resolve():
+                shutil.copyfile(source, media_path)
+            report = report.model_copy(
+                update={"media": report.media.model_copy(update={"path": str(media_path)})}
+            )
+
+        if media_path is not None:
+            assert report is not None  # the run/encode branch always finalizes
+            sidecar = write_sidecar(
+                media_path,
+                report,
+                with_feedback=with_feedback,
+                redact_patterns=self._redact_patterns,
+                strip_query_strings=self._strip_query_strings,
+            )
+        else:
+            assert report is not None
+            target = out_dir / "transcript.json"
+            sidecar = write_sidecar(
+                target,
+                report,
+                target=target,
+                with_feedback=with_feedback,
+                redact_patterns=self._redact_patterns,
+                strip_query_strings=self._strip_query_strings,
+            )
+
+        visual = None
+        if baseline_sidecar is not None:
+            if sidecar is None:  # pragma: no cover — a report is always present
+                raise RuntimeError("cannot diff a reel without a sidecar")
+            visual = _visual_diff(
+                sidecar,
+                baseline_sidecar,
+                threshold=threshold,
+                out_dir=out_dir / "visual-diff",
+            )
+
+        return _write_receipt(
+            report,
+            out_dir,
+            media_path=media_path,
+            sidecar_path=sidecar,
+            baseline=baseline,
+            visual_diff=visual,
+        )
+
     async def save(
         self,
         path: str | Path,
@@ -1010,6 +1150,42 @@ class Reel(_BaseReel):
         """
         _fail_if_running_loop("Reel.observe()")
         return asyncio.run(self._as_async().observe(token_budget=token_budget))
+
+    def receipt(
+        self,
+        out: str | Path = "receipt",
+        *,
+        media: bool = False,
+        baseline: str | Path | None = None,
+        baseline_sidecar: str | Path | None = None,
+        threshold: float = DEFAULT_THRESHOLD,
+        quality: int = 8,
+        with_feedback: bool = False,
+    ) -> dict[str, Any]:
+        """Sync counterpart to :meth:`AsyncReel.receipt`.
+
+        Returns the ``receipt/1`` summary and writes the artifact directory
+        (media, v5 sidecar, assertions, receipt) to ``out``. Raises if called
+        from a running event loop — use :class:`AsyncReel` there.
+        """
+        _fail_if_running_loop("Reel.receipt()")
+        async_reel = self._as_async()
+        # Share the already-run report so a `save()` -> `receipt(media=False)`
+        # sequence never re-executes the tour.
+        async_reel._last_report = self._last_report
+        summary = asyncio.run(
+            async_reel.receipt(
+                out,
+                media=media,
+                baseline=baseline,
+                baseline_sidecar=baseline_sidecar,
+                threshold=threshold,
+                quality=quality,
+                with_feedback=with_feedback,
+            )
+        )
+        self._last_report = async_reel._last_report
+        return summary
 
     # ------------------------------------------------------------------
     # Local static file serving — QoL for the pre-push iteration loop
