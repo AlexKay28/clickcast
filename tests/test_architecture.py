@@ -9,9 +9,8 @@ Four invariants:
 
 1. Playwright may only be imported by the session layer (the real browser API).
 2. The ``clickcast.encode.encode()`` callable is only called by the render
-   kernel (plus ``reel.py`` until #261 routes the SDK through the kernel).
-   The facade's result *types* (``EncodeResult``, ``Format``) are plain data
-   and may be imported anywhere.
+   kernel. The facade's result *types* (``EncodeResult``, ``Format``) are
+   plain data and may be imported anywhere.
 3. Engine/layer packages never import the CLI framework (``typer``).
 4. Nothing under ``src/`` imports ``clickcast.cli`` except the entry point.
 """
@@ -45,9 +44,6 @@ _PLAYWRIGHT_ALLOWLIST = {
 #: are not restricted: they carry no encoder behaviour.
 _ENCODE_ALLOWLIST = {
     "kernel/render.py": "the one render pipeline; the only supported encoder caller",
-    # TODO(#261): the SDK still encodes directly. Drop this entry once reel.py
-    # hands frames to the kernel instead of calling encode() itself.
-    "reel.py": "direct SDK encoding, to be narrowed by #261",
 }
 
 #: Packages that must stay free of the CLI framework. (``feedback/session``

@@ -230,7 +230,7 @@ class TestReelSaveUsesTheKernel:
         enc = _enc(tmp_path)
         with patch(
             "clickcast.reel._run_and_encode",
-            return_value=(SimpleNamespace(ok=True, failed_at=None), enc),
+            return_value=(SimpleNamespace(ok=True, failed_at=None), enc, 6),
         ):
             reel.save(tmp_path / "reel.gif", with_feedback=True)
 
@@ -248,7 +248,7 @@ class TestReelSaveUsesTheKernel:
         enc = _enc(tmp_path)
         with patch(
             "clickcast.reel._run_and_encode",
-            return_value=(SimpleNamespace(ok=True, failed_at=None), enc),
+            return_value=(SimpleNamespace(ok=True, failed_at=None), enc, 6),
         ):
             reel.save(tmp_path / "reel.gif", no_sidecar=True)
 

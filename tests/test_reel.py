@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -362,3 +363,352 @@ class TestAsyncReelIntegration:
         assert out.exists()
         with Image.open(out) as img:
             assert img.n_frames >= 2
+
+
+# ------------------------------------------------------------------
+# Render pipeline (#261) — SDK goes through clickcast.kernel.render
+# ------------------------------------------------------------------
+
+
+class _FakeRecorder:
+    """Stand-in for :class:`clickcast.capture.Recorder` in pipeline tests.
+
+    The real recorder needs a browser; the render stage only needs a frames
+    directory with a ``frames.json`` manifest, so the fake just hands one back.
+    """
+
+    def __init__(self, frames_dir: Path, **_kwargs: object) -> None:
+        self.frames_dir = frames_dir
+
+    def __enter__(self) -> _FakeRecorder:
+        return self
+
+    def __exit__(self, *_exc: object) -> bool:
+        return False
+
+    def flush(self) -> None:
+        return None
+
+
+def _write_frame_dir(root: Path, *, count: int = 6) -> Path:
+    """Synthetic recorder output: PNG frames + ``frames.json`` manifest."""
+    from PIL import ImageDraw
+
+    root.mkdir(parents=True, exist_ok=True)
+    entries = []
+    for i in range(count):
+        img = Image.new("RGB", (160, 100), (20 + i * 8, 70, 140))
+        ImageDraw.Draw(img).rectangle([12 + i * 4, 12, 68 + i * 4, 52], fill=(250, 250, 250))
+        name = f"frame-{i:04d}-000.png"
+        img.save(root / name)
+        entries.append(
+            {
+                "path": name,
+                "step_index": i // 2,
+                "sub_index": i % 2,
+                "cursor_xy": [50 + i * 4, 40] if i % 2 else None,
+            }
+        )
+    (root / "frames.json").write_text(json.dumps({"frames": entries}))
+    return root
+
+
+def _install_fake_run(monkeypatch: pytest.MonkeyPatch, frames_dir: Path) -> None:
+    """Point ``reel._run_and_encode``'s recorder/runner at synthetic frames."""
+    import clickcast.reel as reel_mod
+    from clickcast.core.actions import ActionResult
+    from clickcast.scenario.scenario import RunResult
+
+    monkeypatch.setattr(reel_mod, "Recorder", lambda **_kw: _FakeRecorder(frames_dir))
+
+    async def fake_run_scenario(
+        scenario: object, *, recorder: object = None, builder: object = None
+    ):
+        return RunResult(
+            results=[
+                ActionResult(ok=True, status="ok", action="goto", cursor_xy=(50, 40)),
+                ActionResult(ok=True, status="ok", action="click", cursor_xy=(56, 40)),
+            ],
+            failed_at=None,
+        )
+
+    monkeypatch.setattr(reel_mod, "run_scenario", fake_run_scenario)
+
+
+_SCENARIO_URL = "https://example.com"
+
+
+def _pipeline_scenario() -> object:
+    return (
+        Reel(_SCENARIO_URL, fps=12)
+        .goto(wait="load", label="Open")
+        .click("#btn", label="Click")
+        .build_scenario()
+    )
+
+
+class TestRenderPipeline:
+    async def test_default_save_is_byte_identical_to_direct_encode(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """No opt-in flags → the encoded reel must not change (#261 risk)."""
+        from clickcast.encode import encode
+        from clickcast.reel import _run_and_encode
+
+        frames = _write_frame_dir(tmp_path / "frames")
+        pristine = tmp_path / "pristine"
+        shutil.copytree(frames, pristine)
+        _install_fake_run(monkeypatch, frames)
+
+        out = tmp_path / "sdk.gif"
+        _result, enc, encode_fps = await _run_and_encode(
+            _pipeline_scenario(),  # type: ignore[arg-type]
+            out,
+            format_="gif",
+            quality=8,
+            loop=0,
+        )
+        reference = tmp_path / "reference.gif"
+        encode(pristine, reference, fps=12, quality=8, loop=0, format="gif")
+
+        assert out.read_bytes() == reference.read_bytes()
+        assert enc.frame_count == 6
+        assert encode_fps == 12
+
+    async def test_default_does_not_interpolate_or_annotate(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from unittest.mock import patch
+
+        from clickcast.reel import _run_and_encode
+
+        frames = _write_frame_dir(tmp_path / "frames")
+        _install_fake_run(monkeypatch, frames)
+
+        with (
+            patch("clickcast.kernel.render.interpolate_cursor_motion") as interpolate,
+            patch("clickcast.kernel.render.annotate_frames_dir", return_value=0) as annotate,
+        ):
+            await _run_and_encode(
+                _pipeline_scenario(),  # type: ignore[arg-type]
+                tmp_path / "out.gif",
+                format_="gif",
+                quality=8,
+                loop=0,
+            )
+
+        interpolate.assert_not_called()
+        config = annotate.call_args.kwargs["config"]
+        assert config.clicks is False
+        assert config.labels is False
+        assert config.cursor is False
+        assert config.progress is False
+        assert config.actions_panel is False
+        assert annotate.call_args.kwargs["steps"] is None
+
+    async def test_smooth_encodes_at_video_fps(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        from clickcast.encode import EncodeResult
+        from clickcast.reel import _run_and_encode
+
+        frames = _write_frame_dir(tmp_path / "frames")
+        _install_fake_run(monkeypatch, frames)
+        out = tmp_path / "smooth.gif"
+        fake_enc = EncodeResult(path=out, format="gif", size_bytes=1, duration_s=1.0, frame_count=8)
+        smoothed = SimpleNamespace(output_fps=24, inserted=2, total_frames=8)
+
+        with (
+            patch("clickcast.kernel.render.smooth_frames_dir", return_value=smoothed) as smooth,
+            patch("clickcast.kernel.render.encode", return_value=fake_enc) as encode,
+        ):
+            _result, _enc, encode_fps = await _run_and_encode(
+                _pipeline_scenario(),  # type: ignore[arg-type]
+                out,
+                format_="gif",
+                quality=8,
+                loop=0,
+                smooth=True,
+                video_fps=24,
+            )
+
+        assert smooth.call_args.kwargs["source_fps"] == 12
+        assert encode.call_args.kwargs["fps"] == 24
+        assert encode_fps == 24
+
+    async def test_annotate_produces_frame_visible_overlays(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from clickcast.annotate import AnnotateConfig
+        from clickcast.reel import _run_and_encode
+
+        frames = _write_frame_dir(tmp_path / "frames")
+        pristine = tmp_path / "pristine"
+        shutil.copytree(frames, pristine)
+        _install_fake_run(monkeypatch, frames)
+
+        await _run_and_encode(
+            _pipeline_scenario(),  # type: ignore[arg-type]
+            tmp_path / "annotated.gif",
+            format_="gif",
+            quality=8,
+            loop=0,
+            annotate=AnnotateConfig(),
+        )
+
+        before = Image.open(pristine / "frame-0000-000.png").convert("RGB")
+        after = Image.open(frames / "frame-0000-000.png").convert("RGB")
+        assert before.tobytes() != after.tobytes()
+
+    async def test_annotate_interpolates_cursor_motion(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from unittest.mock import patch
+
+        from clickcast.annotate import AnnotateConfig
+        from clickcast.reel import _run_and_encode
+
+        frames = _write_frame_dir(tmp_path / "frames")
+        _install_fake_run(monkeypatch, frames)
+
+        with patch("clickcast.kernel.render.interpolate_cursor_motion", return_value=0) as interp:
+            await _run_and_encode(
+                _pipeline_scenario(),  # type: ignore[arg-type]
+                tmp_path / "out.gif",
+                format_="gif",
+                quality=8,
+                loop=0,
+                annotate=AnnotateConfig(),
+            )
+        interp.assert_called_once()
+
+    async def test_step_annotations_carry_labels_and_ripples(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        from unittest.mock import patch
+
+        from clickcast.annotate import AnnotateConfig
+        from clickcast.reel import _run_and_encode
+
+        frames = _write_frame_dir(tmp_path / "frames")
+        _install_fake_run(monkeypatch, frames)
+
+        with patch("clickcast.kernel.render.annotate_frames_dir", return_value=0) as annotate:
+            await _run_and_encode(
+                _pipeline_scenario(),  # type: ignore[arg-type]
+                tmp_path / "out.gif",
+                format_="gif",
+                quality=8,
+                loop=0,
+                annotate=AnnotateConfig(),
+            )
+
+        steps = annotate.call_args.kwargs["steps"]
+        # 6 frames → step_index 0..2; labels come from the scenario's steps.
+        assert steps[0].label == "Open"
+        assert steps[1].label == "Click"
+        assert steps[1].click_at == (56, 40)
+
+    def test_save_forwards_render_options(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """`save` plumbs annotate/smooth/video_fps into `_run_and_encode`."""
+        import clickcast.reel as reel_mod
+        from clickcast.annotate import AnnotateConfig
+        from clickcast.encode import EncodeResult
+
+        out = tmp_path / "out.gif"
+        fake_enc = EncodeResult(path=out, format="gif", size_bytes=1, duration_s=1.0, frame_count=2)
+        captured: dict[str, object] = {}
+        config = AnnotateConfig()
+
+        async def fake_run_and_encode(scenario, out_path, **kwargs):
+            captured.update(kwargs)
+            captured["out"] = out_path
+            captured["scenario"] = scenario
+            from types import SimpleNamespace
+
+            return SimpleNamespace(ok=True, failed_at=None), fake_enc, 24
+
+        monkeypatch.setattr(reel_mod, "_run_and_encode", fake_run_and_encode)
+
+        result = (
+            Reel(_SCENARIO_URL, fps=12)
+            .goto(wait="load")
+            .save(out, annotate=config, smooth=True, video_fps=24, with_feedback=True)
+        )
+
+        assert result == out
+        assert captured["annotate"] is config
+        assert captured["smooth"] is True
+        assert captured["video_fps"] == 24
+
+    def test_video_fps_is_validated(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="video_fps"):
+            Reel(_SCENARIO_URL).goto(wait="load").save(tmp_path / "o.gif", video_fps=0)
+
+
+class TestBuilderTimeoutMs:
+    """`timeout_ms` reaches the built step for every action that honors it."""
+
+    @pytest.mark.parametrize(
+        "build_action",
+        [
+            lambda r: Reel(r).goto(timeout_ms=2000),
+            lambda r: Reel(r).click("#a", timeout_ms=2000),
+            lambda r: Reel(r).dblclick("#a", timeout_ms=2000),
+            lambda r: Reel(r).hover("#a", timeout_ms=2000),
+            lambda r: Reel(r).type("#a", "x", timeout_ms=2000),
+            lambda r: Reel(r).press("Enter", timeout_ms=2000),
+            lambda r: Reel(r).select("#a", "b", timeout_ms=2000),
+            lambda r: Reel(r).scroll(by=100, timeout_ms=2000),
+            lambda r: Reel(r).wheel(50, timeout_ms=2000),
+        ],
+    )
+    def test_timeout_ms_flows_into_step(self, build_action) -> None:
+        step = build_action("https://x").steps[0]
+        assert step.timeout_ms == 2000
+
+    def test_timeout_ms_defaults_to_none(self) -> None:
+        assert Reel("https://x").click("#a").steps[0].timeout_ms is None
+
+
+@pytest.mark.integration
+class TestReelPipelineIntegration:
+    """End-to-end checks against a real browser + data: URL."""
+
+    def test_last_report_populated_without_sidecar(self, tmp_path: Path) -> None:
+        out = tmp_path / "tour.gif"
+        reel = (
+            Reel(_FIXTURE_URL, viewport=(400, 300), fps=4, dwell=0.25)
+            .goto(wait="load")
+            .click("#btn", dwell=0.25, label="Click")
+        )
+        reel.save(out, no_sidecar=True)
+        assert not out.with_suffix(out.suffix + ".json").exists()
+        assert reel._last_report is not None
+        assert reel.assertions()["step_count"] == 2
+
+    def test_with_feedback_adds_pointer_block(self, tmp_path: Path) -> None:
+        out = tmp_path / "tour.gif"
+        Reel(_FIXTURE_URL, viewport=(400, 300), fps=4, dwell=0.25).goto(wait="load").save(
+            out, with_feedback=True
+        )
+        payload = json.loads(out.with_suffix(out.suffix + ".json").read_text())
+        assert payload["feedback"] is not None
+
+    def test_smooth_reel_reports_video_fps(self, tmp_path: Path) -> None:
+        out = tmp_path / "tour.gif"
+        Reel(_FIXTURE_URL, viewport=(400, 300), fps=4, dwell=0.25).goto(wait="load").save(
+            out, smooth=True, video_fps=20
+        )
+        with Image.open(out) as img:
+            # Pillow's GIF optimizer fuses identical hold slots into one frame
+            # with a summed duration, so assert the per-frame quantum instead
+            # of the raw frame count.
+            assert img.info["duration"] % round(1000 / 20) == 0
+        payload = json.loads(out.with_suffix(out.suffix + ".json").read_text())
+        assert payload["media"]["fps"] == 20
