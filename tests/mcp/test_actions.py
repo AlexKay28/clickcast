@@ -268,3 +268,49 @@ class TestErrorModes:
             result = await client.call_tool("scroll", {})
         assert result.isError is True
         assert result_json(result)["error_code"] == "other"
+
+
+class TestDeltaLatency:
+    """#297: a read-only tool must not pay for the per-action delta.
+
+    Every action tool settles and captures a before/after observation pair
+    (#264). ``screenshot`` cannot change the page, so it skips all three —
+    otherwise a pure read costs the same seconds as a click.
+    """
+
+    async def test_screenshot_skips_settle_and_observations(
+        self, monkeypatch: pytest.MonkeyPatch, fixture_site_url: str
+    ) -> None:
+        import clickcast.mcp.server as server_mod
+
+        async def _boom(*_args: object, **_kwargs: object) -> object:
+            raise AssertionError("screenshot must not settle or observe the page")
+
+        monkeypatch.setattr(server_mod, "settle_session", _boom)
+        monkeypatch.setattr(server_mod, "_capture_observation", _boom)
+
+        async with live_session(fixture_site_url=fixture_site_url, goto_home=True) as client:
+            result = await client.call_tool("screenshot", {})
+        payload = result_json(result)
+        assert payload["ok"] is True
+        assert payload["delta"] is None
+
+    async def test_zero_embedded_budget_skips_the_settle_verdict(
+        self, fixture_site_url: str
+    ) -> None:
+        async with live_session(
+            fixture_site_url=fixture_site_url,
+            goto_home=True,
+            settle_budget_ms=0,
+        ) as client:
+            result = await client.call_tool("click", {"selector": "#btn-3d"})
+        payload = result_json(result)
+        assert payload["ok"] is True
+        assert payload["delta"] is not None
+        assert "settled" not in payload["delta"]
+
+    async def test_settle_budget_is_validated(self) -> None:
+        async with open_client() as client:
+            result = await client.call_tool("start_session", {"settle_budget_ms": 40_000})
+            assert result.isError is True
+            assert result_json(result)["error_code"] == "other"

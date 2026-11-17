@@ -92,6 +92,12 @@ class ClickcastSessionState:
     annotator: Annotator | None = None
     grid: GridConfig | None = None
     step_index: int = 0
+    #: Budget for the settle() embedded in every action's delta (#297).
+    #: The explicit ``settle`` tool keeps the full 3000 ms default; an
+    #: embedded verdict only needs to be good enough to tell the caller
+    #: whether the page had settled, not to be maximally patient. ``0``
+    #: skips the embedded settle entirely (deltas carry ``settled: null``).
+    delta_settle_budget_ms: int = 1500
     _tmpdir: TemporaryDirectory[str] | None = None
     frames_dir: Path | None = None
 
@@ -243,7 +249,9 @@ def create_server(
             )
         return resolved, None
 
-    async def _run_step(step: BaseStep, *, full_page: bool = False) -> mcp_types.CallToolResult:
+    async def _run_step(
+        step: BaseStep, *, full_page: bool = False, capture_delta: bool = True
+    ) -> mcp_types.CallToolResult:
         """Execute one step against the live session and build its response.
 
         Reused by every action tool below — see module docstring. Each call
@@ -252,6 +260,10 @@ def create_server(
         ships the resulting ``delta`` in the response and on the recorded
         step, so a live transcript carries the same v5 ``steps[].delta``
         block a consumer sees (#264).
+
+        ``capture_delta=False`` is for read-only tools (``screenshot``): they
+        cannot change the page, so the two observations and the settle would
+        buy an always-empty delta at the cost of seconds per call (#297).
         """
         if state.session is None or state.builder is None or state.annotator is None:
             return _error_result("other", _ERROR_NO_SESSION)
@@ -264,11 +276,12 @@ def create_server(
         index = state.step_index
         state.step_index += 1
 
-        try:
-            before = await _capture_observation(session)
-        except Exception as exc:  # a crashed/blank page must not break the action
-            _log.warning("delta before-capture failed for step %d: %r", index, exc)
-            before = None
+        before = None
+        if capture_delta:
+            try:
+                before = await _capture_observation(session)
+            except Exception as exc:  # a crashed/blank page must not break the action
+                _log.warning("delta before-capture failed for step %d: %r", index, exc)
 
         result = await execute(step, session, step_index=index)
 
@@ -327,23 +340,29 @@ def create_server(
         # #264: one delta per action. Settle first so the after-observation
         # reflects the same quiescence the agent is told about; a broken page
         # degrades to `delta: null` rather than masking the ActionResult.
-        settled = await settle_session(session)
+        # The embedded budget is deliberately smaller than the explicit
+        # `settle` tool's (#297): a verdict is worth one beat, not three.
         delta: StepDelta | None = None
-        try:
-            after = await _capture_observation(session)
-            if before is not None:
-                delta = StepDelta.model_validate(
-                    _diff_observations(
-                        before,
-                        after,
-                        console_errors=page_state.console_errors if page_state else (),
-                        network_failed=page_state.network_failed if page_state else (),
-                        settled=settled,
+        if capture_delta:
+            settled = None
+            budget = state.delta_settle_budget_ms
+            if budget > 0:
+                settled = await settle_session(session, budget_ms=budget)
+            try:
+                after = await _capture_observation(session)
+                if before is not None:
+                    delta = StepDelta.model_validate(
+                        _diff_observations(
+                            before,
+                            after,
+                            console_errors=page_state.console_errors if page_state else (),
+                            network_failed=page_state.network_failed if page_state else (),
+                            settled=settled,
+                        )
                     )
-                )
-                builder.steps[-1].delta = delta
-        except Exception as exc:
-            _log.warning("delta capture failed for step %d (%s): %r", index, step.action, exc)
+                    builder.steps[-1].delta = delta
+            except Exception as exc:
+                _log.warning("delta capture failed for step %d (%s): %r", index, step.action, exc)
 
         payload: dict[str, Any] = {
             "ok": result.ok,
@@ -384,6 +403,7 @@ def create_server(
         grid_pitch: int | None = None,
         grid_color: str | None = None,
         grid_style: str | None = None,
+        settle_budget_ms: int | None = None,
     ) -> mcp_types.CallToolResult:
         """Open the one live browser session this server process holds.
 
@@ -393,6 +413,8 @@ def create_server(
         """
         if state.session is not None:
             return _error_result("other", _ERROR_SESSION_ACTIVE)
+        if settle_budget_ms is not None and not 0 <= settle_budget_ms <= 30_000:
+            return _error_result("other", "settle_budget_ms must be between 0 and 30000")
 
         base = state.default_browser
         opts = BrowserOpts(
@@ -404,6 +426,8 @@ def create_server(
             dark=base.dark if dark is None else dark,
         )
         grid_cfg = _resolve_grid(state.default_grid, grid, grid_pitch, grid_color, grid_style)
+        if settle_budget_ms is not None:
+            state.delta_settle_budget_ms = settle_budget_ms
 
         try:
             session = await Session(**opts.to_session_kwargs()).__aenter__()
@@ -642,9 +666,15 @@ def create_server(
         full_page: bool = False,
         label: str | None = None,
     ) -> mcp_types.CallToolResult:
-        """Capture the current page without performing any action."""
+        """Capture the current page without performing any action.
+
+        No ``delta`` is computed: a screenshot cannot change the page, so the
+        observations and settle would be pure latency (#297).
+        """
         return await _run_step(
-            ScreenshotStep(full_page=full_page, label=label), full_page=full_page
+            ScreenshotStep(full_page=full_page, label=label),
+            full_page=full_page,
+            capture_delta=False,
         )
 
     @server.tool()
