@@ -22,6 +22,7 @@ from clickcast.cli import app
 from clickcast.feedback.session.storage import (
     InvocationEvent,
     SessionStore,
+    _git_rev,
     record_invocation_safe,
 )
 from clickcast.feedback.session.summary import (
@@ -198,6 +199,102 @@ class TestRecordInvocation:
         record_invocation_safe(["auto"], exit_code=0, wall_time_ms=1, store=store)
         assert store.list_sessions() == []
 
+    def test_sensitive_argv_values_are_redacted_before_append(self, store: SessionStore) -> None:
+        info = store.start()
+        record_invocation_safe(
+            [
+                "run",
+                "tour.yml",
+                "--header",
+                "Authorization: Bearer header-separate",
+                "-H=X-Api-Key: header-equals",
+                "--var",
+                "TOKEN=var-separate",
+                "--var=PASSWORD=var-equals",
+                "--url",
+                "https://user:pass@example.test/path?token=url-secret&ok=1",
+                "--verbose",
+            ],
+            exit_code=0,
+            wall_time_ms=1,
+            store=store,
+        )
+
+        events = store.load_events(info.session_id)
+        assert events[0].argv == [
+            "run",
+            "tour.yml",
+            "--header",
+            "Authorization: <redacted>",
+            "-H=X-Api-Key: <redacted>",
+            "--var",
+            "TOKEN=<redacted>",
+            "--var=PASSWORD=<redacted>",
+            "--url",
+            "https://<redacted>@example.test/path?token=<redacted>&ok=1",
+            "--verbose",
+        ]
+
+    def test_attached_short_option_headers_are_redacted(self, store: SessionStore) -> None:
+        info = store.start()
+        record_invocation_safe(
+            [
+                "run",
+                "tour.yml",
+                "-HX-Api-Key: attached-secret",
+                "-H=Cookie: equals-secret",
+            ],
+            exit_code=0,
+            wall_time_ms=1,
+            store=store,
+        )
+        argv = store.load_events(info.session_id)[0].argv
+        assert argv == [
+            "run",
+            "tour.yml",
+            "-H=X-Api-Key: <redacted>",
+            "-H=Cookie: <redacted>",
+        ]
+
+    def test_oauth_code_session_and_fragment_credentials_are_redacted(
+        self, store: SessionStore
+    ) -> None:
+        info = store.start()
+        record_invocation_safe(
+            [
+                "auto",
+                "https://example.test/cb?code=oauth-code&jsessionid=abc&sid=def&ok=1",
+                "https://example.test/app#access_token=frag-secret&state=x",
+            ],
+            exit_code=0,
+            wall_time_ms=1,
+            store=store,
+        )
+        argv = store.load_events(info.session_id)[0].argv
+        assert argv == [
+            "auto",
+            "https://example.test/cb?code=<redacted>&jsessionid=<redacted>&sid=<redacted>&ok=1",
+            "https://example.test/app#access_token=<redacted>&state=x",
+        ]
+
+    def test_camel_case_token_query_keys_are_redacted(self, store: SessionStore) -> None:
+        info = store.start()
+        record_invocation_safe(
+            [
+                "auto",
+                "https://example.test/?authToken=a&accessToken=b&bypassToken=c&ok=1",
+            ],
+            exit_code=0,
+            wall_time_ms=1,
+            store=store,
+        )
+        argv = store.load_events(info.session_id)[0].argv
+        assert argv == [
+            "auto",
+            "https://example.test/?authToken=<redacted>&accessToken=<redacted>"
+            "&bypassToken=<redacted>&ok=1",
+        ]
+
 
 # ---------------------------------------------------------------------------
 # Summary
@@ -352,3 +449,37 @@ class TestCLI:
         assert r.exit_code == 0
         for cmd in ("start", "stop", "status", "list", "summary"):
             assert cmd in r.stdout
+
+
+class TestGitRevWorktree:
+    """Linked worktrees store ``.git`` as a file, not a dir."""
+
+    def test_worktree_gitdir_file_resolves_common_refs(self, tmp_path: Path) -> None:
+        repo = tmp_path / "repo"
+        git = repo / ".git"
+        gitmeta = git / "worktrees" / "preview"
+        (gitmeta).mkdir(parents=True)
+        (git / "refs" / "heads").mkdir(parents=True)
+        (git / "refs" / "heads" / "preview").write_text("abc123def4567890\n")
+
+        worktree = tmp_path / "repo-preview"
+        worktree.mkdir()
+        (worktree / ".git").write_text(f"gitdir: {gitmeta}\n")
+        (gitmeta / "HEAD").write_text("ref: refs/heads/preview\n")
+        (gitmeta / "commondir").write_text("../..\n")
+
+        assert _git_rev(str(worktree)) == "abc123def456"
+
+    def test_malformed_gitdir_file_returns_none_without_parent_fallback(
+        self, tmp_path: Path
+    ) -> None:
+        # An unrelated ENCLOSING repo must not be attributed to a bad marker.
+        outer = tmp_path / "outer"
+        (outer / ".git" / "refs" / "heads").mkdir(parents=True)
+        (outer / ".git" / "HEAD").write_text("ref: refs/heads/main\n")
+        (outer / ".git" / "refs" / "heads" / "main").write_text("ffffffffffff\n")
+
+        inner = outer / "project"
+        inner.mkdir()
+        (inner / ".git").write_text("nonsense\n")
+        assert _git_rev(str(inner)) is None

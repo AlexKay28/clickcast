@@ -19,6 +19,8 @@ from clickcast.annotate.cards import (
 from clickcast.annotate.grid import GridConfig, draw_grid
 from clickcast.annotate.interpolate import interpolate_cursor_motion
 from clickcast.annotate.pipeline import StepAnnotation, annotate_frames_dir
+from clickcast.annotate.primitives import RegionAnnotation, load_annotations
+from clickcast.annotate.smooth import SmoothConfig, SmoothResult, smooth_frames_dir
 from clickcast.annotate.zoom import apply_zoom_on_click
 
 __all__ = [
@@ -30,7 +32,10 @@ __all__ = [
     "GridConfig",
     "LabelStyle",
     "ProgressStyle",
+    "RegionAnnotation",
     "RippleStyle",
+    "SmoothConfig",
+    "SmoothResult",
     "StepAnnotation",
     "SummaryStats",
     "TargetHighlightStyle",
@@ -38,6 +43,8 @@ __all__ = [
     "apply_zoom_on_click",
     "draw_grid",
     "interpolate_cursor_motion",
+    "load_annotations",
     "render_summary_card",
     "render_title_card",
+    "smooth_frames_dir",
 ]

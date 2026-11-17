@@ -44,15 +44,30 @@ def apply_zoom_on_click(
     if not frames:
         return 0
 
-    zoomed = 0
+    # Validate every candidate before the first in-place write. A malformed
+    # cursor or missing/corrupt late frame must not leave a directory with
+    # half its frames zoomed and half untouched.
+    candidates: list[tuple[Path, list[int] | tuple[int, int]]] = []
     for entry in frames:
         cursor_xy_raw = entry.get("cursor_xy")
-        if cursor_xy_raw is None:
+        if not cursor_xy_raw or len(cursor_xy_raw) < 2:
             continue
-        if entry["sub_index"] >= frames_after_click:
+        if entry.get("sub_index", 0) >= frames_after_click:
             continue
         frame_path = frames_dir / entry["path"]
-        _zoom_frame_in_place(frame_path, cursor_xy_raw, factor)
+        if not frame_path.is_file():
+            continue
+        candidates.append((frame_path, cursor_xy_raw))
+    try:
+        for frame_path, _ in candidates:
+            with Image.open(frame_path) as image:
+                image.verify()
+    except (OSError, SyntaxError):
+        return 0
+
+    zoomed = 0
+    for frame_path, cursor_xy in candidates:
+        _zoom_frame_in_place(frame_path, cursor_xy, factor)
         zoomed += 1
     return zoomed
 

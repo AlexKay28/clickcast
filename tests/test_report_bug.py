@@ -71,10 +71,17 @@ class TestPayloadShape:
 
     def test_failed_step_narrated(self) -> None:
         failed = _step(index=2, action="click", status="failed", error="timeout after 5000ms")
-        payload = build_agent_report(_report(steps=[_step(), failed]))
+        payload = build_agent_report(_report(steps=[_step(), failed]), redact=False)
         assert "step 2" in payload["expected"].lower()
         assert "timeout" in payload["actual"].lower()
         assert payload["sidecar_excerpt"]["failed_step"]["index"] == 2
+
+    def test_skipped_step_is_not_treated_as_failure(self) -> None:
+        skipped = _step(index=1, status="skipped", error="optional step skipped")
+        failed = _step(index=2, status="failed", error="actual failure")
+        payload = build_agent_report(_report(steps=[skipped, failed]))
+        assert payload["sidecar_excerpt"]["failed_step"]["index"] == 2
+        assert "Step 2" in payload["expected"]
 
     def test_happy_path_narrated(self) -> None:
         payload = build_agent_report(_report())
@@ -82,7 +89,7 @@ class TestPayloadShape:
         assert payload["sidecar_excerpt"].get("failed_step") is None
 
     def test_environment_note_threaded(self) -> None:
-        payload = build_agent_report(_report(), environment_note="proxy on")
+        payload = build_agent_report(_report(), environment_note="proxy on", redact=False)
         assert payload["environment_note"] == "proxy on"
 
 
@@ -94,13 +101,39 @@ class TestRedactionIntegration:
     def test_url_sanitized_when_redacted(self) -> None:
         payload = build_agent_report(_report())
         assert "example" in payload["sidecar_excerpt"]["url"]
-        # Original .example TLD stays; hostname gets its TLD replaced with `.example`.
-        assert "acme.example" in payload["sidecar_excerpt"]["url"]
+        assert payload["sidecar_excerpt"]["url"] == "https://redacted.example/*"
+        assert "acme" not in payload["sidecar_excerpt"]["url"]
 
     def test_no_redact_preserves_urls(self) -> None:
         payload = build_agent_report(_report(), redact=False)
         assert payload["sidecar_excerpt"]["url"] == "https://acme.example/app"
         assert payload["redacted"] is False
+
+    def test_no_secrets_reach_payload_or_prefilled_issue(self) -> None:
+        failed = _step(
+            index=1,
+            status="failed",
+            error="request failed with token=ERRORSECRET",
+        )
+        report = _report(
+            url="https://user:pw@internal.acme.com:8443/app?token=URLSECRET",
+            steps=[failed],
+        )
+        payload = build_agent_report(
+            report,
+            command_or_api_call="clickcast auto https://internal/?token=COMMANDSECRET",
+            environment_note="proxy credential NOTESECRET",
+        )
+        serialized = json.dumps(payload)
+        issue_url = prefilled_issue_url(payload)
+        issue_body = parse_qs(urlparse(issue_url).query)["body"][0]
+        for secret in ("URLSECRET", "ERRORSECRET", "COMMANDSECRET", "NOTESECRET"):
+            assert secret not in serialized
+            assert secret not in issue_url
+            assert secret not in issue_body
+        assert "internal.acme.com" not in serialized
+        assert "internal.acme.com" not in issue_url
+        assert payload["reproduction"]["content"] == payload["command_or_api_call"]
 
 
 class TestIssueURL:
@@ -112,9 +145,15 @@ class TestIssueURL:
         assert q["title"][0].startswith("[agent-report]")
         assert "clickcast" in q["body"][0]
 
+    def test_no_failed_step_title_has_no_trailing_whitespace(self) -> None:
+        url = prefilled_issue_url(build_agent_report(_report()))
+        title = parse_qs(urlparse(url).query)["title"][0]
+        assert title == "[agent-report] sidecar anomaly"
+        assert title == title.rstrip()
+
     def test_url_body_includes_excerpt_json(self) -> None:
         failed = _step(index=1, action="click", status="failed", error="not found")
-        payload = build_agent_report(_report(steps=[failed]))
+        payload = build_agent_report(_report(steps=[failed]), redact=False)
         url = prefilled_issue_url(payload)
         body = parse_qs(urlparse(url).query)["body"][0]
         assert "not found" in body
@@ -131,7 +170,7 @@ class TestDiagnostics:
 
     def test_shows_failed_step_line(self) -> None:
         failed = _step(index=1, action="click", status="failed", error="oops")
-        text = render_diagnostics(build_agent_report(_report(steps=[failed])))
+        text = render_diagnostics(build_agent_report(_report(steps=[failed]), redact=False))
         assert "failed step #1" in text
         assert "oops" in text
 
@@ -204,7 +243,10 @@ class TestCLI:
 
     def test_note_threaded_through(self, tmp_path: Path) -> None:
         sc = self._sidecar(tmp_path)
-        result = self.runner.invoke(app, ["report-bug", str(sc), "--json", "--note", "proxy on"])
+        result = self.runner.invoke(
+            app,
+            ["report-bug", str(sc), "--json", "--note", "proxy on", "--no-redact"],
+        )
         payload = json.loads(result.stdout)
         assert payload["environment_note"] == "proxy on"
 

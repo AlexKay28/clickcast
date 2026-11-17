@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from clickcast.annotate.annotator import AnnotateConfig, Annotator
+from clickcast.annotate.primitives import RegionAnnotation
 
 __all__ = ["StepAnnotation", "annotate_frames_dir"]
 
@@ -42,6 +43,7 @@ def annotate_frames_dir(
     *,
     steps: dict[int, StepAnnotation] | None = None,
     config: AnnotateConfig | None = None,
+    regions: list[RegionAnnotation] | None = None,
 ) -> int:
     """Composite overlays onto every frame in ``frames.json``, in place.
 
@@ -75,28 +77,21 @@ def annotate_frames_dir(
     # start at that offset. Ripple stages are counted from the click frame,
     # not from sub_index=0 — otherwise pre-click padding would consume every
     # ripple stage silently.
+    # Count only LEADING None cursors per step. A None after the click (e.g.
+    # scroll/goto frames) must not extend the pre-click region. Track which
+    # steps have already seen a cursor so this stays one linear pass rather
+    # than rescanning the full frame list once per step.
     pre_click_count: dict[int, int] = {}
+    clicked_steps: set[int] = set()
     for f in frames:
         idx = f["step_index"]
-        if idx in pre_click_count:
+        if idx in clicked_steps:
             continue
-        # Walk the step's sub-frames in order; count leading Nones.
         if f["cursor_xy"] is None:
             pre_click_count[idx] = pre_click_count.get(idx, 0) + 1
-
-    # Second pass to correctly count LEADING Nones per step (the naive
-    # increment above overcounts if cursor_xy is None post-click too — e.g.
-    # scroll/goto steps). Reset and walk deterministically:
-    pre_click_count.clear()
-    for idx in range(total_steps):
-        count = 0
-        for f in frames:
-            if f["step_index"] != idx:
-                continue
-            if f["cursor_xy"] is not None:
-                break
-            count += 1
-        pre_click_count[idx] = count
+        else:
+            pre_click_count.setdefault(idx, 0)
+            clicked_steps.add(idx)
 
     for entry in frames:
         step_index = entry["step_index"]
@@ -133,5 +128,6 @@ def annotate_frames_dir(
             all_labels=all_labels,
             target_bbox=target_bbox,
             target_pulse_phase=target_pulse_phase,
+            regions=regions,
         )
     return len(frames)

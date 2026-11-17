@@ -68,10 +68,12 @@ class TestBuildFeedback:
 
     def test_skill_url_points_at_skill_md(self) -> None:
         """Regression guard: the epilog's skill-guide pointer must resolve
-        to `skill.md` at the repo root — the file the agent expects to
-        find when it follows the link from `<any-command> --help`."""
+        to the Agent Skills manifest `SKILL.md` at the repo root — the
+        file the agent expects to find when it follows the link from
+        `<any-command> --help` (and a path that stays unique on
+        case-insensitive macOS/Windows checkouts)."""
         assert SKILL_URL.startswith(REPO_URL)
-        assert SKILL_URL.endswith("/skill.md")
+        assert SKILL_URL.endswith("/SKILL.md")
 
     def test_new_issue_url_prefills_environment(self) -> None:
         fb = build_feedback(_report())
@@ -80,12 +82,14 @@ class TestBuildFeedback:
         assert "clickcast: 1.2.3" in body
         assert "engine: chromium" in body
         assert "viewport: 1440x900" in body
-        assert "target url: https://example.com/app" in body
+        assert "target url" not in body
 
-    def test_body_omits_target_url_when_absent(self) -> None:
-        fb = build_feedback(_report(url=None))
+    def test_target_url_and_query_token_never_reach_prefill(self) -> None:
+        fb = build_feedback(_report(url="https://internal.acme.com/app?token=TOPSECRET"))
         body = parse_qs(urlparse(fb.new_issue_url).query)["body"][0]
         assert "target url" not in body
+        assert "internal.acme.com" not in fb.new_issue_url
+        assert "TOPSECRET" not in fb.new_issue_url
 
     def test_body_includes_prompt_template_labels(self) -> None:
         fb = build_feedback(_report())

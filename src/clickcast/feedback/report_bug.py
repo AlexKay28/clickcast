@@ -36,14 +36,17 @@ def build_agent_report(
     """Assemble the Track-C payload (see ``docs/agent-report-schema/v1.json``).
 
     ``report`` is the loaded sidecar. When ``redact`` is set (the default),
-    URLs / selectors / visible text in the sidecar excerpt are sanitized. The
-    output dict is JSON-safe (no non-primitives at any depth).
+    every report-derived value is sanitized before it can reach the excerpt,
+    inferred command, reproduction, or narrative. The output dict is JSON-safe
+    (no non-primitives at any depth).
     """
+    if redact:
+        report = Report.model_validate(redact_report(report.model_dump(mode="json")))
     failed = _first_failed_step(report)
     excerpt = _build_excerpt(report, failed)
-    if redact:
-        excerpt = redact_report(excerpt)
     call = command_or_api_call or _infer_command(report)
+    if redact and command_or_api_call:
+        call = _redact_freeform(call)
     expected, actual = _infer_narrative(report, failed)
     payload: dict[str, Any] = {
         "schema_version": _SCHEMA_VERSION,
@@ -65,7 +68,9 @@ def build_agent_report(
     except Exception:  # pragma: no cover — playwright is a hard dep
         pass
     if environment_note:
-        payload["environment_note"] = environment_note
+        payload["environment_note"] = (
+            _redact_freeform(environment_note) if redact else environment_note
+        )
     return payload
 
 
@@ -115,7 +120,7 @@ def render_diagnostics(payload: dict[str, Any]) -> str:
 
 def _first_failed_step(report: Report) -> StepReport | None:
     for step in report.steps:
-        if step.status != "ok":
+        if step.status == "failed":
             return step
     return None
 
@@ -161,6 +166,11 @@ def _infer_command(report: Report) -> str:
     return "clickcast auto <url> --out <path>"
 
 
+def _redact_freeform(raw: str) -> str:
+    """Sanitize caller-supplied free-form text under the redaction contract."""
+    return str(redact_report({"error": raw})["error"])
+
+
 def _infer_narrative(report: Report, failed: StepReport | None) -> tuple[str, str]:
     if failed is None:
         expected = "A GIF + sidecar; every step OK; discovery finds ≥ 1 element."
@@ -181,7 +191,7 @@ def _title(payload: dict[str, Any]) -> str:
     excerpt = payload["sidecar_excerpt"]
     if failed := excerpt.get("failed_step"):
         return f"[agent-report] step {failed['index']} {failed['action']} — {failed.get('status', 'failed')}"
-    return "[agent-report] "
+    return "[agent-report] sidecar anomaly"
 
 
 def _body(payload: dict[str, Any]) -> str:

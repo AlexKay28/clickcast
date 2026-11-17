@@ -9,6 +9,7 @@ report and a friendly pre-flight error instead of Playwright's raw
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -117,10 +118,17 @@ def find_installed_engine(engine: str) -> tuple[Path, str] | None:
 
     Returns ``None`` if no matching browser is installed.
     """
-    cache_root = Path.home() / ".cache" / "ms-playwright"
-    if not cache_root.exists():
-        alt = Path.home() / "Library" / "Caches" / "ms-playwright"
-        cache_root = alt if alt.exists() else cache_root
+    # Playwright's standard override must agree with what Playwright itself
+    # will launch. "0" is its special in-package location, not a literal
+    # directory named 0; leave that layout to the normal fallback here.
+    configured_root = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
+    if configured_root and configured_root != "0":
+        cache_root = Path(configured_root).expanduser()
+    else:
+        cache_root = Path.home() / ".cache" / "ms-playwright"
+        if not cache_root.exists():
+            alt = Path.home() / "Library" / "Caches" / "ms-playwright"
+            cache_root = alt if alt.exists() else cache_root
     if not cache_root.exists():
         return None
     prefix = {"chromium": "chromium", "firefox": "firefox", "webkit": "webkit"}.get(engine)
@@ -130,16 +138,21 @@ def find_installed_engine(engine: str) -> tuple[Path, str] | None:
     # installs that share the prefix but have a different exec layout, e.g.
     # `chromium-headless-shell-*` and `chromium-tip-of-tree-*`.
     matches = sorted(
-        p
-        for p in cache_root.glob(f"{prefix}-*")
-        if p.is_dir() and p.name[len(prefix) + 1 :].isdigit()
+        (
+            p
+            for p in cache_root.glob(f"{prefix}-*")
+            if p.is_dir() and p.name[len(prefix) + 1 :].isdigit()
+        ),
+        key=lambda p: int(p.name[len(prefix) + 1 :]),
+        reverse=True,
     )
     if not matches:
         return None
-    install_dir = matches[-1]
-    for parts in _candidate_executable_parts(engine):
-        candidate = install_dir.joinpath(*parts)
-        if candidate.exists():
-            return candidate, "executable"
-    # Novel layout: don't lie about what we found.
-    return install_dir, "install dir"
+    for install_dir in matches:
+        for parts in _candidate_executable_parts(engine):
+            candidate = install_dir.joinpath(*parts)
+            if candidate.exists():
+                return candidate, "executable"
+    # Novel layout: don't lie about what we found. Report the numerically
+    # newest install, not the lexicographic maximum (999 > 1234 as strings).
+    return matches[0], "install dir"

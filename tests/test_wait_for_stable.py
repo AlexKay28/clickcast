@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import re
 import time
 from collections.abc import AsyncIterator
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
 
-from clickcast.core.actions import WaitForStep, execute
-from clickcast.core.session import Session
+from clickcast.core.actions import WaitForStep, _wait_for_stable, execute
+from clickcast.core.session import PlaywrightTimeoutError, Session
 
 # HTML that jitters `#target` for a short window, then stops.
 # The `data-settle-ms` attribute lets each test set its own settling deadline.
@@ -49,6 +51,37 @@ async def session() -> AsyncIterator[Session]:
     async with Session(viewport=(400, 300)) as sess:
         sess.page.set_default_timeout(5000)
         yield sess
+
+
+async def test_timeout_history_is_relative_to_original_start(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = 0.0
+
+    def monotonic() -> float:
+        nonlocal now
+        now += 0.01
+        return now
+
+    session = MagicMock()
+    session.locator.return_value.bounding_box = AsyncMock(
+        return_value={"x": 1, "y": 2, "width": 3, "height": 4}
+    )
+    monkeypatch.setattr("clickcast.core.actions.time.monotonic", monotonic)
+    monkeypatch.setattr("clickcast.core.actions.asyncio.sleep", AsyncMock())
+
+    with pytest.raises(PlaywrightTimeoutError) as caught:
+        await _wait_for_stable(
+            session,
+            "#target",
+            quiet_ms=100_000,
+            timeout=1.0,
+            poll_ms=0,
+        )
+
+    timestamps = re.findall(r"@(\d+\.\d+)s", str(caught.value))
+    assert timestamps  # enough polls to exercise the 20-entry history cap
+    assert float(timestamps[-1]) == pytest.approx(1.0, abs=0.02)
 
 
 @pytest.mark.integration

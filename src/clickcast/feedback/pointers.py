@@ -33,7 +33,7 @@ DOCS_URL = f"{REPO_URL}/blob/main/docs/for-agents.md"
 # (which is capped at ~900 words). Every subcommand's --help epilog points
 # agents at this file so they can pull the full workflow patterns from a
 # canonical URL without running the CLI first.
-SKILL_URL = f"{REPO_URL}/blob/main/skill.md"
+SKILL_URL = f"{REPO_URL}/blob/main/SKILL.md"
 DIAGNOSTICS_COMMAND = "clickcast report-bug <sidecar.json>"
 
 _MESSAGE = (
@@ -53,8 +53,9 @@ _TEMPLATE = FeedbackTemplate(
 
 def build_feedback(report: Report) -> Feedback:
     """Assemble a :class:`Feedback` pointer, prefilling the new-issue URL
-    with context lifted from ``report`` (clickcast version, engine, viewport,
-    target URL) so a filed issue arrives with the environment already noted.
+    with non-sensitive context lifted from ``report`` (clickcast version,
+    engine, viewport) so a filed issue arrives with the environment noted.
+    Target URLs are deliberately excluded because they may carry credentials.
     """
     body_lines = [
         "**Problem**",
@@ -70,8 +71,6 @@ def build_feedback(report: Report) -> Feedback:
         f"- engine: {report.engine}",
         f"- viewport: {report.viewport[0]}x{report.viewport[1]}",
     ]
-    if report.url:
-        body_lines.append(f"- target url: {report.url}")
     body = "\n".join(body_lines)
     title = "[feedback] "
     query = urlencode({"title": title, "body": body})

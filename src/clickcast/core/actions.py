@@ -21,10 +21,16 @@ _HINTABLE_ACTIONS: frozenset[str] = frozenset({"click", "dblclick", "hover", "ty
 # Substrings in Playwright error messages that indicate the selector didn't
 # resolve to anything. TimeoutError classes and this text are the two
 # canonical "we couldn't find the element" signals.
-_LOCATOR_MISSING_MARKERS: tuple[str, ...] = (
-    "locator resolved to 0 elements",
-    "waiting for locator",
-)
+_LOCATOR_MISSING_MARKERS: tuple[str, ...] = ("locator resolved to 0 elements",)
+
+
+def _is_locator_missing(text: str) -> bool:
+    """Recognize an absent target without mistaking visibility drift for absence."""
+    lower = text.lower()
+    if any(marker in lower for marker in _LOCATOR_MISSING_MARKERS):
+        return True
+    return "waiting for locator" in lower and "to be visible" not in lower
+
 
 # Process-wide flag toggled by the CLI's `--dump-elements` option. When set,
 # the failure hook appends the full discover() list to the error string
@@ -252,10 +258,9 @@ def _classify_error(exc: BaseException) -> str:
         return "timeout"
     text = str(exc)
     # Playwright surfaces the "0 elements" text on click / hover / type when
-    # the selector parses but nothing matches — distinct from a Timeout
-    # (which fires on wait-for-visible drift after resolution). Keep both
-    # markers in sync with :data:`_LOCATOR_MISSING_MARKERS` above.
-    if any(m in text for m in _LOCATOR_MISSING_MARKERS):
+    # the selector parses but nothing matches. A locator that resolved but
+    # never became visible is a different failure, not a missing element.
+    if _is_locator_missing(text):
         return "locator_missing"
     # Playwright's cross-origin errors surface a few different phrasings
     # depending on the engine and the failure mode; match the substrings
@@ -301,7 +306,8 @@ async def _goto_with_retries(session: Session, step: GotoStep) -> None:
     last_exc: BaseException | None = None
     for attempt in range(attempts):
         try:
-            await session.goto(step.url, wait=step.wait)
+            timeout = {"timeout_ms": step.timeout_ms} if step.timeout_ms is not None else {}
+            await session.goto(step.url, wait=step.wait, **timeout)
             return
         except PlaywrightTimeoutError as e:
             last_exc = e
@@ -328,7 +334,8 @@ async def _wait_for_stable(
     can debug jittery elements.
     """
     loc = session.locator(selector)
-    deadline = time.monotonic() + timeout
+    started = time.monotonic()
+    deadline = started + timeout
     history: list[tuple[float, tuple[float, float, float, float] | None]] = []
     last_box: tuple[float, float, float, float] | None = None
     quiet_since: float | None = None
@@ -365,7 +372,7 @@ async def _wait_for_stable(
             last_box = box
 
         if time.monotonic() >= deadline:
-            recent = ", ".join(f"@{t - history[0][0]:.2f}s={b}" for t, b in history[-5:])
+            recent = ", ".join(f"@{t - started:.2f}s={b}" for t, b in history[-5:])
             raise PlaywrightTimeoutError(
                 f"wait_for(selector={selector!r}, state='stable', quiet_ms={quiet_ms}) "
                 f"timed out after {timeout:.2f}s. recent bboxes: [{recent}]"
@@ -542,9 +549,12 @@ async def _handle_wait_for(step: WaitForStep, session: Session, out: _StepOutcom
 
 
 async def _handle_screenshot(step: ScreenshotStep, session: Session, out: _StepOutcome) -> None:
+    # ActionResult has no bytes field, so a pathless screenshot would only
+    # capture and discard a potentially large PNG. Treat it as a no-op.
+    if step.path is None:
+        return
     await session.screenshot(path=step.path, full_page=step.full_page)
-    if step.path is not None:
-        out.screenshot_path = Path(step.path)
+    out.screenshot_path = Path(step.path)
 
 
 async def _handle_evaluate(step: EvaluateStep, session: Session, out: _StepOutcome) -> None:
@@ -697,18 +707,33 @@ async def _augment_with_hints(
     # otherwise a genuine action failure (button clicked but handler
     # raised) would drop misleading hints into the error.
     is_timeout = "Timeout" in type(exc).__name__
-    if not is_timeout and not any(m in err_text for m in _LOCATOR_MISSING_MARKERS):
+    if not is_timeout and not _is_locator_missing(err_text):
         return base_message
 
     try:
         from clickcast.discovery import discover
-        from clickcast.discovery.hints import format_candidates, suggest_candidates
+        from clickcast.discovery.hints import (
+            ScoredCandidate,
+            format_candidates,
+            parse_selector,
+            score_candidate,
+        )
 
-        candidates = await suggest_candidates(session, selector)
-        # Recount without the discover(limit=20) cap for the tail line —
-        # in practice the pool is small enough that this second call is
-        # cheap and gives an accurate "N interactive elements" number.
+        # One walk feeds both ranking and the total/full dump. This preserves
+        # suggest_candidates' scoring while avoiding a second DOM traversal.
         all_elements = await discover(session, limit=200)
+        target_role, target_name = parse_selector(selector)
+        candidates = sorted(
+            (
+                ScoredCandidate(
+                    element=el,
+                    score=score_candidate(el, target_role, target_name),
+                )
+                for el in all_elements
+            ),
+            key=lambda candidate: candidate.score,
+            reverse=True,
+        )[:5]
         dump = _dump_enabled()
         hint_block = format_candidates(
             selector,

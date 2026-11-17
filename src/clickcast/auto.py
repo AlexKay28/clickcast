@@ -46,6 +46,7 @@ from clickcast.annotate import (
     render_summary_card,
     render_title_card,
 )
+from clickcast.annotate.smooth import SmoothConfig, smooth_frames_dir
 from clickcast.capture import Recorder
 from clickcast.core.actions import ClickStep, GotoStep, ScrollStep, execute
 from clickcast.core.session import Session
@@ -167,6 +168,12 @@ class AutoConfig:
     summary_card_frames: int = 16
     summary_card_watermark: str = ""
     card_style: CardStyle = field(default_factory=CardStyle)
+    # Smooth high-FPS video post-processing. Capture remains at ``fps``;
+    # cursor moves and step transitions are retimed to ``video_fps`` before
+    # encoding. ``annotations`` contains declarative region primitives.
+    smooth: bool = False
+    video_fps: int = 30
+    annotations: list[Any] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -213,6 +220,7 @@ async def _goto_and_discover(
     dwell: float,
     initial_wait: float,
     click_budget: int,
+    click_timeout_ms: int,
     step_index: int,
     step_annotations: dict[int, StepAnnotation],
     page_label: str,
@@ -252,7 +260,12 @@ async def _goto_and_discover(
     grid cell, so ``discovered_elements[].accessibility.role/name/state``
     populate on every sidecar, grid or not.
     """
-    goto = GotoStep(url=url, wait="networkidle", dwell=dwell)
+    # A click timeout is the wrong budget for a full page navigation: the
+    # default --click-timeout (5 s) would make slow-but-working landing pages
+    # fail networkidle and get skipped where main branch captured them. Give
+    # discovery gotos a dedicated floor so per-click timing stays untouched.
+    goto_timeout_ms = max(click_timeout_ms, 15_000)
+    goto = GotoStep(url=url, wait="networkidle", dwell=dwell, timeout_ms=goto_timeout_ms)
     await rec.pre_action(sess)
     result = await execute(goto, sess, step_index=step_index)
     if not result.ok:
@@ -399,6 +412,11 @@ async def _click_loop(
         if r.status == "ok":
             clicked += 1
             consecutive_failures = 0
+        elif r.status == "skipped":
+            # Optional elements can disappear during hydration. That is an
+            # expected skip, not evidence that the page is broken.
+            consecutive_failures = 0
+            log.info("%s · attempt %d skipped: %s", page_label, attempt, r.skip_reason)
         else:
             consecutive_failures += 1
             log.warning(
@@ -504,6 +522,7 @@ async def explore_page(
         dwell=dwell,
         initial_wait=initial_wait,
         click_budget=click_budget,
+        click_timeout_ms=click_timeout_ms,
         step_index=step_index,
         step_annotations=step_annotations,
         page_label=page_label,
@@ -703,7 +722,11 @@ async def run_tour(cfg: AutoConfig) -> None:
                     new_enqueued,
                 )
 
-            log.info("BFS done. Flushing %d step annotations...", len(step_annotations))
+            log.info(
+                "%s traversal done. Flushing %d step annotations...",
+                cfg.traversal.upper(),
+                len(step_annotations),
+            )
             rec.flush()
             if cfg.zoom_on_click_factor is not None:
                 zoomed = apply_zoom_on_click(
@@ -717,17 +740,37 @@ async def run_tour(cfg: AutoConfig) -> None:
                     cfg.zoom_on_click_factor,
                     cfg.zoom_frames_after_click,
                 )
-            inserted = interpolate_cursor_motion(rec.frames_dir, cfg.annotate.cursor_style)
-            if inserted:
-                log.info(
-                    "interpolated %d frames (n=%d per gap, easing=%s, min_distance=%d)",
-                    inserted,
-                    cfg.annotate.cursor_style.interpolate_frames,
-                    cfg.annotate.cursor_style.interpolate_easing,
-                    cfg.annotate.cursor_style.interpolate_min_distance,
+            encode_fps = cfg.fps
+            if cfg.smooth:
+                smoothed = smooth_frames_dir(
+                    rec.frames_dir,
+                    SmoothConfig(output_fps=cfg.video_fps),
+                    source_fps=cfg.fps,
                 )
+                encode_fps = smoothed.output_fps
+                log.info(
+                    "smoothed reel: +%d frames, %d total @ %d fps",
+                    smoothed.inserted,
+                    smoothed.total_frames,
+                    encode_fps,
+                )
+            else:
+                inserted = interpolate_cursor_motion(rec.frames_dir, cfg.annotate.cursor_style)
+                if inserted:
+                    log.info(
+                        "interpolated %d frames (n=%d per gap, easing=%s, min_distance=%d)",
+                        inserted,
+                        cfg.annotate.cursor_style.interpolate_frames,
+                        cfg.annotate.cursor_style.interpolate_easing,
+                        cfg.annotate.cursor_style.interpolate_min_distance,
+                    )
             log.info("annotating frames...")
-            annotate_frames_dir(rec.frames_dir, steps=step_annotations, config=cfg.annotate)
+            annotate_frames_dir(
+                rec.frames_dir,
+                steps=step_annotations,
+                config=cfg.annotate,
+                regions=cfg.annotations,
+            )
             # Bookend the annotated frames with title / summary cards so a
             # human viewer sees a titled entry beat and a stats-summary
             # tail. Cards render at the browser's viewport size so they
@@ -752,12 +795,12 @@ async def run_tour(cfg: AutoConfig) -> None:
             enc = encode(
                 rec.frames_dir,
                 out_path,
-                fps=cfg.fps,
+                fps=encode_fps,
                 quality=cfg.quality,
                 loop=cfg.loop,
                 format=cfg.format,  # type: ignore[arg-type]
             )
-            media = _make_media(enc, cfg.fps)
+            media = _make_media(enc, encode_fps)
             sidecar = _write_sidecar(
                 out_path,
                 cfg.no_sidecar,
@@ -947,7 +990,7 @@ def _prepend_title_card(frames_dir: Path, cfg: AutoConfig, size: tuple[int, int]
         title=title,
         subtitle=cfg.url,
         size=size,
-        frame_count=cfg.title_card_frames,
+        frame_count=_output_frame_count(cfg, cfg.title_card_frames),
         style=cfg.card_style,
     )
     _splice_manifest(frames_dir, [p.name for p in paths], where="prepend")
@@ -973,11 +1016,18 @@ def _append_summary_card(
         frames_dir,
         stats=stats,
         size=size,
-        frame_count=cfg.summary_card_frames,
+        frame_count=_output_frame_count(cfg, cfg.summary_card_frames),
         style=cfg.card_style,
     )
     _splice_manifest(frames_dir, [p.name for p in paths], where="append")
     log.info("appended summary card: %d frames", len(paths))
+
+
+def _output_frame_count(cfg: AutoConfig, capture_frames: int) -> int:
+    """Scale bookend-card holds when the encoder runs at the smooth FPS."""
+    if not cfg.smooth:
+        return capture_frames
+    return max(1, round(capture_frames * cfg.video_fps / cfg.fps))
 
 
 def _default_title_for(url: str) -> str:

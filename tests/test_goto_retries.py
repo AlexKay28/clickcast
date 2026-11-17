@@ -28,6 +28,17 @@ class TestGotoRetries:
         assert result.status == "failed"
         assert "TimeoutError" in (result.error or "")
         assert sess.goto.await_count == 1
+        sess.goto.assert_awaited_once_with("https://x", wait=None)
+
+    async def test_threads_step_timeout_to_session(self) -> None:
+        sess = _FakeSession([None])
+        result = await execute(
+            GotoStep(url="https://x", wait="networkidle", timeout_ms=1234),
+            sess,  # type: ignore[arg-type]
+        )
+
+        assert result.ok
+        sess.goto.assert_awaited_once_with("https://x", wait="networkidle", timeout_ms=1234)
 
     async def test_second_attempt_succeeds(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # Bypass backoff sleeps so the test stays fast.

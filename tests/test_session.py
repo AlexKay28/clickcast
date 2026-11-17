@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from unittest.mock import AsyncMock
+
 import pytest
 
 from clickcast.core.session import EngineNotInstalledError, Session, hostname_matches
@@ -57,6 +59,39 @@ def test_page_property_raises_when_closed() -> None:
     sess = Session()
     with pytest.raises(RuntimeError, match="not open"):
         _ = sess.page
+
+
+async def test_goto_threads_timeout_to_playwright_and_load_state_wait() -> None:
+    sess = Session()
+    page = AsyncMock()
+    sess._page = page
+
+    await sess.goto("https://x", wait="networkidle", timeout_ms=1234)
+
+    page.goto.assert_awaited_once_with("https://x", timeout=1234)
+    page.wait_for_load_state.assert_awaited_once_with("networkidle", timeout=1234)
+
+
+async def test_goto_threads_timeout_to_selector_wait() -> None:
+    sess = Session()
+    page = AsyncMock()
+    sess._page = page
+
+    await sess.goto("https://x", wait="#ready", timeout_ms=2345)
+
+    page.goto.assert_awaited_once_with("https://x", timeout=2345)
+    page.wait_for_selector.assert_awaited_once_with("#ready", timeout=2345)
+
+
+async def test_goto_preserves_playwright_default_timeout() -> None:
+    sess = Session()
+    page = AsyncMock()
+    sess._page = page
+
+    await sess.goto("https://x", wait="load")
+
+    page.goto.assert_awaited_once_with("https://x")
+    page.wait_for_load_state.assert_awaited_once_with("load")
 
 
 def test_context_kwargs_viewport_string() -> None:

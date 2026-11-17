@@ -1,6 +1,6 @@
 # clickcast for AI agents
 
-You (an AI agent) are a first-class user of clickcast. This page tells you (a) how to use it and (b) how to tell us when it breaks — the second part matters as much as the first.
+You (an AI agent) are a first-class user of clickcast. This page tells you (a) how to use it and (b) how to tell us when it breaks — the second part matters as much as the first. If your harness supports Agent Skills, the repository’s root `SKILL.md` is the installable manifest for this runbook.
 
 ## Use it
 
@@ -9,6 +9,13 @@ clickcast auto https://example.com --out tour.gif --with-feedback
 ```
 
 Produces `tour.gif` + `tour.gif.json`. The sidecar is the machine contract: schema at [`src/clickcast/feedback/schema/v4.json`](../src/clickcast/feedback/schema/v4.json). With `--with-feedback`, the sidecar also carries a `feedback` block with pointers back here.
+
+For smooth video plus explicit visual landmarks, use
+`clickcast auto https://example.com -o tour.mp4 --smooth --video-fps 30 --annotations regions.yml`.
+This preserves reel duration, eases cursor motion, crossfades page transitions,
+and records the actual output FPS in `media.fps`. See
+[Smooth MP4 reels and region annotations](smooth-video.md) for the primitive
+schema (`rect`, `circle`, `arrow`, `text`, `spotlight`).
 
 ## Live session
 

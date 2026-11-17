@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import io
 from dataclasses import dataclass
+from functools import lru_cache
 from importlib.resources import files
 from typing import Literal
 
@@ -113,6 +114,7 @@ def grid_cell(x: int, y: int, pitch: int) -> tuple[int, int]:
     return (x // pitch, y // pitch)
 
 
+@lru_cache(maxsize=16)
 def _load_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     """Load the bundled DejaVuSans truetype at ``size`` points.
 

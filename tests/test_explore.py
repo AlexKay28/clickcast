@@ -454,8 +454,8 @@ class TestPageFailurePaths:
     async def test_goto_failure_skips_page_and_continues(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """An unreachable URL is skipped (still a payload page with no
-        discoveries); a queued sibling still gets explored."""
+        """An unreachable URL is skipped without an empty payload page;
+        its discovered navigation edge remains in the graph."""
         fake_sess = _stub_session(monkeypatch)
         gotos: list[str] = []
 
@@ -479,11 +479,10 @@ class TestPageFailurePaths:
         ):
             payload = await explore_site(explore_cfg(max_steps=10, max_pages=5))
 
-        # The dead page was visited-but-failed: no discoveries, in pages[].
-        dead = next(p for p in payload["pages"] if "dead" in p["url"])
-        assert dead["discovered"] == []
-        assert dead["clicks_ok"] == 0
-        # And it produced a node + edge (it IS part of the app's shape —
+        # Failed navigation must not create a zeroed, title-less page node
+        # in the per-page payload or consume a successful-page slot.
+        assert all("dead" not in p["url"] for p in payload["pages"])
+        # But it produced a graph node + edge (it IS part of the app's shape —
         # agents want broken links in the map).
         assert any(n["url"] == "https://x.com/dead" for n in payload["graph"]["nodes"])
         assert any(e["to"] == "n2" for e in payload["graph"]["edges"])

@@ -95,7 +95,7 @@ the exact bootstrap steps: [`docs/packaging/npm.md`](docs/packaging/npm.md).
 
 ## For AI agents — copy this prompt into your chat
 
-Paste the block below into your coding agent (Claude Code, Cursor, Copilot Chat, Codex, etc.) to teach it clickcast in one message. The agent will install the tool, verify the environment, generate a visual + machine-readable report for your project, and know how to gate CI on the results.
+Paste the block below into your coding agent (Claude Code, Cursor, Copilot Chat, Codex, etc.) to teach it clickcast in one message. The agent will install the tool, verify the environment, generate a visual + machine-readable report for your project, and know how to gate CI on the results. If your harness supports the Agent Skills format, install this repository as a skill; the root-level `SKILL.md` is the manifest and `references/REFERENCE.md` holds the deeper runbook.
 
 ```text
 You are going to use `clickcast` (https://pypi.org/project/clickcast/) to visually verify
@@ -694,6 +694,14 @@ CLICKCAST_PROXY=http://proxy.internal:8080
 | `frames` | Custom pipelines | Numbered PNGs + a `frames.json` manifest. |
 
 `--quality 1..30` trades size for fidelity (lower = better). `--loop 0` loops forever; `--loop 1` plays once.
+
+For a smooth 30/60-fps MP4 without capturing 30/60 browser screenshots per
+second, add `--smooth --video-fps 30`. Smooth mode eases cursor movement and
+crossfades page transitions while preserving reel duration. Declarative
+rectangles, arrows, callouts, circles, and spotlights can be added with
+`--annotations annotations.yml`; see [Smooth MP4 reels and region
+annotations](docs/smooth-video.md) and the [annotated scenario
+example](docs/scenarios/annotated.yml).
 
 ---
 

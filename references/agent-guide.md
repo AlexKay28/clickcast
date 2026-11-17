@@ -2,6 +2,8 @@
 
 > **You are an AI agent.** This document is written for you. It covers every command clickcast ships, the workflows that pull them together, and the failure modes you should learn to recognize. Read this once and you will be able to drive a browser, produce evidence a human can watch, and gate CI on a machine-readable summary.
 >
+> **Agent Skills manifest:** the harness-installable version of this runbook is `SKILL.md` at the repository root. If your client can discover skills from a repo, that file is the entrypoint.
+>
 > **Shorter alternative**: `clickcast skill` prints a ~900-word brief embedded in the binary. This file is the long form — read it when the brief left you guessing.
 
 ---
@@ -56,6 +58,8 @@ Produces `tour.gif` + `tour.gif.json`. The sidecar has every clicked element, it
 | `--seed-url` (repeatable) | force a specific URL order instead of auto-discovery |
 | `--pace fast\|natural\|slow\|onboarding` | speed preset — sets fps + dwell together |
 | `--for-humans` | composite: flips pace/zoom/highlight/cards to human-friendly defaults |
+| `--smooth --video-fps 30` | duration-preserving eased cursor + page crossfades for smooth MP4 |
+| `--annotations regions.yml` | step-ranged rect/circle/arrow/text/spotlight primitives |
 | `--emit-events` | print a JSON `tour_complete` line to stdout for JSONL parsers |
 | `--with-feedback` | attach a feedback pointer block to the sidecar (issue-report URLs, docs) |
 | `--insecure` / `--header` / `--header-host` | internal-host support — see §"Internal / SSO-protected sites" below |

@@ -5,6 +5,61 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Smooth high-FPS MP4 reels and declarative region annotations.** `auto` and
+  `run` accept `--smooth --video-fps 30` for duration-preserving frame holds,
+  eased cursor motion, and cross-dissolved page transitions. The new
+  `--annotations` YAML/JSON input (also available as a scenario-level
+  `annotations:` list) draws rectangles, circles, arrows, text callouts, and
+  spotlights by step range. See `docs/smooth-video.md`.
+- **Harness-discoverable `SKILL.md`.** Added a root-level Agent Skills
+  manifest with a detailed AI-agent runbook, split with
+  `references/REFERENCE.md` so harnesses can load the manifest and deepen
+  context on demand, making this repo directly installable as an agent skill.
+
+### Changed
+- Pre-click annotation counting, graph/advisory lookup, failure-hint discovery,
+  and duplicate-label step pairing no longer repeat full-frame/full-DOM/full-list
+  scans. Grid fonts are cached and visual-diff Pillow buffers are released
+  deterministically.
+
+### Fixed
+- **Security/privacy:** discovery-generated scenarios use safe YAML
+  serialization (hostile element labels cannot inject steps); feedback issue
+  reports redact URLs/errors/diagnostics throughout; feedback pointer URLs no
+  longer embed the target URL; invocation history redacts headers, variables,
+  URL userinfo, and sensitive query parameters; run-time failure stderr honors
+  redaction flags; header flags reject control characters.
+- **Follow-up hardening from review:** attached short-option headers
+  (`-HX-Header: value`) are redacted in invocation history; OAuth codes,
+  session IDs, and `#fragment` credentials are scrubbed from recorded URLs;
+  failed-step `args` (`expression`, `into`, `value`, `key`) honor report
+  redaction; `--smooth --video-fps` no-ops encode at the capture rate instead
+  of silently changing playback speed; discovery gotos use a dedicated
+  navigation timeout instead of the click timeout; scenario `video_fps` is
+  validated at load time; the selector-hint scorer is now a public API.
+- **`skill.md` renamed to `references/agent-guide.md`.** Keeping a root
+  `skill.md` next to the Agent Skills `SKILL.md` unified the two files on
+  macOS/Windows case-insensitive checkouts, clobbering `SKILL.md` and
+  breaking the macOS CI job. Help epilogs now point at `SKILL.md`, and a
+  regression test rejects any future case-only filename collisions.
+- `GotoStep.timeout_ms` now reaches navigation and subsequent waits. Browser
+  detection honors `PLAYWRIGHT_BROWSERS_PATH` and numeric version ordering.
+- `serve_directory` binds port 0 atomically instead of racing to reuse a port
+  probed through a temporary socket.
+- Smooth-video holds are emitted before cursor/transition effects, avoiding a
+  flash back to the source frame immediately before the target page.
+- Optional skips no longer count toward consecutive-failure bailouts; failed
+  exploration gotos no longer emit empty per-page records; malformed zoom
+  manifests cannot cause partial in-place overwrites; viewport dimensions must
+  be positive; pathless screenshot actions no longer capture discarded bytes.
+- Legacy cursor interpolation is idempotent on retried pipeline stages.
+- Feedback invocation revision detection handles linked worktrees (`.git`
+  files) and no longer attributes malformed markers to a parent repository.
+  Report titles without a failed step no longer carry trailing whitespace.
+
 ## [0.5.0] — 2026-10-31
 
 ### Added
@@ -29,7 +84,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   artifact (``kind: clickcast/explore``, `schema_version: 1`, documented
   in `docs/explore-schema.md`) — the reel sidecar and the `assertions`
   byte-stability contract are untouched. Also registered in the embedded
-  skill brief (`clickcast skill`) and `skill.md`.
+  skill brief (`clickcast skill`) and `references/agent-guide.md`.
 - **The npm install path is registered in the MCP registry.** `server.json`
   gains a second `packages[]` entry (`registryType: npm`, `identifier:
   clickcast-mcp`, `runtimeHint: npx`) alongside the existing PyPI one, so

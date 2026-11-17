@@ -18,14 +18,14 @@ Two related-but-distinct entry points live here:
 
 :func:`redact_report` rules:
 
-- **URLs** — keep scheme + hostname (TLD replaced with ``.example`` to mark
-  the URL as sanitized) + segment COUNT of the path. Query string and each
-  path segment are replaced with placeholders that keep length category (so
-  \"very long slug\" doesn't shrink to a single \"*\").
+- **URLs** — keep scheme + port + segment COUNT of the path. Hostnames,
+  query strings, and each path segment are replaced with placeholders that
+  keep length category (so \"very long slug\" doesn't shrink to a single \"*\").
 - **CSS/XPath selectors** — keep structure. Text values inside quotes are
   replaced with ``\"«redacted»\"``.
-- **Visible text** (``DiscoveredElement.text``, ``PageState.title``) — replaced
-  with ``«redacted, N chars»`` so the caller sees the original length category.
+- **Visible text and diagnostics** (including ``text``, ``title``, accessibility
+  ``name``, errors, and console/page/network diagnostics) — replaced with
+  ``«redacted, N chars»`` so the caller sees the original length category.
 - **Structural fields** — ``role``, ``bbox``, ``status``, counts, timing,
   and every schema-defined non-text field pass through untouched.
 
@@ -44,9 +44,21 @@ __all__ = ["apply_patterns", "redact_report", "strip_query_strings"]
 REDACTED = "«redacted»"
 
 
-_TEXT_KEYS = ("text", "title")
-_URL_KEYS = ("url", "url_after", "path")
-_SELECTOR_KEYS = ("selector",)
+_TEXT_KEYS = ("text", "title", "name", "expression", "value", "key")
+_ERROR_KEYS = (
+    "error",
+    "errors",
+    "warning",
+    "warnings",
+    "message",
+    "console_errors",
+    "page_errors",
+    "network_failed",
+)
+_URL_KEYS = ("url", "url_after")
+# ``into`` is the target selector for type/select steps and is excluded from
+# ``_TEXT_KEYS`` on purpose: quoted text inside it follows selector rules.
+_SELECTOR_KEYS = ("selector", "into")
 
 
 def redact_report(report: dict[str, Any]) -> dict[str, Any]:
@@ -70,6 +82,8 @@ def _walk(value: Any) -> Any:
 
 
 def _redact_field(key: str, value: Any) -> Any:
+    if key in _ERROR_KEYS:
+        return _redact_error(value)
     if isinstance(value, str):
         if key in _URL_KEYS:
             return _redact_url(value)
@@ -81,29 +95,35 @@ def _redact_field(key: str, value: Any) -> Any:
     return _walk(value)
 
 
+def _redact_error(value: Any) -> Any:
+    """Redact free-form diagnostics, including lists of diagnostic strings."""
+    if isinstance(value, str):
+        return _redact_text(value)
+    if isinstance(value, list):
+        return [_redact_error(item) for item in value]
+    return _walk(value)
+
+
 def _redact_url(raw: str) -> str:
-    """Keep scheme + hostname (TLD replaced with .example) + path segment count."""
+    """Keep scheme, port, and path segment count; remove all host and query data."""
     if not raw:
         return raw
     try:
         parsed = urlparse(raw)
+        port = parsed.port
     except ValueError:
         return "«redacted url»"
     if not parsed.scheme:
         return "«redacted url»"
-    host = parsed.hostname or "redacted"
-    # Replace the TLD (last dot-segment) with `.example` so the URL is
-    # visibly sanitized without losing the leaf domain (`acme.com` → `acme.example`).
-    if "." in host:
-        stem, _, _tld = host.rpartition(".")
-        host = f"{stem}.example" if stem else "redacted.example"
-    else:
-        host = f"{host}.example"
+    # Internal and non-dotted hostnames can be just as identifying as public
+    # domains, so do not retain any part of the original hostname.
+    host = "redacted.example"
+    port_suffix = f":{port}" if port is not None else ""
     segments = [s for s in parsed.path.split("/") if s]
     scrubbed = "/".join("*" for _ in segments)
     path = f"/{scrubbed}" if segments else ""
     tail = "?…" if parsed.query else ""
-    return f"{parsed.scheme}://{host}{path}{tail}"
+    return f"{parsed.scheme}://{host}{port_suffix}{path}{tail}"
 
 
 _SELECTOR_QUOTED = re.compile(r"([\"\'])(.*?)\1")

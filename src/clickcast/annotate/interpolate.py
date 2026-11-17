@@ -25,6 +25,9 @@ Design notes:
 - After insertion, ``sub_index`` is renumbered densely per step in traversal
   order, so ripple-stage checks (``sub_index < ripple.stages``) still fire on
   the original post-click frames rather than the interp tail.
+- The rewritten manifest carries ``cursor_interpolated: true``. The pass is
+  idempotent: re-running it on its own output is a no-op, so a retried
+  pipeline stage never re-expands (and re-eases) already-inserted frames.
 """
 
 from __future__ import annotations
@@ -36,6 +39,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from clickcast.annotate.annotator import CursorStyle
+from clickcast.annotate.smooth import _write_manifest_atomic
 
 __all__ = ["interpolate_cursor_motion"]
 
@@ -55,6 +59,9 @@ def interpolate_cursor_motion(frames_dir: Path, config: CursorStyle) -> int:
     manifest = json.loads(manifest_path.read_text())
     frames: list[dict[str, Any]] = manifest.get("frames", [])
     if len(frames) < 2:
+        return 0
+    if manifest.get("cursor_interpolated"):
+        # Already smoothed by a previous pass — never re-expand its output.
         return 0
 
     cursor_indices = [i for i, f in enumerate(frames) if f.get("cursor_xy")]
@@ -109,7 +116,8 @@ def interpolate_cursor_motion(frames_dir: Path, config: CursorStyle) -> int:
         step_counters[si] = f["sub_index"] + 1
 
     manifest["frames"] = new_frames
-    manifest_path.write_text(json.dumps(manifest, indent=2))
+    manifest["cursor_interpolated"] = True
+    _write_manifest_atomic(manifest_path, manifest)
     return sum(len(v) for v in insertions.values())
 
 
