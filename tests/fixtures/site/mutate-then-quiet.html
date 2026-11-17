@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Mutating then quiet</title>
+  <style>
+    body { font-family: sans-serif; margin: 20px; color: #222; }
+    #tick { font-variant-numeric: tabular-nums; color: #14509d; }
+  </style>
+</head>
+<body>
+  <h1>Mutating then quiet</h1>
+  <p>This page mutates the DOM for about a second and then stops.
+     <code>settle()</code> must return <code>ok: true</code> well under its budget.</p>
+  <p id="tick">0</p>
+  <script>
+    // setTimeout (not rAF): the compositor signal should be quiet almost
+    // immediately, leaving the DOM signal as the interesting one.
+    const started = performance.now();
+    const tick = document.getElementById('tick');
+    function mutate() {
+      const elapsed = performance.now() - started;
+      tick.textContent = String(Math.round(elapsed));
+      if (elapsed < 1000) {
+        setTimeout(mutate, 50);
+      }
+    }
+    setTimeout(mutate, 0);
+  </script>
+</body>
+</html>
