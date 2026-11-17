@@ -8,6 +8,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Screencast capture backend (`--capture screencast`).** A second frame
+  source behind the same render kernel: Chromium CDP `Page.startScreencast`
+  pushes a frame whenever the page changes, so CSS transitions, route
+  cross-fades, spinners and typed characters arrive as real frames instead of
+  being held stills. Frames land in the existing `frames_dir`/`frames.json`
+  with an optional `captured_at` and are attributed to steps by timestamp
+  interval (then resampled onto `video_fps`); the cursor stays a synthetic
+  overlay on real footage. `--screencast-quality` (default 80) tunes the JPEG
+  stream and a max-frames guard bounds disk use. Chromium only — Firefox and
+  WebKit fail fast with a documented error rather than silently downgrading.
+  Measured on a 300 ms transition fixture: **99.2% unique frames vs 43.2%**
+  for stills under the same metric. `--smooth` is a logged passthrough no-op
+  in this mode. See [`docs/smooth-video.md`](docs/smooth-video.md).
+- **Reel grammar: click feedback, transition grammar, captions, timeline.** In
+  smooth mode, a deterministic post-capture pass (`annotate/reel_grammar.py`)
+  adds a press cue and expanding ripple at each action, cross-dissolves for
+  same-URL (SPA) changes but short directional slides for cross-document
+  navigation (driven by the step's recorded URL), a lower-third caption for
+  every labelled step, and a bottom progress bar. Frame count, duration and
+  sidecar attribution are untouched; `--no-grammar` (or `render.grammar:
+  false`) restores the plain retimed output. It composes with screencast
+  capture when `--smooth` is passed. Measured: **69.5% unique frames vs 27.1%**
+  on the same tour.
+- **`scripts/bench_motion.py` — motion-continuity measurement.** Decodes any
+  GIF/MP4/WebP and reports unique vs held frames, with `--fail-under` for CI.
+  A pair counts as a duplicate only when fewer than 0.01% of its pixels
+  changed by more than 4/255 levels, because a whole-frame average calls a
+  click ripple static. The baseline it exposed — 11.9% unique frames for the
+  old "smooth" MP4 — is why both features above exist.
 - **Structured action deltas (`steps[].delta`, sidecar v5).** Every MCP action
   tool now observes the page before and after the action, settles, and returns
   a compact `StepDelta` — `{url, title, added, removed, text_changes,
