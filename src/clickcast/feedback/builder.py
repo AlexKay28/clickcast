@@ -24,6 +24,7 @@ from clickcast.feedback.models import (
     PageState,
     Report,
     SkipReason,
+    StepDelta,
     StepReport,
 )
 
@@ -168,6 +169,7 @@ class ReportBuilder:
         step: BaseStep,
         result: ActionResult,
         frames: list[Path] | None = None,
+        delta: StepDelta | None = None,
     ) -> None:
         page_state = None
         if self._collector is not None:
@@ -188,9 +190,11 @@ class ReportBuilder:
         # raised) but produced no observable page reaction is exactly the
         # case `SkipReason.optional_no_reaction` names — downgrade it here
         # rather than leaving it reported as a plain "ok" step. Shares the
-        # same conservative url/title comparison as the tour-level
-        # `click-no-dom-reaction` stderr advisory (see `no_dom_reaction`);
-        # non-optional no-reaction clicks are left to that advisory instead.
+        # same reaction test as the tour-level `click-no-dom-reaction` stderr
+        # advisory (see `no_dom_reaction`): the structured `delta` (#264)
+        # when the caller captured one, otherwise the conservative url/title
+        # comparison. Non-optional no-reaction clicks are left to that
+        # advisory instead.
         status: Literal["ok", "failed", "skipped"] = result.status
         skip_reason = result.skip_reason
         error = result.error
@@ -198,11 +202,11 @@ class ReportBuilder:
             status == "ok"
             and step.optional
             and step.action in _REACTION_CHECKED_ACTIONS
-            and no_dom_reaction(self._last_page_state, page_state)
+            and no_dom_reaction(self._last_page_state, page_state, delta)
         ):
             status = "skipped"
             skip_reason = "optional_no_reaction"
-            error = "click produced no observable page reaction (url and title unchanged)"
+            error = "click produced no observable page reaction"
 
         self._steps.append(
             StepReport(
@@ -223,6 +227,7 @@ class ReportBuilder:
                 # feedback layer, not the action engine).
                 error_code=cast("ErrorCode | None", result.error_code),
                 skip_reason=cast("SkipReason | None", skip_reason),
+                delta=delta,
             )
         )
         self._last_page_state = page_state

@@ -50,8 +50,12 @@ Two session-lifecycle tools that have no `core/actions.py` counterpart
 - `close_session` — closes the Playwright session and optionally flushes
   the accumulated sidecar-shaped transcript to disk.
 
-`settle` (below) is a third non-step tool: a perception primitive from
-`perception/settle.py`, not a `Step` wrapper.
+`settle` and `observe` (below) are non-step tools: perception primitives
+from `perception/`, not `Step` wrappers.
+
+Selector-shaped action tools also accept `ref` (an `eN` handle from
+`observe`) in place of `selector`/`into` — see "`ref=` — act on an observed
+element" under the per-call response shape.
 
 ## Session lifecycle
 
@@ -129,9 +133,49 @@ Every action tool (`goto` through `screenshot`) returns an MCP
     "page_errors": [],
     "network_failed": []
   },
+  "delta": {                // v5 (#264) — what this action changed; null on
+                            // capture failure, never absent
+    "url": "https://example.com/",
+    "title": "Example",
+    "added": [{"ref": "e7", "role": "button", "name": "Details"}],
+    "text_changes": ["+ Details content — hidden until Details was clicked."],
+    "settled": {"ok": true, "ms": 812}
+  },
   "grid": {"pitch": 100, "style": "full", "color": "#FFFFFF33"}  // present only when the grid overlay is on
 }
 ```
+
+### `ref=` — act on an observed element
+
+Every selector-shaped action tool (`click`, `dblclick`, `hover`, `type`,
+`press`, `select`, `scroll`) accepts `ref` as an alternative to its
+`selector`/`into` argument:
+
+```jsonc
+{"ref": "e7"}            // instead of {"selector": "role=button[name=\"Details\"]"}
+```
+
+The handle is resolved through `perception/refs.py` (the same registry
+`observe` populates). Passing both `selector` and `ref` is an `other`
+error; an unknown ref is an `other` error (`unknown ref 'e9' — call observe
+for current refs`); a ref whose element disappeared is an `other` error
+that says it was removed. Neither ever surfaces a traceback.
+
+### `delta` — what changed
+
+`_run_step` observes the page before the action, runs it, waits for
+`settle`, then observes again and diffs the pair (see
+`perception/delta.py`). The result is returned as `delta` on every action
+tool response **and** written to the matching `steps[].delta` entry when
+`close_session` saves a transcript (schema v5). Batch `auto`/`run` sidecars
+carry `steps[].delta: null` — they do not capture a before-observation.
+
+Caps and semantics (see `docs/feedback-schema.md` §`steps[].delta`): at most
+5 `added`/`removed`/`text_changes` entries and 3 `console_errors` /
+`network_failed`; empty blocks are omitted; node identity is the 64px
+`dom_signature` with a ref fallback, so jitter and remounts do not churn;
+the serialized block is ≤300 estimated tokens. `settled` is the compact
+`{ok, ms}` verdict; the full per-signal breakdown remains on `settle`.
 
 On failure, `CallToolResult.isError` is `true`, the `ImageContent` block is
 still included when a frame could be captured (best-effort — a crashed page

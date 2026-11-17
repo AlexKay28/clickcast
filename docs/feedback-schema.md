@@ -1,22 +1,22 @@
-# AI-feedback sidecar — schema v4
+# AI-feedback sidecar — schema v5
 
 Every non-`--no-sidecar` reel writes a sidecar JSON next to the media
 file (`tour.gif` → `tour.gif.json`). This is the primary contract an AI
 consumer reads. The canonical JSON Schema lives at
-[`src/clickcast/feedback/schema/v4.json`](../src/clickcast/feedback/schema/v4.json).
-The prior [`v3.json`](../src/clickcast/feedback/schema/v3.json),
+[`src/clickcast/feedback/schema/v5.json`](../src/clickcast/feedback/schema/v5.json).
+The prior [`v4.json`](../src/clickcast/feedback/schema/v4.json),
+[`v3.json`](../src/clickcast/feedback/schema/v3.json),
 [`v2.json`](../src/clickcast/feedback/schema/v2.json), and
 [`v1.json`](../src/clickcast/feedback/schema/v1.json) are preserved
-verbatim for downstream consumers that bookmarked them — v4 is strictly
-additive over v3 (one new optional per-element field:
-`discovered_elements[].accessibility`; see the "v3 → v4 additive
-contract" section below).
+verbatim for downstream consumers that bookmarked them — v5 is strictly
+additive over v4 (one new optional per-step block: `steps[].delta`; see
+the "v4 → v5 additive contract" section below).
 
 ## Top-level shape
 
 ```jsonc
 {
-  "schema_version": 4,          // this document's version
+  "schema_version": 5,          // this document's version
   "clickcast_version": "0.2.9", // the package version that wrote it
   "url": "https://example.com", // seed URL (nullable — YAML runs may not have one)
   "engine": "chromium",         // playwright engine
@@ -27,7 +27,8 @@ contract" section below).
   "discovered_elements": [...], // ranked elements from discover() (v4 rows
                                 // carry an optional `accessibility` block)
   "steps": [...],               // one entry per step iteration (v3 rows
-                                // carry optional `skip_reason` + `error_code`)
+                                // carry optional `skip_reason` + `error_code`;
+                                // v5 rows may carry a structured `delta`)
   "warnings": [],
   "errors": [],
   "graph": {...},               // v2 additive: app-shape summary (nullable)
@@ -37,7 +38,7 @@ contract" section below).
 
 `schema_version` and `clickcast_version` let consumers verify
 compatibility before parsing. Bump `schema_version` on any breaking
-change; the current stable release is **v4**.
+change; the current stable release is **v5**.
 
 ## `media`
 
@@ -140,13 +141,48 @@ One entry per step iteration (a `repeat: N` step produces `N` entries).
     "page_errors": [],          // up to 50 entries
     "network_failed": []        // up to 50 URLs
   },
-  "error": null                 // string when status != "ok"
+  "error": null,                // string when status != "ok"
+  "delta": {                    // v5 additive — null when not captured
+    "url": "https://example.com/",
+    "title": "Example",
+    "added": [{"ref": "e7", "role": "button", "name": "Details"}],
+    "removed": [{"ref": "e2", "role": "button", "name": "Open menu"}],
+    "text_changes": ["+ Details content — hidden until Details was clicked."],
+    "console_errors": ["Uncaught TypeError: ..."],
+    "network_failed": ["https://example.com/api/items"],
+    "layout_shift": true,
+    "settled": {"ok": true, "ms": 812}
+  }
 }
 ```
 
 `optional: true` steps that fail get `status: "skipped"` with `ok: true`
 in `ActionResult` terms — the sidecar reports `"skipped"` and keeps the
 error message.
+
+## `steps[].delta` — v5 additive block
+
+Written by the MCP action tools (#264), where a before/after observation
+pair is available; `null` in batch `auto`/`run` sidecars and in every
+sidecar written before v5. It answers the question an agent asks right
+after an action: *what did that actually do?*
+
+- **Node identity** is the same 64px-quantized `dom_signature` the ref
+  registry uses, with the opaque `ref` as a fallback for a survivor whose
+  box moved across a bucket boundary. A remounted identical node does not
+  churn `added` + `removed`, and bbox jitter under 4px is not a change.
+- **Caps**: `added` / `removed` / `text_changes` carry at most 5 entries,
+  `console_errors` / `network_failed` at most 3 — ranked (in-viewport,
+  then y, then x) before capping. Empty blocks are omitted entirely, so
+  read them with `.get()`; `url` and `title` are always present.
+- **Budget**: the whole serialized delta is fitted to ≤300 estimated
+  tokens (`ceil(len(compact_json)/4)`), measured in production code.
+- **`text_changes`** entries are prefixed `+` (appeared) or `-` (disappeared)
+  and truncated to 80 characters.
+- **`layout_shift`** is `true` when a surviving node moved at least 4px on
+  any coordinate; it is omitted otherwise.
+- **`settled`** embeds the compact `settle()` verdict (`ok`, `ms`); the
+  full per-signal detail stays on the `settle` MCP tool response.
 
 ## `graph` — v2 additive block
 
@@ -267,10 +303,33 @@ Consequences:
   strict path is the reason v4 bumps `schema_version` rather than
   silently landing.
 
+## v4 → v5 additive contract
+
+v5 is **strictly additive** over v4 (see #264):
+
+- All v4 fields are unchanged (same names, same types, same defaults).
+- `schema_version` default bumped from 4 → 5.
+- One new optional field on `StepReport`:
+  - `delta: {url, title, added, removed, text_changes, console_errors,
+    network_failed, layout_shift, settled} | null` — the structured
+    before/after change set a live action produced. Lists are capped and
+    ranked, empty blocks are omitted, and the whole block is ≤300
+    estimated tokens.
+
+Consequences:
+
+- **v1–v4 files load through v5**: `delta` is optional, so an old sidecar
+  parses cleanly and every `steps[i].delta` is `None`.
+- **v5 files parsed by v4 consumers**: `StepReport` DOES forbid extras
+  (`extra="forbid"`), so a strict v4 parser rejects a v5 sidecar whose
+  steps carry a non-null `delta`. A lenient consumer that ignores unknown
+  per-step keys keeps working; the strict path is the reason v5 bumps
+  `schema_version` rather than silently landing.
+
 The nested sub-models (`Media`, `DiscoveredElement`, `ElementAccessibility`,
-`AccessibilityState`, `StepReport`, `PageState`, `PageNode`,
-`ComponentNode`, `Edge`, `Graph`) DO forbid extras — those shapes are
-stable within a major schema version.
+`AccessibilityState`, `StepReport`, `StepDelta`, `DeltaNode`, `DeltaSettled`,
+`PageState`, `PageNode`, `ComponentNode`, `Edge`, `Graph`) DO forbid extras —
+those shapes are stable within a major schema version.
 
 ## Reading the sidecar
 
