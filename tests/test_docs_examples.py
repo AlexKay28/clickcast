@@ -1,0 +1,47 @@
+"""Keep the committed README demo sidecar in sync with the packaged schema.
+
+``docs/demo.gif`` ships with a machine-readable companion,
+``docs/demo.gif.json``, that readers are pointed at as the canonical example
+of the sidecar an agent receives. It therefore has to describe the schema the
+current release actually writes — a stale copy silently documents an API that
+no longer exists (#269).
+
+The canonical version lives on the :class:`~clickcast.feedback.models.Report`
+model, so this test derives it instead of hardcoding a number that would need
+updating on every schema bump.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from clickcast.feedback.models import Report
+
+REPO_ROOT = Path(__file__).parent.parent
+DEMO_SIDECAR = REPO_ROOT / "docs" / "demo.gif.json"
+SCHEMA_DIR = REPO_ROOT / "src" / "clickcast" / "feedback" / "schema"
+
+# The version the packaged model writes; the JSON schema in ``schema/`` must
+# agree with it, and so must the committed example.
+PACKAGED_SCHEMA_VERSION = Report.model_fields["schema_version"].default
+
+
+def test_demo_sidecar_matches_packaged_schema_version() -> None:
+    assert DEMO_SIDECAR.exists(), (
+        "docs/demo.gif.json is missing — regenerate it with "
+        "`python scripts/generate_demo.py --out docs/demo.gif`"
+    )
+    payload = json.loads(DEMO_SIDECAR.read_text())
+
+    assert payload["schema_version"] == PACKAGED_SCHEMA_VERSION, (
+        "docs/demo.gif.json is schema v"
+        f"{payload['schema_version']} but the packaged model writes "
+        f"v{PACKAGED_SCHEMA_VERSION}; regenerate the demo sidecar via "
+        ".github/workflows/demo.yml (or scripts/generate_demo.py)"
+    )
+
+    # Every version the model writes must ship a matching JSON schema, and the
+    # committed example must still validate against the model itself.
+    assert (SCHEMA_DIR / f"v{PACKAGED_SCHEMA_VERSION}.json").exists()
+    Report.model_validate(payload)
