@@ -24,6 +24,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   manifest with a detailed AI-agent runbook, split with
   `references/REFERENCE.md` so harnesses can load the manifest and deepen
   context on demand, making this repo directly installable as an agent skill.
+- **Community-health scaffolding.** `CONTRIBUTING.md` (dev setup, the exact
+  lint/format/mypy/pytest loop, test markers, label taxonomy), a PR template,
+  and bug/feature issue forms; `.github/SECURITY.md` with private reporting,
+  the security-relevant surfaces (npm provisioning, bundled ffmpeg, header
+  scoping, `--insecure`, redaction) and reproducible no-telemetry checks; and
+  weekly Dependabot updates for pip, GitHub Actions, and both npm packages.
+- **The README demo sidecar is now a current schema example.**
+  `docs/demo.gif.json` was a schema-v1 / 0.2.0 artifact while every agent doc
+  promised v4; it is regenerated from the demo workflow recipe, and
+  `tests/test_docs_examples.py` pins it to the schema version the packaged
+  `Report` model writes so it cannot silently drift again.
 
 ### Changed
 - **One sidecar writer for every surface.** `auto`, `run`, the `Reel` SDK and
@@ -46,8 +57,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and duplicate-label step pairing no longer repeat full-frame/full-DOM/full-list
   scans. Grid fonts are cached and visual-diff Pillow buffers are released
   deterministically.
+- **Layering is enforced by a test, not by convention.**
+  `tests/test_architecture.py` AST-parses every module under `src/clickcast`
+  (so function-local imports are caught) and fails when Playwright is imported
+  anywhere but the session seam, the encoder is imported anywhere but the
+  render kernel (and, until #261, the SDK), a layer module imports `typer` (bar
+  the `clickcast feedback` sub-app adapter), or anything under `src/` imports
+  `clickcast.cli`. One Playwright probe now exists
+  (`core.engines.playwright_importable()`), used by `doctor` and `report-bug`;
+  `report-bug` also reports the real installed Playwright version
+  (`playwright.__version__` never existed, so its version field was always
+  absent).
 
 ### Fixed
+- **Live MCP frames render the same click ripple as batch reels.** The MCP
+  step renderer passed the *final* ripple stage for its single post-click
+  frame, while a batch reel's first post-click frame is stage 1 — the same
+  click looked different live and in the recording. Both now use
+  `annotate.pipeline.ripple_stage_for()`.
 - **Playwright floor raised to `>=1.49`.** `capture_accessibility` calls
   `Locator.aria_snapshot()`, which only exists from 1.49; on 1.44–1.48 the call
   failed inside a blanket `except Exception: pass`, so the v4 `accessibility`
