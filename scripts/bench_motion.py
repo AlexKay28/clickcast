@@ -5,15 +5,20 @@ The headline question for human-facing output is not "how many frames?" but
 "how many of those frames are actually new?". A 30 fps file that holds every
 frame for half a second is a slideshow with a frame rate.
 
-This script decodes any GIF/MP4/WebP via ffmpeg and reports, over consecutive
-frame pairs:
+This script decodes any GIF/MP4/WebP via imageio (Pillow for GIF, the bundled
+ffmpeg for video) and reports, over consecutive frame pairs:
 
 * ``unique_pct``   — share of frames that differ from their predecessor
-* ``dup_pct``      — share that are (near-)identical, i.e. held frames
+* ``dup_pct``      — share that are held frames (essentially nothing changed)
 * ``mean_diff``    — mean absolute luminance difference (0-255 scale)
 
-``--threshold`` sets the per-pixel-mean cutoff below which a pair counts as a
-duplicate (default 0.5/255, i.e. imperceptible).
+A pair counts as a duplicate when fewer than ``--min-changed`` of its pixels
+changed by more than ``--pixel-delta`` levels (defaults: 0.01% of the frame,
+4/255 — above H.264 noise on a held frame, below a drawn ring). The whole-frame
+mean is deliberately *not* the criterion: a cursor
+move or a click ripple repaints a few hundred pixels, which is real motion but
+averages away to ~0.07/255, so averaging calls that static and quietly rewards
+slideshows.
 
 Usage::
 
@@ -34,6 +39,9 @@ import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+import imageio.v3 as iio
+import numpy as np
+
 __all__ = ["MotionStats", "measure"]
 
 
@@ -49,135 +57,79 @@ class MotionStats:
     duration_s: float
 
 
-def _ffmpeg() -> str:
-    exe = shutil.which("ffmpeg")
-    if exe:
-        return exe
-    try:  # imageio-ffmpeg ships a static binary; clickcast already depends on it
-        import imageio_ffmpeg
-
-        return imageio_ffmpeg.get_ffmpeg_exe()
-    except Exception as exc:  # pragma: no cover - environment specific
-        raise SystemExit(f"ffmpeg is required to measure motion: {exc}") from exc
-
-
-def _ffprobe(path: Path) -> dict:
+def _timing(path: Path) -> tuple[float, float]:
+    """``(fps, duration_s)`` from ffprobe, or ``(0, 0)`` when it is absent."""
     exe = shutil.which("ffprobe")
-    if exe:
-        out = subprocess.run(
-            [
-                exe,
-                "-v",
-                "error",
-                "-select_streams",
-                "v:0",
-                "-show_entries",
-                "stream=width,height,avg_frame_rate,nb_frames",
-                "-show_entries",
-                "format=duration",
-                "-of",
-                "json",
-                str(path),
-            ],
-            capture_output=True,
-            text=True,
-        )
-        if out.returncode == 0:
-            return json.loads(out.stdout)
-
-    # Fallback: derive geometry from the decoded stream itself (no ffprobe).
-    return {}
-
-
-def _dims(path: Path) -> tuple[int, int]:
-    """Frame geometry, from ffprobe when available and a 1-frame decode otherwise."""
-    probe = _ffprobe(path)
-    stream = (probe.get("streams") or [{}])[0]
-    if stream.get("width") and stream.get("height"):
-        return int(stream["width"]), int(stream["height"])
-
-    # No ffprobe: ask ffmpeg for one frame and infer the aspect from the raw
-    # size by trying the most common viewport widths (the caller only needs a
-    # shape that splits the buffer evenly, and the encode side is always the
-    # same canvas as the capture viewport).
+    if not exe:
+        return 0.0, 0.0
     out = subprocess.run(
         [
-            _ffmpeg(),
+            exe,
             "-v",
             "error",
-            "-i",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=avg_frame_rate,nb_frames",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "json",
             str(path),
-            "-frames:v",
-            "1",
-            "-f",
-            "rawvideo",
-            "-pix_fmt",
-            "gray",
-            "-",
         ],
         capture_output=True,
+        text=True,
     )
-    size = len(out.stdout)
-    for width, height in ((1280, 800), (1280, 720), (1920, 1080), (800, 600)):
-        if width * height == size:
-            return width, height
-    raise SystemExit("cannot determine frame geometry (install ffprobe or use a standard viewport)")
+    if out.returncode != 0:
+        return 0.0, 0.0
+    probe = json.loads(out.stdout)
+    stream = (probe.get("streams") or [{}])[0]
+
+    fps = 0.0
+    rate = stream.get("avg_frame_rate") or "0/0"
+    num, _, den = rate.partition("/")
+    if float(den or 1) > 0:
+        fps = float(num) / float(den or 1)
+
+    duration = float((probe.get("format") or {}).get("duration") or 0.0)
+    return fps, duration
 
 
-def measure(path: str | Path, *, threshold: float = 0.5) -> MotionStats:
+def _luma(frame: np.ndarray) -> np.ndarray:
+    """Collapse an RGB/RGBA/grayscale frame to float luminance."""
+    if frame.ndim == 2:
+        return frame.astype(np.float32)
+    if frame.shape[-1] >= 3:
+        return frame[..., :3].astype(np.float32).mean(axis=2)
+    return frame[..., 0].astype(np.float32)
+
+
+def measure(path: str | Path, *, min_changed: float = 0.0001, pixel_delta: int = 2) -> MotionStats:
     path = Path(path)
     if not path.exists():
         raise SystemExit(f"no such file: {path}")
 
-    probe = _ffprobe(path)
-    stream = (probe.get("streams") or [{}])[0]
-    width, height = _dims(path)
+    count = 0
+    diffs: list[float] = []
+    moved: list[float] = []
+    previous: np.ndarray | None = None
+    try:
+        for frame in iio.imiter(path):
+            gray = _luma(frame)
+            count += 1
+            if previous is not None:
+                delta = np.abs(gray - previous)
+                diffs.append(float(delta.mean()))
+                moved.append(float((delta > pixel_delta).mean()))
+            previous = gray
+    except Exception as exc:  # pragma: no cover - codec/plugin specific
+        raise SystemExit(f"{path}: cannot decode frames: {exc}") from exc
 
-    raw = subprocess.run(
-        [
-            _ffmpeg(),
-            "-v",
-            "error",
-            "-i",
-            str(path),
-            "-f",
-            "rawvideo",
-            "-pix_fmt",
-            "gray",
-            "-",
-        ],
-        capture_output=True,
-    ).stdout
-
-    size = width * height
-    count = len(raw) // size
     if count < 2:
         raise SystemExit(f"{path}: needs at least two frames")
 
-    diffs: list[float] = []
-    prev = raw[0:size]
-    for i in range(1, count):
-        cur = raw[i * size : (i + 1) * size]
-        # Mean absolute difference, accumulated on a coarse grid: a full-width
-        # row sum is enough for a duplicate/no-duplicate verdict and keeps the
-        # script stdlib-only (no numpy).
-        total = 0
-        for off in range(0, size, 7):
-            a = prev[off]
-            b = cur[off]
-            total += a - b if a > b else b - a
-        samples = len(range(0, size, 7))
-        diffs.append(total / samples)
-        prev = cur
-
-    duplicates = sum(1 for d in diffs if d < threshold)
-    mean_diff = sum(diffs) / len(diffs)
-
-    fps = 0.0
-    if stream.get("avg_frame_rate") and stream["avg_frame_rate"] != "0/0":
-        num, _, den = stream["avg_frame_rate"].partition("/")
-        fps = float(num) / float(den or 1)
-    duration = float((probe.get("format") or {}).get("duration") or 0.0)
+    duplicates = sum(1 for share in moved if share < min_changed)
+    fps, duration = _timing(path)
 
     return MotionStats(
         path=str(path),
@@ -185,7 +137,7 @@ def measure(path: str | Path, *, threshold: float = 0.5) -> MotionStats:
         duplicates=duplicates,
         unique_pct=round(100 * (count - 1 - duplicates) / (count - 1), 1),
         dup_pct=round(100 * duplicates / (count - 1), 1),
-        mean_diff=round(mean_diff, 3),
+        mean_diff=round(sum(diffs) / len(diffs), 3),
         fps=round(fps, 2),
         duration_s=round(duration, 3),
     )
@@ -197,7 +149,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("media", nargs="+", help="GIF/MP4/WebP reel(s) to measure")
     parser.add_argument(
-        "--threshold", type=float, default=0.5, help="duplicate cutoff, 0-255 (default 0.5)"
+        "--min-changed",
+        type=float,
+        default=0.0001,
+        help="share of changed pixels below which a pair is a duplicate (default 0.01%%)",
+    )
+    parser.add_argument(
+        "--pixel-delta",
+        type=int,
+        default=4,
+        help="per-pixel luminance change that counts as motion, 0-255 (default 4)",
     )
     parser.add_argument("--json", action="store_true", help="emit JSON instead of a table")
     parser.add_argument(
@@ -205,7 +166,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    results = [measure(p, threshold=args.threshold) for p in args.media]
+    results = [
+        measure(p, min_changed=args.min_changed, pixel_delta=args.pixel_delta) for p in args.media
+    ]
 
     if args.json:
         print(json.dumps([asdict(r) for r in results], indent=2))
