@@ -43,6 +43,9 @@ Two session-lifecycle tools that have no `core/actions.py` counterpart
 - `start_session` — opens the Playwright session (mirrors
   [`core/opts.py`](../src/clickcast/core/opts.py)'s `BrowserOpts` fields:
   engine/viewport/device/headful/lang/dark, plus the grid overlay knobs).
+  `settle_budget_ms` (0–30000, default 1500) caps the `settle()` embedded in
+  every action's delta; `0` disables it (`delta.settled` is then absent). The
+  explicit `settle` tool keeps its own full 3000 ms default — see below.
   `RenderOpts` (fps/quality/loop/format) is **not** mirrored here — v1 does
   not encode a reel from a live session (no video/GIF is produced), so
   frame-encoding options don't apply. See "Transcript" below for what *is*
@@ -294,7 +297,7 @@ the sidecar builder relies on — one classification table, two consumers.
 | | |
 |---|---|
 | Args | `full_page` (`bool`, default `false`), `label` (`str \| null`) |
-| Returns | Per-call response shape — the primary payload IS the frame; `status` is `"ok"` unless the page itself is unreachable. |
+| Returns | Per-call response shape — the primary payload IS the frame; `status` is `"ok"` unless the page itself is unreachable. `delta` is always `null`: a screenshot cannot change the page, so it skips the per-action observations and settle (#297). |
 | Errors | `other`. |
 
 ### `settle`
@@ -376,6 +379,13 @@ from the parity table above.
   element no longer appears anywhere in the page's interactive candidate set
   transitions to removed and is listed **once**. Hidden-but-present elements
   are simply absent from `nodes`; they are not `removed`.
+- **Latency (#297).** The per-action `settle()` uses
+  `start_session(settle_budget_ms=…)` (default **1500 ms**, configurable,
+  `0` disables) rather than the explicit tool's 3000 ms: it only has to answer
+  "had the page settled?" for the delta, and a timed-out embedded settle is
+  still information (`settled.ok: false`). `screenshot` performs **no**
+  observation and **no** settle — a screenshot cannot change the page, so its
+  response carries `delta: null` instead of paying for an always-empty diff.
 - Playwright 1.64's native `page.get_by_ref()` is **not** used —
   `playwright>=1.49` remains the supported floor. Native refs are documented
   as a future fast-path behind the same `ref=eN` handles.

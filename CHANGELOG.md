@@ -72,6 +72,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and duplicate-label step pairing no longer repeat full-frame/full-DOM/full-list
   scans. Grid fonts are cached and visual-diff Pillow buffers are released
   deterministically.
+- **The MCP per-action delta no longer taxes read-only calls.** `screenshot`
+  skips the before/after observations and the embedded `settle()` entirely (a
+  screenshot cannot change the page), and the budget for the settle embedded in
+  an action's delta is now explicit and smaller than the `settle` tool's:
+  `start_session(settle_budget_ms=…)`, default 1500 ms, `0` disables it. The
+  explicit `settle` tool keeps its full 3000 ms default.
 - **Layering is enforced by a test, not by convention.**
   `tests/test_architecture.py` AST-parses every module under `src/clickcast`
   (so function-local imports are caught) and fails when Playwright is imported
