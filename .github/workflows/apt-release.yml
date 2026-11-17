@@ -32,7 +32,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       has_apt_signing_key: ${{ steps.check-secret.outputs.has_key }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v5
         with:
@@ -158,7 +158,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v5
         with:
