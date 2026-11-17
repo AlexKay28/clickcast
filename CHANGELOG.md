@@ -23,6 +23,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `observe` registry; removed/unknown refs are clean `other` errors), and the
   `click-no-dom-reaction` advisory consumes the delta, removing the same-URL
   SPA false-positive class from #228.
+- **The perception loop: `observe → act → settle → receipt`.** Four primitives
+  make a live agent loop cheap enough to run dozens of times without filling
+  its context:
+  - `observe()` / MCP `observe` — a ranked snapshot of the page's interactive
+    elements addressed by stable opaque `ref=eN` handles (session-scoped,
+    role+name identity tie-broken by the 64px bbox signature), capped at 20
+    nodes / 800 estimated tokens / 3200 compact chars with truthful
+    `truncated` counts and one-shot `removed` reporting. `Reel.observe()`
+    exposes the same payload to the Python SDK.
+  - `settle()` / MCP `settle` — deterministic quiescence across three
+    independent, individually budgeted signals (own in-flight network
+    counter, `MutationObserver`, rAF + `getAnimations`) with no bare sleeps:
+    a signal that exhausts its budget is reported in `timed_out` instead of
+    raising, so "the page never stopped moving" is an observation, not an
+    error.
+  - `receipt()` / MCP `receipt` / `Reel.receipt()` — the closing call: one
+    artifact directory (media, v5 sidecar, assertions, visual diff) plus a
+    ≤200-token summary with step counts and the first failed step's
+    `error_code`. Media goes through the render kernel; a live MCP session is
+    not closed by it.
+  - Action tools accept `ref=` and return a `delta` (see v5 below), so the
+    loop's second step needs no selectors and no screenshot.
+  See `docs/perception.md` for the loop and the artifact layout.
 - **Smooth high-FPS MP4 reels and declarative region annotations.** `auto` and
   `run` accept `--smooth --video-fps 30` for duration-preserving frame holds,
   eased cursor motion, and cross-dissolved page transitions. The new

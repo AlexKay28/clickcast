@@ -41,19 +41,23 @@ report only).
 
 ## Baseline
 
-Linux x86-64, 2026-11-17, Python 3.12, warm pip cache, chromium already
-installed, `--repeat 2`:
+Linux x86-64, 2026-11-17 (sidecar v5), Python 3.12, chromium already
+installed, `--repeat 3 --no-cache-dir`:
 
 | Stage | Wall |
 |---|---|
-| `python -m venv` | 3.1 s |
-| `pip install` (warm cache) | 19.0 s |
-| `clickcast doctor --json` | 0.7 s |
+| `python -m venv` | 3.2 s |
+| `pip install` (cold pip, the stricter reading) | 18.2 s |
+| `clickcast doctor --json` | 0.6 s |
 | first `auto` tour (4 steps: goto, 2 clicks, scroll) | 9.5 s |
-| **M1: install → verified report** | **32.4 s** |
-| M2: sidecar bytes/step (p50) | 1,510 B |
-| M2: estimated tokens/step (p50) | 378 |
-| tour wall p50 / p95 | 9.49 s / 9.54 s |
+| **M1: install → verified report** | **31.4 s** |
+| M2: sidecar bytes/step (p50) | 1,530 B |
+| M2: estimated tokens/step (p50) | 382 |
+| tour wall p50 / p95 | 9.51 s / 9.55 s |
+
+Earlier run on sidecar v4 (warm pip cache, `--repeat 2`): **32.4 s** and
+**1,510 B/step (378 tokens)**. The v5 delta field is `null` on batch runs, so
+the per-step cost moved by ~20 bytes — within run-to-run noise.
 
 Deliberately excluded from M1:
 
@@ -70,9 +74,14 @@ perception API ships: `ceil(chars / 4)`. It is model-agnostic on purpose — the
 contract is a stable budget, not a vendor-specific count. A real tokenizer is
 an optional cross-check, never a runtime dependency.
 
-Today's only machine payload is the sidecar, so it is the honest baseline.
-Once `observe()` / `act()` / `receipt()` land (#263–#265, #271), their
-ceilings are enforced in tests, and this file gains p50/p95 rows for each.
+The batch sidecar is still the honest per-step baseline. The live-loop
+payloads now have measured ceilings enforced in tests:
+
+| Primitive | Budget | Measured |
+|---|---|---|
+| `observe()` | ≤ 800 est. tokens, ≤ 20 nodes | 246 on `index.html`; 559 on a 203-element stress page |
+| `act()` delta | ≤ 300 est. tokens | 36–39 on plain pages, 70 (tabs click), 95 (menu open) |
+| `receipt()` | ≤ 200 est. tokens | 38 (no media), 52 (media), 65 (media + assertions baseline) |
 
 ## Regression ceilings
 

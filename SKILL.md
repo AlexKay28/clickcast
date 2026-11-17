@@ -1,6 +1,6 @@
 ---
 name: clickcast
-description: Record deterministic Playwright browser tours that produce both a human-watchable GIF/MP4 reel and a machine-readable v4 JSON sidecar, plus an optional MCP server for live interactive control. Use this skill when an AI agent must visually verify a live web UI, author reproducible YAML scenario walkthroughs, generate CI regression gates, produce smooth MP4 reels with region annotations, or inspect a site’s interactive structure.
+description: Record deterministic Playwright browser tours that produce both a human-watchable GIF/MP4 reel and a machine-readable v5 JSON sidecar, plus an optional MCP server for live interactive control. Use this skill when an AI agent must visually verify a live web UI, author reproducible YAML scenario walkthroughs, generate CI regression gates, produce smooth MP4 reels with region annotations, or inspect a site’s interactive structure.
 ---
 
 # clickcast — AI agent runbook
