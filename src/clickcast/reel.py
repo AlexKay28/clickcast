@@ -29,6 +29,7 @@ from typing import Any, cast
 
 from PIL import Image
 
+from clickcast.annotate import AnnotateConfig, StepAnnotation
 from clickcast.capture import FrameRef, Recorder
 from clickcast.core.actions import (
     BaseStep,
@@ -51,13 +52,19 @@ from clickcast.core.session import Engine, Session, WaitArg
 from clickcast.core.viewport import Viewport
 from clickcast.discovery import Element
 from clickcast.discovery import discover as _async_discover
-from clickcast.encode import EncodeResult, Format, encode
+from clickcast.encode import EncodeResult, Format
 from clickcast.feedback import Report, ReportBuilder
 from clickcast.feedback.assertions import build_assertions, diff_assertions, load_assertions
 from clickcast.feedback.models import VisualDiffReport
 from clickcast.feedback.visual_diff import DEFAULT_THRESHOLD
 from clickcast.feedback.visual_diff import visual_diff as _visual_diff
-from clickcast.kernel import finalize_report, make_media, write_sidecar
+from clickcast.kernel import (
+    RenderPlan,
+    finalize_report,
+    make_media,
+    render_reel,
+    write_sidecar,
+)
 from clickcast.scenario import Meta, Scenario
 from clickcast.scenario import run as run_scenario
 from clickcast.serving import serve_directory
@@ -137,6 +144,7 @@ class _BaseReel:
         dwell: float = 0.0,
         optional: bool = False,
         retries: int = 0,
+        timeout_ms: int | None = None,
     ) -> Any:
         self._steps.append(
             GotoStep(
@@ -146,6 +154,7 @@ class _BaseReel:
                 dwell=dwell,
                 optional=optional,
                 retries=retries,
+                timeout_ms=timeout_ms,
             )
         )
         return self
@@ -158,9 +167,17 @@ class _BaseReel:
         dwell: float = 0.0,
         optional: bool = False,
         repeat: int = 1,
+        timeout_ms: int | None = None,
     ) -> Any:
         self._steps.append(
-            ClickStep(selector=selector, label=label, dwell=dwell, optional=optional, repeat=repeat)
+            ClickStep(
+                selector=selector,
+                label=label,
+                dwell=dwell,
+                optional=optional,
+                repeat=repeat,
+                timeout_ms=timeout_ms,
+            )
         )
         return self
 
@@ -171,9 +188,16 @@ class _BaseReel:
         label: str | None = None,
         dwell: float = 0.0,
         optional: bool = False,
+        timeout_ms: int | None = None,
     ) -> Any:
         self._steps.append(
-            DblClickStep(selector=selector, label=label, dwell=dwell, optional=optional)
+            DblClickStep(
+                selector=selector,
+                label=label,
+                dwell=dwell,
+                optional=optional,
+                timeout_ms=timeout_ms,
+            )
         )
         return self
 
@@ -184,9 +208,16 @@ class _BaseReel:
         label: str | None = None,
         dwell: float = 0.0,
         optional: bool = False,
+        timeout_ms: int | None = None,
     ) -> Any:
         self._steps.append(
-            HoverStep(selector=selector, label=label, dwell=dwell, optional=optional)
+            HoverStep(
+                selector=selector,
+                label=label,
+                dwell=dwell,
+                optional=optional,
+                timeout_ms=timeout_ms,
+            )
         )
         return self
 
@@ -199,6 +230,7 @@ class _BaseReel:
         label: str | None = None,
         dwell: float = 0.0,
         optional: bool = False,
+        timeout_ms: int | None = None,
     ) -> Any:
         self._steps.append(
             TypeStep(
@@ -208,6 +240,7 @@ class _BaseReel:
                 label=label,
                 dwell=dwell,
                 optional=optional,
+                timeout_ms=timeout_ms,
             )
         )
         return self
@@ -220,9 +253,17 @@ class _BaseReel:
         label: str | None = None,
         dwell: float = 0.0,
         optional: bool = False,
+        timeout_ms: int | None = None,
     ) -> Any:
         self._steps.append(
-            PressStep(key=key, selector=selector, label=label, dwell=dwell, optional=optional)
+            PressStep(
+                key=key,
+                selector=selector,
+                label=label,
+                dwell=dwell,
+                optional=optional,
+                timeout_ms=timeout_ms,
+            )
         )
         return self
 
@@ -234,9 +275,17 @@ class _BaseReel:
         label: str | None = None,
         dwell: float = 0.0,
         optional: bool = False,
+        timeout_ms: int | None = None,
     ) -> Any:
         self._steps.append(
-            SelectStep(into=into, value=value, label=label, dwell=dwell, optional=optional)
+            SelectStep(
+                into=into,
+                value=value,
+                label=label,
+                dwell=dwell,
+                optional=optional,
+                timeout_ms=timeout_ms,
+            )
         )
         return self
 
@@ -250,6 +299,7 @@ class _BaseReel:
         label: str | None = None,
         dwell: float = 0.0,
         optional: bool = False,
+        timeout_ms: int | None = None,
     ) -> Any:
         """Scroll the window (default) or a container element.
 
@@ -266,6 +316,7 @@ class _BaseReel:
                 label=label,
                 dwell=dwell,
                 optional=optional,
+                timeout_ms=timeout_ms,
             )
         )
         return self
@@ -303,6 +354,7 @@ class _BaseReel:
         label: str | None = None,
         dwell: float = 0.0,
         optional: bool = False,
+        timeout_ms: int | None = None,
     ) -> Any:
         """Dispatch a mouse-wheel event.
 
@@ -318,6 +370,7 @@ class _BaseReel:
                 label=label,
                 dwell=dwell,
                 optional=optional,
+                timeout_ms=timeout_ms,
             )
         )
         return self
@@ -475,19 +528,99 @@ async def _run_and_encode(
     quality: int,
     loop: int,
     builder: ReportBuilder | None = None,
-) -> tuple[Any, EncodeResult]:
+    annotate: AnnotateConfig | None = None,
+    smooth: bool = False,
+    video_fps: int = 30,
+) -> tuple[Any, EncodeResult, int]:
+    """Run the scenario, render its frames, encode ``out``.
+
+    Returns ``(run_result, encode_result, encode_fps)`` — ``encode_fps`` is the
+    rate the shared kernel actually encoded at (``video_fps`` when smoothing,
+    the capture FPS otherwise), so the caller can record it in the sidecar's
+    ``media.fps`` instead of re-deriving the FPS rule.
+
+    Every save goes through :func:`clickcast.kernel.render.render_reel` — the
+    same zoom → smooth/interpolate → annotate → encode pipeline as
+    ``clickcast run`` and ``auto`` (#261). Before that, the SDK re-encoded the
+    recorder's raw frames and so could never produce labels, a cursor trail,
+    ripples, a grid, or smoothed video.
+
+    ``annotate=None`` (the default) means "no overlays", which is why the
+    kernel is handed an all-layers-off :class:`AnnotateConfig`: the pristine
+    frames are re-saved pixel-identically and the encoded reel is byte-identical
+    to the pre-#261 SDK output. ``interpolate`` is likewise off unless the
+    caller opted into annotation — frame insertion changes the reel.
+    """
     with Recorder(fps=scenario.meta.fps, default_dwell=scenario.meta.dwell) as rec:
         result = await run_scenario(scenario, recorder=rec, builder=builder)
         rec.flush()
-        enc = encode(
-            rec.frames_dir,
-            out,
+        annotating = annotate is not None
+        plan = RenderPlan(
+            out=out,
             fps=scenario.meta.fps,
+            smooth=smooth,
+            video_fps=video_fps,
+            interpolate=annotating,
+            # `AnnotateConfig`'s layer toggles all default to on, so "no
+            # annotation requested" has to be spelled out or the kernel would
+            # stamp its default chrome onto every SDK reel.
+            annotate=annotate if annotating else _NO_OVERLAY_ANNOTATE,
+            step_annotations=(_step_annotations_from_run(scenario, result) if annotating else {}),
             quality=quality,
             loop=loop,
             format=format_,
         )
-    return result, enc
+        rendered = render_reel(rec.frames_dir, plan)
+    return result, rendered.enc, rendered.encode_fps
+
+
+#: Layer toggles that turn :func:`annotate_frames_dir` into a pixel-preserving
+#: no-op. Used when the SDK caller didn't ask for annotation, so default SDK
+#: reels keep the exact frames (and therefore bytes) they had before #261.
+_NO_OVERLAY_ANNOTATE = AnnotateConfig(
+    clicks=False,
+    labels=False,
+    cursor=False,
+    progress=False,
+    actions_panel=False,
+)
+
+
+def _step_annotations_from_run(scenario: Scenario, result: Any) -> dict[int, StepAnnotation]:
+    """Build per-recorder-step annotation inputs from a completed run.
+
+    Mirrors ``clickcast.cli._scenario_step_annotations`` — the recorder bumps
+    ``step_index`` once per ``pre_action`` call, so a ``repeat=3`` step owns
+    three consecutive indices. Kept here (rather than imported from ``cli``,
+    which is a command layer) until the kernel grows a shared implementation;
+    both copies must stay in lockstep on the label-synthesis and ripple rules.
+    """
+    out: dict[int, StepAnnotation] = {}
+    frame_step_index = 0
+    result_index = 0
+    for step in scenario.steps:
+        for _ in range(step.repeat):
+            if result_index >= len(result.results):
+                # Scenario failed early — remaining steps never ran.
+                return out
+            r = result.results[result_index]
+            label = step.label
+            if not label:
+                primary = (
+                    getattr(step, "selector", None)
+                    or getattr(step, "into", None)
+                    or getattr(step, "url", None)
+                    or ""
+                )
+                label = f"{step.action}: {primary[:40]}" if primary else step.action
+            # Ripple only fires on click-shaped actions where the click landed.
+            click_at = (
+                r.cursor_xy if step.action in ("click", "dblclick") and r.status == "ok" else None
+            )
+            out[frame_step_index] = StepAnnotation(label=label, click_at=click_at)
+            frame_step_index += 1
+            result_index += 1
+    return out
 
 
 def _viewport_list_from_meta(scenario: Scenario) -> list[int] | None:
@@ -701,10 +834,32 @@ class AsyncReel(_BaseReel):
         quality: int = 8,
         loop: int = 0,
         no_sidecar: bool = False,
+        annotate: AnnotateConfig | None = None,
+        smooth: bool = False,
+        video_fps: int = 30,
         with_feedback: bool = False,
     ) -> Path:
+        """Record the scenario and encode it to ``path``.
+
+        Render options mirror the CLI / scenario ``render:`` block:
+
+        - ``annotate`` — pass an :class:`~clickcast.annotate.AnnotateConfig`
+          to bake the same overlays ``clickcast run`` produces (step labels,
+          cursor trail + arrows, click ripples, progress bar, actions panel,
+          optional grid/regions). ``None`` (default) leaves the frames
+          untouched, which keeps the encoded reel byte-identical to what the
+          SDK emitted before #261.
+        - ``smooth`` — duration-preserving retiming of the captured frames to
+          ``video_fps`` (the output plays at ``video_fps``; capture stays at
+          the reel's ``fps``). Off by default.
+        - ``video_fps`` — the smoothed output rate.
+        - ``with_feedback`` — attach the agent-guidance ``feedback`` block to
+          the sidecar (ignored with ``no_sidecar=True``).
+        """
         out = Path(path)
         out.parent.mkdir(parents=True, exist_ok=True)
+        if not 1 <= video_fps <= 120:
+            raise ValueError("video_fps must be an integer between 1 and 120")
         scenario = self.build_scenario()
         # Always run a builder — even with ``no_sidecar=True`` we still want
         # ``self._last_report`` populated so post-run inspection APIs
@@ -714,19 +869,22 @@ class AsyncReel(_BaseReel):
             engine=scenario.meta.engine,
             viewport=_viewport_list_from_meta(scenario),
         )
-        result, enc = await _run_and_encode(
+        result, enc, encode_fps = await _run_and_encode(
             scenario,
             out,
             format_=format,
             quality=quality,
             loop=loop,
             builder=builder,
+            annotate=annotate,
+            smooth=smooth,
+            video_fps=video_fps,
         )
         if not result.ok:
             builder.add_warning(f"scenario failed at step {result.failed_at}")
         # Finalize once: `assertions()` needs the report even with
         # `no_sidecar=True`, and ReportBuilder.build must run at most once.
-        report = finalize_report(builder, make_media(enc, scenario.meta.fps))
+        report = finalize_report(builder, make_media(enc, encode_fps))
         self._last_report = report
         write_sidecar(
             out,
@@ -765,8 +923,12 @@ class Reel(_BaseReel):
         quality: int = 8,
         loop: int = 0,
         no_sidecar: bool = False,
+        annotate: AnnotateConfig | None = None,
+        smooth: bool = False,
+        video_fps: int = 30,
         with_feedback: bool = False,
     ) -> Path:
+        """Sync counterpart to :meth:`AsyncReel.save` — same render options."""
         _fail_if_running_loop("Reel.save()")
         # Reuse AsyncReel's implementation to avoid drift. Use `_as_async` to
         # share the field-copying logic with the other sync-facade methods.
@@ -779,6 +941,9 @@ class Reel(_BaseReel):
                 quality=quality,
                 loop=loop,
                 no_sidecar=no_sidecar,
+                annotate=annotate,
+                smooth=smooth,
+                video_fps=video_fps,
                 with_feedback=with_feedback,
             )
         )
