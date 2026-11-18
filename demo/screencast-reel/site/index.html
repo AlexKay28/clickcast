@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Acme Analytics — motion demo</title>
+    <style>
+      :root {
+        --ink: #0f172a;
+        --muted: #64748b;
+        --line: #e2e8f0;
+        --bg: #f8fafc;
+        --card: #ffffff;
+        --accent: #4f46e5;
+        --accent-soft: #eef2ff;
+        --ok: #10b981;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+      }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 18px 28px;
+        background: var(--card);
+        border-bottom: 1px solid var(--line);
+      }
+      .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; letter-spacing: -0.01em; }
+      .mark {
+        width: 26px; height: 26px; border-radius: 8px;
+        background: linear-gradient(135deg, #6366f1, #a855f7);
+      }
+      .who { color: var(--muted); font-size: 13px; }
+      nav { display: flex; gap: 4px; padding: 10px 28px; background: var(--card); border-bottom: 1px solid var(--line); }
+      nav button {
+        appearance: none; border: 0; background: none; cursor: pointer;
+        padding: 8px 14px; border-radius: 8px; font: inherit; color: var(--muted);
+        transition: background 200ms ease, color 200ms ease;
+      }
+      nav button:hover { background: var(--bg); color: var(--ink); }
+      nav button[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+      main { max-width: 900px; margin: 0 auto; padding: 28px; }
+      .panel { animation: rise 280ms cubic-bezier(.2,.7,.3,1) both; }
+      .panel[hidden] { display: none; }
+      @keyframes rise {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: none; }
+      }
+      .card {
+        background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+        padding: 22px 24px; box-shadow: 0 1px 2px rgb(15 23 42 / 4%);
+      }
+      .row { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+      .kpi { font-size: 40px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; }
+      .label { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; }
+      .delta { color: var(--ok); font-weight: 600; font-size: 14px; }
+      .btn {
+        appearance: none; border: 1px solid var(--line); background: var(--card); color: var(--ink);
+        padding: 9px 16px; border-radius: 9px; font: inherit; cursor: pointer;
+        transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+      }
+      .btn:hover { border-color: #c7d2fe; box-shadow: 0 2px 8px rgb(79 70 229 / 12%); transform: translateY(-1px); }
+      .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+      .btn.primary:hover { box-shadow: 0 4px 14px rgb(79 70 229 / 32%); }
+
+      /* The motion this demo exists for: a real 300 ms height/opacity reveal. */
+      #breakdown {
+        overflow: hidden;
+        max-height: 0;
+        opacity: 0;
+        transition: max-height 300ms cubic-bezier(.2,.7,.3,1), opacity 300ms ease, margin 300ms ease;
+        margin-top: 0;
+      }
+      #breakdown.open { max-height: 220px; opacity: 1; margin-top: 20px; }
+      .bar { display: flex; align-items: center; gap: 12px; margin: 10px 0; color: var(--muted); font-size: 13px; }
+      .track { flex: 1; height: 8px; border-radius: 999px; background: var(--bg); overflow: hidden; }
+      .fill {
+        height: 100%; width: 0; border-radius: 999px;
+        background: linear-gradient(90deg, #6366f1, #a855f7);
+        transition: width 600ms cubic-bezier(.2,.7,.3,1);
+      }
+      #breakdown.open .fill[data-w="64"] { width: 64%; }
+      #breakdown.open .fill[data-w="28"] { width: 28%; }
+      #breakdown.open .fill[data-w="8"] { width: 8%; }
+
+      .filter { margin-top: 24px; display: flex; gap: 10px; align-items: center; }
+      input[type="search"] {
+        flex: 1; font: inherit; padding: 10px 14px; border: 1px solid var(--line);
+        border-radius: 9px; outline: none; transition: border-color 160ms ease, box-shadow 160ms ease;
+      }
+      input[type="search"]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgb(79 70 229 / 14%); }
+      .chips { display: flex; gap: 8px; margin-top: 14px; min-height: 30px; }
+      .chip {
+        background: var(--accent-soft); color: var(--accent); border-radius: 999px;
+        padding: 5px 12px; font-size: 13px; font-weight: 600;
+        animation: pop 220ms cubic-bezier(.2,.7,.3,1) both;
+      }
+      @keyframes pop { from { opacity: 0; transform: scale(.9); } to { opacity: 1; transform: none; } }
+      .empty { color: var(--muted); font-size: 13px; }
+
+      .sync { display: inline-flex; align-items: center; gap: 9px; }
+      .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+      .sync.busy .dot { animation: pulse 700ms ease-in-out infinite; background: var(--accent); }
+      @keyframes pulse { 0%, 100% { opacity: .35; transform: scale(.8); } 50% { opacity: 1; transform: scale(1.15); } }
+      .hint { margin-top: 22px; color: var(--muted); font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="brand"><span class="mark"></span> Acme Analytics</div>
+      <div class="who">demo workspace</div>
+    </header>
+
+    <nav role="tablist" aria-label="Sections">
+      <button role="tab" id="tab-overview" aria-selected="true" aria-controls="panel-overview">Overview</button>
+      <button role="tab" id="tab-reports" aria-selected="false" aria-controls="panel-reports">Reports</button>
+    </nav>
+
+    <main>
+      <section class="panel" id="panel-overview" role="tabpanel" aria-labelledby="tab-overview">
+        <div class="card">
+          <div class="row">
+            <div>
+              <div class="label">Weekly active users</div>
+              <div class="kpi">128,409</div>
+              <div class="delta">+12.4% vs last week</div>
+            </div>
+            <button class="btn" id="toggle-breakdown" aria-expanded="false" aria-controls="breakdown">
+              Show breakdown
+            </button>
+          </div>
+
+          <div id="breakdown">
+            <div class="bar"><span>Desktop</span><div class="track"><div class="fill" data-w="64"></div></div><span>64%</span></div>
+            <div class="bar"><span>Mobile</span><div class="track"><div class="fill" data-w="28"></div></div><span>28%</span></div>
+            <div class="bar"><span>Tablet</span><div class="track"><div class="fill" data-w="8"></div></div><span>8%</span></div>
+          </div>
+
+          <div class="filter">
+            <input id="filter" type="search" placeholder="Filter customers…" aria-label="Filter customers" />
+            <button class="btn primary sync" id="sync"><span class="dot"></span> Sync now</button>
+          </div>
+          <div class="chips" id="chips"><span class="empty">No filter applied.</span></div>
+
+          <p class="hint">Every transition on this page is a real CSS animation (300 ms reveal, 600 ms bars, typed input).</p>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-reports" role="tabpanel" aria-labelledby="tab-reports" hidden>
+        <div class="card">
+          <div class="label">Saved reports</div>
+          <div class="kpi" style="font-size: 26px; margin-top: 6px">Retention · Cohorts · Funnels</div>
+          <p class="hint">Switching tabs swaps this panel with a 280 ms rise-and-fade.</p>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const tabs = [
+        ["tab-overview", "panel-overview"],
+        ["tab-reports", "panel-reports"],
+      ];
+      for (const [tabId, panelId] of tabs) {
+        document.getElementById(tabId).addEventListener("click", () => {
+          for (const [t, p] of tabs) {
+            const isTarget = t === tabId;
+            document.getElementById(t).setAttribute("aria-selected", String(isTarget));
+            document.getElementById(p).hidden = !isTarget;
+            if (isTarget) {
+              // Restart the rise animation on every switch.
+              const panel = document.getElementById(p);
+              panel.style.animation = "none";
+              void panel.offsetWidth;
+              panel.style.animation = "";
+            }
+          }
+        });
+      }
+
+      const toggle = document.getElementById("toggle-breakdown");
+      const breakdown = document.getElementById("breakdown");
+      toggle.addEventListener("click", () => {
+        const open = breakdown.classList.toggle("open");
+        toggle.setAttribute("aria-expanded", String(open));
+        toggle.textContent = open ? "Hide breakdown" : "Show breakdown";
+      });
+
+      const filter = document.getElementById("filter");
+      const chips = document.getElementById("chips");
+      filter.addEventListener("input", () => {
+        const value = filter.value.trim();
+        chips.replaceChildren();
+        if (!value) {
+          const empty = document.createElement("span");
+          empty.className = "empty";
+          empty.textContent = "No filter applied.";
+          chips.append(empty);
+          return;
+        }
+        for (const part of value.split(/[,\s]+/).filter(Boolean)) {
+          const chip = document.createElement("span");
+          chip.className = "chip";
+          chip.textContent = part;
+          chips.append(chip);
+        }
+      });
+
+      const sync = document.getElementById("sync");
+      sync.addEventListener("click", () => {
+        sync.classList.add("busy");
+        setTimeout(() => sync.classList.remove("busy"), 900);
+      });
+    </script>
+  </body>
+</html>
