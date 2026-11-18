@@ -156,6 +156,11 @@ clickcast auto https://example.com -o tour.mp4 --format mp4 \
   --capture screencast --smooth --video-fps 30
 ```
 
+A runnable, self-contained example lives in
+[`demo/screencast-reel/`](../demo/screencast-reel/): its own page with 300 ms
+transitions and live typing, the scenario, and both the screencast and stills
+renders for comparison.
+
 ## Region annotations
 
 Annotations draw attention to stable page regions with simple, deterministic

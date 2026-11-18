@@ -1,0 +1,209 @@
+{
+  "schema_version": 5,
+  "clickcast_version": "0.5.0",
+  "url": "http://127.0.0.1:8740/index.html",
+  "engine": "chromium",
+  "viewport": [
+    960,
+    600
+  ],
+  "started_at": "2026-11-18T09:47:26.493707+00:00",
+  "duration_s": 19.633683043066412,
+  "media": {
+    "path": "demo/screencast-reel/reel.mp4",
+    "format": "mp4",
+    "size_bytes": 232073,
+    "frame_count": 214,
+    "duration_s": 7.133333333333334,
+    "fps": 30
+  },
+  "discovered_elements": [],
+  "steps": [
+    {
+      "index": 0,
+      "action": "goto",
+      "args": {
+        "timeout_ms": null,
+        "url": "http://127.0.0.1:8740/index.html",
+        "wait": "load",
+        "retries": 0
+      },
+      "status": "ok",
+      "duration_ms": 920.6376529764384,
+      "frames": [],
+      "label": "Open the dashboard",
+      "cursor_xy": null,
+      "page_state": {
+        "title": "Acme Analytics \u2014 motion demo",
+        "url_after": "http://127.0.0.1:8740/index.html",
+        "console_errors": [],
+        "page_errors": [],
+        "network_failed": []
+      },
+      "error": null,
+      "skip_reason": null,
+      "error_code": null,
+      "delta": null
+    },
+    {
+      "index": 1,
+      "action": "click",
+      "args": {
+        "timeout_ms": null,
+        "selector": "role=tab[name=\"Reports\"]",
+        "wait": null
+      },
+      "status": "ok",
+      "duration_ms": 891.1436980124563,
+      "frames": [],
+      "label": "Switch to Reports",
+      "cursor_xy": [
+        166,
+        92
+      ],
+      "page_state": {
+        "title": "Acme Analytics \u2014 motion demo",
+        "url_after": "http://127.0.0.1:8740/index.html",
+        "console_errors": [],
+        "page_errors": [],
+        "network_failed": []
+      },
+      "error": null,
+      "skip_reason": null,
+      "error_code": null,
+      "delta": null
+    },
+    {
+      "index": 2,
+      "action": "click",
+      "args": {
+        "timeout_ms": null,
+        "selector": "role=tab[name=\"Overview\"]",
+        "wait": null
+      },
+      "status": "ok",
+      "duration_ms": 825.7337969262153,
+      "frames": [],
+      "label": "Back to Overview",
+      "cursor_xy": [
+        73,
+        92
+      ],
+      "page_state": {
+        "title": "Acme Analytics \u2014 motion demo",
+        "url_after": "http://127.0.0.1:8740/index.html",
+        "console_errors": [],
+        "page_errors": [],
+        "network_failed": []
+      },
+      "error": null,
+      "skip_reason": null,
+      "error_code": null,
+      "delta": null
+    },
+    {
+      "index": 3,
+      "action": "click",
+      "args": {
+        "timeout_ms": null,
+        "selector": "role=button[name=\"Show breakdown\"]",
+        "wait": null
+      },
+      "status": "ok",
+      "duration_ms": 1233.4247140679508,
+      "frames": [],
+      "label": "Expand the breakdown",
+      "cursor_xy": [
+        802,
+        194
+      ],
+      "page_state": {
+        "title": "Acme Analytics \u2014 motion demo",
+        "url_after": "http://127.0.0.1:8740/index.html",
+        "console_errors": [],
+        "page_errors": [],
+        "network_failed": []
+      },
+      "error": null,
+      "skip_reason": null,
+      "error_code": null,
+      "delta": null
+    },
+    {
+      "index": 4,
+      "action": "type",
+      "args": {
+        "timeout_ms": null,
+        "into": "#filter",
+        "text": "enterprise",
+        "delay": 90.0
+      },
+      "status": "ok",
+      "duration_ms": 1949.4151729159057,
+      "frames": [],
+      "label": "Type a filter",
+      "cursor_xy": [
+        416,
+        422
+      ],
+      "page_state": {
+        "title": "Acme Analytics \u2014 motion demo",
+        "url_after": "http://127.0.0.1:8740/index.html",
+        "console_errors": [],
+        "page_errors": [],
+        "network_failed": []
+      },
+      "error": null,
+      "skip_reason": null,
+      "error_code": null,
+      "delta": null
+    },
+    {
+      "index": 5,
+      "action": "click",
+      "args": {
+        "timeout_ms": null,
+        "selector": "role=button[name=\"Sync now\"]",
+        "wait": null
+      },
+      "status": "ok",
+      "duration_ms": 1226.1688439175487,
+      "frames": [],
+      "label": "Trigger a sync",
+      "cursor_xy": [
+        818,
+        422
+      ],
+      "page_state": {
+        "title": "Acme Analytics \u2014 motion demo",
+        "url_after": "http://127.0.0.1:8740/index.html",
+        "console_errors": [],
+        "page_errors": [],
+        "network_failed": []
+      },
+      "error": null,
+      "skip_reason": null,
+      "error_code": null,
+      "delta": null
+    }
+  ],
+  "warnings": [],
+  "errors": [],
+  "feedback": null,
+  "graph": {
+    "nodes": [
+      {
+        "id": "n1",
+        "kind": "page",
+        "url": "http://127.0.0.1:8740/index.html",
+        "title": "Acme Analytics \u2014 motion demo",
+        "dom_signature": "",
+        "first_seen_step": 0,
+        "last_seen_step": 5,
+        "components": []
+      }
+    ],
+    "edges": []
+  },
+  "annotate": null
+}

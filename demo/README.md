@@ -9,6 +9,7 @@ a real public site.
 
 | Use case | Reel | When to use |
 |----------|------|-------------|
+| [`screencast-reel/`](screencast-reel/) | [`preview.gif`](screencast-reel/preview.gif) / [`reel.mp4`](screencast-reel/reel.mp4) | The reel is for a human — screencast capture + reel grammar record page motion (transitions, typing) and still label every click. |
 | [`ai-eye-review/`](ai-eye-review/) | [`reel.gif`](ai-eye-review/reel.gif) | Feed a reel + sidecar to an LLM so it can review a live UI (bugs, UX, dead links). |
 | [`site-cartography/`](site-cartography/) | [`reel.gif`](site-cartography/reel.gif) | An agent maps an unknown site's structure before deciding what to test. |
 | [`regression-visual-diff/`](regression-visual-diff/) | [`reel.gif`](regression-visual-diff/reel.gif) | Nightly reel of a critical flow; diff sidecars between runs to spot regressions. |
@@ -27,6 +28,22 @@ a real public site.
 Each subfolder's README has the exact command. Reels are captured against
 public sites (react.dev, tailwindcss.com, docs.python.org) so anyone can
 reproduce them. Small on purpose — short dwells, few clicks, tight viewport.
+
+The exception is [`screencast-reel/`](screencast-reel/), which ships its own
+page in [`site/`](screencast-reel/site/) and serves it locally: it exists to
+show *motion*, so the animation has to be guaranteed rather than dependent on
+whatever a live site renders today.
+
+## Choosing an output
+
+| You want | Use |
+|---|---|
+| a deterministic artifact for CI / diffs | `--capture shots` (default), GIF or MP4 |
+| a reel a human will watch | `--format mp4 --capture screencast --smooth` |
+| a CI-safe reel that still labels actions | `--smooth` with the default `shots` backend |
+
+The difference is measured in [`docs/smooth-video.md`](../docs/smooth-video.md):
+99.2% vs 43.2% unique frames on the same 300 ms transition fixture.
 
 To regenerate a specific reel:
 

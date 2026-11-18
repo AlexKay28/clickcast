@@ -1,0 +1,59 @@
+# Motion reel — what a human-facing recording should look like.
+#
+# Screencast capture (#303) records the page continuously, so the CSS
+# transitions on this page exist as real frames instead of one hold before and
+# one after. Reel grammar (#302) adds the press cue, click ripple, per-step
+# caption and the progress bar.
+#
+# Usage:
+#   cd demo/screencast-reel/site && python -m http.server 8000 &
+#   clickcast run demo/screencast-reel/scenario.yml \
+#     --var base_url=http://127.0.0.1:8000 \
+#     --out demo/screencast-reel/reel.mp4
+#
+# For the comparison artifact, force the stills backend on the same scenario:
+#   clickcast run demo/screencast-reel/scenario.yml \
+#     --var base_url=http://127.0.0.1:8000 \
+#     --capture shots --out demo/screencast-reel/reel-shots.mp4
+
+meta:
+  name: "Motion reel — screencast capture + reel grammar"
+  browser:
+    viewport: 960x600
+  render:
+    fps: 12 # browser capture rate (ignored by the screencast stream)
+    format: mp4
+    smooth: true # opts into reel grammar; a no-op for retiming here
+    video_fps: 30
+    capture: screencast
+    screencast_quality: 80
+  dwell: 0.7
+
+steps:
+  - goto: "{{ base_url }}/index.html"
+    wait: load
+    dwell: 0.9
+    label: "Open the dashboard"
+
+  - click: 'role=tab[name="Reports"]'
+    dwell: 0.8
+    label: "Switch to Reports"
+
+  - click: 'role=tab[name="Overview"]'
+    dwell: 0.8
+    label: "Back to Overview"
+
+  - click: 'role=button[name="Show breakdown"]'
+    dwell: 1.2
+    label: "Expand the breakdown"
+
+  - type:
+      into: "#filter"
+      text: "enterprise"
+      delay: 90 # per-character ms, so the screencast sees each keystroke
+    dwell: 1.0
+    label: "Type a filter"
+
+  - click: 'role=button[name="Sync now"]'
+    dwell: 1.2
+    label: "Trigger a sync"
