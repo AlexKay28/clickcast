@@ -23,7 +23,8 @@ meta:
   render:
     fps: 12 # browser capture rate (ignored by the screencast stream)
     format: mp4
-    smooth: true # opts into reel grammar; a no-op for retiming here
+    smooth: true # opts into reel grammar; retiming is a no-op here
+    # Cursor travel is capped by CursorStyle.max_speed_px_s (1600 px/s).
     video_fps: 30
     capture: screencast
     screencast_quality: 80

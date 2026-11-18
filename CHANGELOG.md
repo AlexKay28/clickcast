@@ -19,8 +19,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stream and a max-frames guard bounds disk use. Chromium only — Firefox and
   WebKit fail fast with a documented error rather than silently downgrading.
   Measured on a 300 ms transition fixture: **99.2% unique frames vs 43.2%**
-  for stills under the same metric. `--smooth` is a logged passthrough no-op
-  in this mode. See [`docs/smooth-video.md`](docs/smooth-video.md).
+  for stills under the same metric. `--smooth` skips retiming here (a logged
+  no-op) but still opts into reel grammar. See
+  [`docs/smooth-video.md`](docs/smooth-video.md).
+- **Cursor speed cap (`CursorStyle.max_speed_px_s`, default 1600 px/s).**
+  Screencast frames are continuous in page time, but `cursor_xy` only changes
+  when a step's action completes, so a click-to-click jump of several hundred
+  pixels used to land in a single frame — the pointer teleported. A new pass
+  carries the last known position through untracked frames and inserts eased
+  glide frames wherever the hop exceeds one frame's budget (the smoothstep
+  peak is accounted for, so the stated bound is the actual peak speed).
+  Inserted frames extend the reel slightly and each carries a distinct cursor
+  position, so the duplicate-frame metric does not regress. `None` restores
+  the uncapped output; shots-backend rendering is untouched.
 - **Reel grammar: click feedback, transition grammar, captions, timeline.** In
   smooth mode, a deterministic post-capture pass (`annotate/reel_grammar.py`)
   adds a press cue and expanding ripple at each action, cross-dissolves for
