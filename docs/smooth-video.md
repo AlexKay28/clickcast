@@ -29,10 +29,10 @@ meta:
 |---|---|---|
 | Frame source | one PNG per action boundary + held padding | Chromium CDP `Page.startScreencast`; the compositor pushes a frame when the page changes |
 | Shows | settled states before/after each action | continuous motion: CSS transitions, route cross-fades, charts, spinners, typed characters |
-| Cursor | synthetic overlay | same synthetic overlay (`cursor_xy`) on real footage |
+| Cursor | synthetic overlay | same synthetic overlay (`cursor_xy`) on real footage, speed-capped with inserted glide frames |
 | Engines | Chromium, Firefox, WebKit | **Chromium only** |
 | Determinism | frame count is a function of `fps` × steps — reproducible | frame count follows wall time and compositor updates — **not** byte-reproducible |
-| `--smooth` | retimes held stills into 30/60 fps | **passthrough no-op**: frames are already continuous; the flag is accepted and a warning says so |
+| `--smooth` | retimes held stills into 30/60 fps | **retiming is a no-op**: frames are already continuous (a warning says so). It still opts into reel grammar |
 | Cost | cheap: a few screenshots per step | roughly real time while recording, plus PNG writes |
 
 ### Screencast details
@@ -53,8 +53,16 @@ meta:
   `cursor_xy`.
 - `screencast_max_frames` (default 6000) is a hard disk guard for runaway
   animations. Hitting it logs a warning and drops the remaining frames.
-- `--smooth` and cursor interpolation are skipped for screencast reels: both
-  add or hold frames, which would destroy the real timing the stream recorded.
+- Cursor motion is capped at `CursorStyle.max_speed_px_s` (default 1600
+  px/s, `None` disables it). Screencast frames are continuous, but
+  `cursor_xy` only changes when an action completes, so without the cap the
+  pointer teleports across the viewport in one frame. The pass carries the
+  last known position through untracked frames and inserts eased glide frames
+  where the distance exceeds one frame's budget. Those frames extend the reel
+  slightly; the recorded page footage is untouched.
+- `--smooth` and the shots-backend cursor interpolation are otherwise skipped
+  for screencast reels: retiming would hold or cross-dissolve frames, which
+  destroys the real timing the stream recorded.
 
 ### Engine fallback
 

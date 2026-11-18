@@ -16,6 +16,7 @@ from clickcast.annotate.cards import (
     render_summary_card,
     render_title_card,
 )
+from clickcast.annotate.cursor_speed import DEFAULT_MAX_SPEED_PX_S, cap_cursor_speed
 from clickcast.annotate.grid import GridConfig, draw_grid
 from clickcast.annotate.interpolate import interpolate_cursor_motion
 from clickcast.annotate.pipeline import (
@@ -29,6 +30,7 @@ from clickcast.annotate.smooth import SmoothConfig, SmoothResult, smooth_frames_
 from clickcast.annotate.zoom import apply_zoom_on_click
 
 __all__ = [
+    "DEFAULT_MAX_SPEED_PX_S",
     "ActionsPanelStyle",
     "AnnotateConfig",
     "Annotator",
@@ -49,6 +51,7 @@ __all__ = [
     "annotate_frames_dir",
     "apply_reel_grammar",
     "apply_zoom_on_click",
+    "cap_cursor_speed",
     "draw_grid",
     "interpolate_cursor_motion",
     "load_annotations",

@@ -30,6 +30,7 @@ from clickcast.annotate import (
     StepAnnotation,
     annotate_frames_dir,
     apply_zoom_on_click,
+    cap_cursor_speed,
     interpolate_cursor_motion,
 )
 from clickcast.annotate.reel_grammar import GrammarConfig, apply_reel_grammar
@@ -123,9 +124,23 @@ def render_reel(
     if plan.capture == "screencast":
         # Continuous, real-time frames: the recorder already resampled them
         # onto ``video_fps``. Retiming them would hold/cross-dissolve real
-        # motion back into stills, and cursor interpolation would change the
-        # real duration, so both are passthrough no-ops here.
+        # motion back into stills, so it stays a passthrough.
         encode_fps = plan.video_fps
+        if plan.annotate is None or plan.annotate.cursor:
+            # Page footage is real, but the cursor is metadata that only
+            # changes at step boundaries — bound it so it glides instead of
+            # teleporting. Inserted frames extend the reel slightly.
+            inserted = cap_cursor_speed(
+                frames_dir,
+                max_speed_px_s=plan.cursor_style.max_speed_px_s,
+                fps=encode_fps,
+            )
+            if inserted:
+                log.info(
+                    "cursor speed capped at %.0f px/s: +%d glide frames",
+                    plan.cursor_style.max_speed_px_s or 0.0,
+                    inserted,
+                )
         if plan.smooth:
             message = (
                 "capture=screencast: --smooth is a passthrough no-op — "

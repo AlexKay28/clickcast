@@ -7,14 +7,14 @@
     960,
     600
   ],
-  "started_at": "2026-11-18T09:47:26.493707+00:00",
-  "duration_s": 19.633683043066412,
+  "started_at": "2026-11-18T10:37:36.124985+00:00",
+  "duration_s": 25.42954016313888,
   "media": {
     "path": "demo/screencast-reel/reel.mp4",
     "format": "mp4",
-    "size_bytes": 232073,
-    "frame_count": 214,
-    "duration_s": 7.133333333333334,
+    "size_bytes": 281587,
+    "frame_count": 261,
+    "duration_s": 8.7,
     "fps": 30
   },
   "discovered_elements": [],
@@ -29,7 +29,7 @@
         "retries": 0
       },
       "status": "ok",
-      "duration_ms": 920.6376529764384,
+      "duration_ms": 920.356476912275,
       "frames": [],
       "label": "Open the dashboard",
       "cursor_xy": null,
@@ -54,7 +54,7 @@
         "wait": null
       },
       "status": "ok",
-      "duration_ms": 891.1436980124563,
+      "duration_ms": 900.9860991500318,
       "frames": [],
       "label": "Switch to Reports",
       "cursor_xy": [
@@ -82,7 +82,7 @@
         "wait": null
       },
       "status": "ok",
-      "duration_ms": 825.7337969262153,
+      "duration_ms": 824.2247719317675,
       "frames": [],
       "label": "Back to Overview",
       "cursor_xy": [
@@ -110,7 +110,7 @@
         "wait": null
       },
       "status": "ok",
-      "duration_ms": 1233.4247140679508,
+      "duration_ms": 1231.6799440886825,
       "frames": [],
       "label": "Expand the breakdown",
       "cursor_xy": [
@@ -139,7 +139,7 @@
         "delay": 90.0
       },
       "status": "ok",
-      "duration_ms": 1949.4151729159057,
+      "duration_ms": 1943.990777945146,
       "frames": [],
       "label": "Type a filter",
       "cursor_xy": [
@@ -167,7 +167,7 @@
         "wait": null
       },
       "status": "ok",
-      "duration_ms": 1226.1688439175487,
+      "duration_ms": 1233.832263154909,
       "frames": [],
       "label": "Trigger a sync",
       "cursor_xy": [

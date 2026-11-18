@@ -27,6 +27,10 @@ __all__ = [
 
 _BUNDLED_FONT = "DejaVuSans.ttf"
 
+#: Default peak synthetic-cursor speed for screencast reels (px/s). Kept here
+#: so the dataclass default and the render pass share one number.
+DEFAULT_MAX_SPEED_PX_S = 1600.0
+
 
 @dataclass(slots=True)
 class LabelStyle:
@@ -115,6 +119,12 @@ class CursorStyle:
     interpolate_frames: int = 4
     interpolate_easing: Literal["linear", "ease-in-out"] = "ease-in-out"
     interpolate_min_distance: int = 50
+    # Upper bound on how fast the synthetic cursor may travel, in pixels per
+    # second. Screencast frames are continuous but ``cursor_xy`` only changes
+    # at step boundaries, so without a bound the pointer teleports across the
+    # viewport in a single frame. ``None`` disables the cap (legacy output).
+    # See :func:`clickcast.annotate.cursor_speed.cap_cursor_speed`.
+    max_speed_px_s: float | None = DEFAULT_MAX_SPEED_PX_S
 
 
 @dataclass(slots=True)
