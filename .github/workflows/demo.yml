@@ -78,7 +78,7 @@ jobs:
       CLICK_TIMEOUT: ${{ inputs['click-timeout'] || '15' }}
       TRAVERSAL: ${{ inputs.traversal || 'dfs' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Explicit token so `git push` below uses the GITHUB_TOKEN + our
           # per-job contents:write permission, not any long-lived credential.

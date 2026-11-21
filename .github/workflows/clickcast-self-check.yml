@@ -39,7 +39,7 @@ jobs:
       contents: write       # publish the reel GIF to the `clickcast-media` branch
       pull-requests: write  # post/update the summary comment
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Test PR-comment helper
         run: node --test .github/actions/clickcast/scripts/post_comment.test.js

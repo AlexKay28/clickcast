@@ -91,7 +91,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       has_npm_token: ${{ steps.check-secret.outputs.has_token }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
@@ -268,7 +268,7 @@ jobs:
     if: ${{ needs.resolve.outputs.prerelease != 'true' && needs.build-and-smoke-test.outputs.has_npm_token == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
