@@ -44,7 +44,7 @@ jobs:
       - name: Test PR-comment helper
         run: node --test .github/actions/clickcast/scripts/post_comment.test.js
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
