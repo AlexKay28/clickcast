@@ -164,7 +164,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: clickcast-deb-${{ needs.build-deb.outputs.version }}
           path: dist-deb
