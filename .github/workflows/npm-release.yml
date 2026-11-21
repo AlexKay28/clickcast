@@ -250,7 +250,7 @@ jobs:
           fi
           echo "clickcast-mcp npm package: --help forwards into 'clickcast mcp' correctly"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: clickcast-npm-packages-${{ steps.version.outputs.version }}
           path: dist-npm/*.tgz

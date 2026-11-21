@@ -95,7 +95,7 @@ jobs:
         run: python scripts/homebrew_formula.py "$VERSION" --out /tmp/clickcast.rb
 
       - name: Upload rendered formula
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: clickcast-formula-${{ steps.version.outputs.version }}
           path: /tmp/clickcast.rb
